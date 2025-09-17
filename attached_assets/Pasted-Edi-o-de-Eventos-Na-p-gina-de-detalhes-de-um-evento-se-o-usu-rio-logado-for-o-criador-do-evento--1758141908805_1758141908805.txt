@@ -1,0 +1,25 @@
+Edição de Eventos: Na página de detalhes de um evento, se o usuário logado for o criador do evento, exiba um botão "Editar Evento". Ao ser clicado, este botão deve levar o usuário para o mesmo formulário de criação de evento, mas com todos os campos já preenchidos com as informações atuais do evento para modificação.
+
+Upload de Imagem Nativo: No formulário de "Criar/Editar Evento", substitua os campos de link de imagem por um componente de upload de arquivos. O usuário deve poder selecionar uma imagem de capa diretamente da galeria do seu dispositivo (celular ou computador).
+
+Geolocalização por Endereço (Geocoding): Remova os campos "Latitude" e "Longitude" do formulário de eventos. O usuário deve informar apenas o endereço em texto. Ao salvar o evento, utilize uma API de Geocoding (como a do Mapbox) para converter automaticamente o endereço em coordenadas geográficas e salvá-las no banco de dados.
+
+2. Novas Funcionalidades:
+
+Sistema de Avaliação: Após a data de término de um evento, os usuários que confirmaram presença devem poder avaliar o evento e o organizador. Crie um sistema de 1 a 5 estrelas e um campo de comentário opcional. As médias de avaliação devem ser visíveis no perfil do organizador.
+
+Sistema Social (Amigos/Conexões):
+
+Crie perfis de usuário onde é possível ver os eventos que a pessoa irá ou já participou.
+
+Implemente um sistema de "adicionar amigo" com solicitação. Um usuário envia um pedido de amizade e o outro precisa aceitar.
+
+Na tela inicial, adicione uma seção ou filtro para ver "Eventos que seus amigos vão".
+
+Eventos Recorrentes: No formulário de criação de evento, adicione um checkbox com a pergunta: "Este é um evento recorrente?". Se o usuário marcar, exiba opções para definir a frequência (ex: toda semana, todo mês).
+
+3. Melhorias na Experiência do Usuário (UX):
+
+Seleção de Local no Mapa (Pin): Na tela de "Criar/Editar Evento", além do campo de endereço, exiba um mapa interativo. O usuário deve poder arrastar um pino no mapa para definir a localização exata. Ao soltar o pino, o campo de endereço deve ser preenchido automaticamente (processo de Reverse Geocoding).
+
+Feed de Eventos Baseado na Localização Atual: Ao abrir o aplicativo, solicite permissão para acessar a localização do usuário. A tela inicial deve carregar automaticamente os eventos próximos a essa localização. Adicione um botão visível no topo da tela para "Mudar Localização", permitindo que o usuário pesquise e veja eventos em outras cidades.
