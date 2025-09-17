@@ -1,0 +1,178 @@
+import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import EventCard from "@/components/EventCard";
+import CategoryFilter from "@/components/CategoryFilter";
+import BottomNavigation from "@/components/BottomNavigation";
+import FloatingCreateButton from "@/components/FloatingCreateButton";
+import type { EventWithDetails } from "@shared/schema";
+
+export default function Home() {
+  const [, navigate] = useLocation();
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationName, setLocationName] = useState("São Paulo, SP");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Get user's location
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const location = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          };
+          setUserLocation(location);
+          
+          // Reverse geocode to get location name
+          fetch('/api/reverse-geocode', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(location),
+          })
+            .then(res => res.json())
+            .then(data => {
+              if (data.address) {
+                setLocationName(data.address);
+              }
+            })
+            .catch(console.error);
+        },
+        (error) => {
+          console.error("Error getting location:", error);
+        }
+      );
+    }
+  }, []);
+
+  const { data: events = [], isLoading } = useQuery<EventWithDetails[]>({
+    queryKey: ['/api/events', selectedCategory, userLocation?.lat, userLocation?.lng],
+    queryFn: async ({ queryKey }) => {
+      const [, category, lat, lng] = queryKey;
+      const params = new URLSearchParams();
+      if (category) params.set('category', category as string);
+      if (lat && lng) {
+        params.set('lat', lat.toString());
+        params.set('lng', lng.toString());
+      }
+      
+      const response = await fetch(`/api/events?${params}`);
+      if (!response.ok) throw new Error('Failed to fetch events');
+      return response.json();
+    },
+  });
+
+  const filteredEvents = events.filter(event => 
+    !searchQuery || event.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const handleChangeLocation = () => {
+    const newLocation = prompt("Digite uma nova localização:", locationName);
+    if (newLocation) {
+      // Geocode the new location
+      fetch('/api/geocode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: newLocation }),
+      })
+        .then(res => res.json())
+        .then(data => {
+          setUserLocation(data);
+          setLocationName(newLocation);
+        })
+        .catch(console.error);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background pb-20">
+      {/* Header with Location */}
+      <div className="bg-white border-b border-border p-4 sticky top-0 z-30">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <i className="fas fa-map-marker-alt text-primary"></i>
+            <div>
+              <p className="text-sm text-muted-foreground">Sua localização</p>
+              <p className="font-semibold text-foreground" data-testid="text-location">{locationName}</p>
+            </div>
+          </div>
+          <Button
+            onClick={handleChangeLocation}
+            variant="ghost"
+            size="sm"
+            className="text-primary hover:bg-secondary"
+            data-testid="button-change-location"
+          >
+            <i className="fas fa-edit"></i>
+          </Button>
+        </div>
+      </div>
+
+      {/* Search Bar */}
+      <div className="p-4 bg-white">
+        <div className="relative">
+          <Input
+            type="text"
+            placeholder="Buscar eventos..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10 bg-secondary border-0 h-12"
+            data-testid="input-search"
+          />
+          <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground"></i>
+        </div>
+      </div>
+
+      {/* Category Filter */}
+      <div className="px-4 pb-4">
+        <CategoryFilter
+          selectedCategory={selectedCategory}
+          onCategoryChange={setSelectedCategory}
+        />
+      </div>
+
+      {/* Events Feed */}
+      <div className="px-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-foreground">Eventos próximos</h3>
+          <div className="flex space-x-2">
+            <button className="text-primary text-sm font-medium" data-testid="button-sort-distance">
+              <i className="fas fa-sort-amount-down mr-1"></i>Distância
+            </button>
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="space-y-4">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="bg-card rounded-2xl h-80 animate-pulse" />
+            ))}
+          </div>
+        ) : filteredEvents.length === 0 ? (
+          <div className="text-center py-12">
+            <i className="fas fa-calendar-times text-4xl text-muted-foreground mb-4"></i>
+            <p className="text-muted-foreground">
+              {searchQuery ? "Nenhum evento encontrado" : "Nenhum evento disponível"}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filteredEvents.map((event) => (
+              <EventCard
+                key={event.id}
+                event={event}
+                onClick={() => navigate(`/event/${event.id}`)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <FloatingCreateButton />
+      <BottomNavigation activeTab="home" />
+    </div>
+  );
+}
