@@ -150,6 +150,9 @@ export const insertEventSchema = createInsertSchema(events).omit({
   organizerId: true,
   latitude: true,
   longitude: true,
+}).extend({
+  startDate: z.string().datetime("Data de início é obrigatória"),
+  endDate: z.string().datetime().optional(),
 });
 
 export const insertEventAttendanceSchema = createInsertSchema(eventAttendances).omit({

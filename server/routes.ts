@@ -116,6 +116,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.claims.sub;
       const eventData = insertEventSchema.parse(req.body);
       
+      // Convert date strings to Date objects
+      const processedEventData = {
+        ...eventData,
+        startDate: new Date(eventData.startDate),
+        endDate: eventData.endDate ? new Date(eventData.endDate) : undefined,
+      };
+      
       // Geocode the address
       const coordinates = await geocodeAddress(eventData.address);
       
@@ -133,7 +140,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const event = await storage.createEvent(
         {
-          ...eventData,
+          ...processedEventData,
           coverImageUrl,
         },
         userId,
@@ -164,6 +171,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const eventData = insertEventSchema.partial().parse(req.body);
       
+      // Convert date strings to Date objects if provided
+      const processedEventData = {
+        ...eventData,
+        ...(eventData.startDate && { startDate: new Date(eventData.startDate) }),
+        ...(eventData.endDate && { endDate: new Date(eventData.endDate) }),
+      };
+      
       // Geocode address if it changed
       let coordinates;
       if (eventData.address && eventData.address !== existingEvent.address) {
@@ -178,7 +192,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Rename file to include extension
         fs.renameSync(req.file.path, filePath);
-        eventData.coverImageUrl = `/uploads/${fileName}`;
+        processedEventData.coverImageUrl = `/uploads/${fileName}`;
         
         // Delete old image if exists
         if (existingEvent.coverImageUrl) {
@@ -189,7 +203,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      const event = await storage.updateEvent(eventId, eventData, coordinates);
+      const event = await storage.updateEvent(eventId, processedEventData, coordinates);
       res.json(event);
     } catch (error) {
       console.error("Error updating event:", error);
