@@ -22,7 +22,7 @@ const upload = multer({
     if (allowedMimes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only JPEG, PNG and WebP are allowed.'), false);
+      cb(null, false);
     }
   }
 });
@@ -79,7 +79,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/events', async (req, res) => {
     try {
       const { category, lat, lng } = req.query;
-      const userId = req.user?.claims?.sub;
+      const userId = (req.user as any)?.claims?.sub;
       
       const events = await storage.getEvents({
         category: category as string,
@@ -97,7 +97,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/events/:id', async (req, res) => {
     try {
-      const userId = req.user?.claims?.sub;
+      const userId = (req.user as any)?.claims?.sub;
       const event = await storage.getEventWithDetails(req.params.id, userId);
       
       if (!event) {
@@ -116,11 +116,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.claims.sub;
       const eventData = insertEventSchema.parse(req.body);
       
-      // Convert date strings to Date objects
+      // Use the event data as is since schema expects string dates
       const processedEventData = {
         ...eventData,
-        startDate: new Date(eventData.startDate),
-        endDate: eventData.endDate ? new Date(eventData.endDate) : undefined,
       };
       
       // Geocode the address
@@ -171,11 +169,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const eventData = insertEventSchema.partial().parse(req.body);
       
-      // Convert date strings to Date objects if provided
+      // Use the event data as is since schema expects string dates  
       const processedEventData = {
         ...eventData,
-        ...(eventData.startDate && { startDate: new Date(eventData.startDate) }),
-        ...(eventData.endDate && { endDate: new Date(eventData.endDate) }),
       };
       
       // Geocode address if it changed
