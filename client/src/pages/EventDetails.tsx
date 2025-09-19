@@ -125,31 +125,51 @@ export default function EventDetails() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header with Back Button */}
+      {/* Header with Navigation Buttons */}
       <div className="bg-white border-b border-border p-4 sticky top-0 z-30">
-        <div className="flex items-center space-x-4">
-          <Button
-            onClick={() => navigate("/")}
-            variant="ghost"
-            size="sm"
-            data-testid="button-back"
-          >
-            <i className="fas fa-arrow-left text-xl"></i>
-          </Button>
-          <h2 className="font-semibold text-foreground flex-1">Detalhes do Evento</h2>
-          {isOrganizer && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
             <Button
-              onClick={() => navigate(`/edit/${event.id}`)}
+              onClick={() => window.history.back()}
               variant="ghost"
               size="sm"
-              data-testid="button-edit"
+              data-testid="button-back"
+              title="Voltar"
             >
-              <i className="fas fa-edit text-xl"></i>
+              <i className="fas fa-arrow-left text-xl"></i>
             </Button>
-          )}
-          <Button variant="ghost" size="sm" data-testid="button-share">
-            <i className="fas fa-share text-xl"></i>
-          </Button>
+            <h2 className="font-semibold text-foreground">Detalhes do Evento</h2>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button
+              onClick={() => navigate("/")}
+              variant="ghost"
+              size="sm"
+              data-testid="button-home"
+              title="Ir para início"
+            >
+              <i className="fas fa-home text-xl"></i>
+            </Button>
+            {isOrganizer && (
+              <Button
+                onClick={() => navigate(`/edit/${event.id}`)}
+                variant="ghost"
+                size="sm"
+                data-testid="button-edit"
+                title="Editar evento"
+              >
+                <i className="fas fa-edit text-xl"></i>
+              </Button>
+            )}
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              data-testid="button-share"
+              title="Compartilhar"
+            >
+              <i className="fas fa-share text-xl"></i>
+            </Button>
+          </div>
         </div>
       </div>
 
