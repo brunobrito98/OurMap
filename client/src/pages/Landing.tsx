@@ -74,7 +74,13 @@ export default function Landing() {
           
           <div className="text-center mt-4">
             <span className="text-muted-foreground text-sm">Não tem conta? </span>
-            <a href="#" className="text-primary text-sm font-medium hover:underline">Cadastre-se</a>
+            <button 
+              onClick={handleLogin}
+              className="text-primary text-sm font-medium hover:underline bg-transparent border-none p-0 cursor-pointer"
+              data-testid="button-signup"
+            >
+              Cadastre-se
+            </button>
           </div>
         </div>
       </div>
