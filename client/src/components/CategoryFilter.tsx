@@ -4,7 +4,7 @@ interface CategoryFilterProps {
 }
 
 const categories = [
-  { value: "", label: "Populares", icon: "fas fa-fire" },
+  { value: "", label: "Todos", icon: "fas fa-th-large" },
   { value: "music", label: "Música", icon: "fas fa-music" },
   { value: "food", label: "Gastronomia", icon: "fas fa-utensils" },
   { value: "sports", label: "Esportes", icon: "fas fa-running" },

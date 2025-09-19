@@ -276,9 +276,17 @@ export class DatabaseStorage implements IStorage {
       })
     );
 
-    // Sort by distance if coordinates provided
+    // Filter events by proximity (same city) and sort by distance if coordinates provided
     if (filters?.userLat && filters?.userLng) {
-      enhancedEvents.sort((a, b) => (a.distance || 0) - (b.distance || 0));
+      // Filter events within 50km (same city/region)
+      const nearbyEvents = enhancedEvents.filter(event => 
+        event.distance === undefined || event.distance <= 50
+      );
+      
+      // Sort by distance
+      nearbyEvents.sort((a, b) => (a.distance || 0) - (b.distance || 0));
+      
+      return nearbyEvents;
     }
 
     return enhancedEvents;
