@@ -114,7 +114,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/events', isAuthenticated, upload.single('coverImage'), async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const eventData = insertEventSchema.parse(req.body);
+      
+      // Convert FormData string values back to their proper types
+      const formData = { ...req.body };
+      
+      // Convert boolean fields from strings
+      if (formData.isFree !== undefined) {
+        formData.isFree = formData.isFree === 'true';
+      }
+      if (formData.allowRsvp !== undefined) {
+        formData.allowRsvp = formData.allowRsvp === 'true';
+      }
+      if (formData.isRecurring !== undefined) {
+        formData.isRecurring = formData.isRecurring === 'true';
+      }
+      
+      const eventData = insertEventSchema.parse(formData);
       
       // Convert date strings from datetime-local format to Date objects for database storage
       const processedEventData = {
@@ -169,7 +184,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Not authorized to edit this event" });
       }
       
-      const eventData = insertEventSchema.partial().parse(req.body);
+      // Convert FormData string values back to their proper types
+      const formData = { ...req.body };
+      
+      // Convert boolean fields from strings
+      if (formData.isFree !== undefined) {
+        formData.isFree = formData.isFree === 'true';
+      }
+      if (formData.allowRsvp !== undefined) {
+        formData.allowRsvp = formData.allowRsvp === 'true';
+      }
+      if (formData.isRecurring !== undefined) {
+        formData.isRecurring = formData.isRecurring === 'true';
+      }
+      
+      const eventData = insertEventSchema.partial().parse(formData);
       
       // Convert date strings from datetime-local format to Date objects for database storage
       const processedEventData = {
