@@ -131,12 +131,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const eventData = insertEventSchema.parse(formData);
       
-      // Convert date strings from datetime-local format to Date objects for database storage
-      const processedEventData = {
-        ...eventData,
-        startDate: new Date(eventData.startDate),
-        endDate: eventData.endDate ? new Date(eventData.endDate) : undefined,
-      };
+      // Use eventData directly - dates are already strings from form validation
+      const processedEventData = eventData;
       
       // Geocode the address
       const coordinates = await geocodeAddress(eventData.address);
@@ -200,12 +196,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const eventData = insertEventSchema.partial().parse(formData);
       
-      // Convert date strings from datetime-local format to Date objects for database storage
-      const processedEventData = {
-        ...eventData,
-        startDate: new Date(eventData.startDate),
-        endDate: eventData.endDate ? new Date(eventData.endDate) : undefined,
-      };
+      // Use eventData directly - dates are already strings from form validation
+      const processedEventData = { ...eventData };
       
       // Geocode address if it changed
       let coordinates;

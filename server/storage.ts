@@ -130,6 +130,8 @@ export class DatabaseStorage implements IStorage {
       .insert(events)
       .values({
         ...event,
+        startDate: new Date(event.startDate),
+        endDate: event.endDate ? new Date(event.endDate) : undefined,
         organizerId,
         latitude: coordinates.lat,
         longitude: coordinates.lng,
@@ -216,18 +218,20 @@ export class DatabaseStorage implements IStorage {
     userId?: string;
   }): Promise<EventWithDetails[]> {
     try {
-      let query = db
+      const conditions = [sql`${events.startDate} >= NOW()`];
+      
+      if (filters?.category) {
+        conditions.push(eq(events.category, filters.category));
+      }
+
+      const query = db
         .select({
           event: events,
           organizer: users,
         })
         .from(events)
         .innerJoin(users, eq(events.organizerId, users.id))
-        .where(sql`${events.startDate} >= NOW()`);
-
-      if (filters?.category) {
-        query = query.where(eq(events.category, filters.category));
-      }
+        .where(and(...conditions));
 
       const results = await query.orderBy(desc(events.createdAt));
       
@@ -303,7 +307,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateEvent(id: string, event: Partial<InsertEvent>, coordinates?: { lat: number; lng: number }): Promise<Event | undefined> {
-    const updateData: any = { ...event, updatedAt: new Date() };
+    const updateData: any = { 
+      ...event, 
+      updatedAt: new Date(),
+      ...(event.startDate && { startDate: new Date(event.startDate) }),
+      ...(event.endDate && { endDate: new Date(event.endDate) }),
+    };
     if (coordinates) {
       updateData.latitude = coordinates.lat;
       updateData.longitude = coordinates.lng;
@@ -321,7 +330,7 @@ export class DatabaseStorage implements IStorage {
     const result = await db
       .delete(events)
       .where(and(eq(events.id, id), eq(events.organizerId, organizerId)));
-    return result.rowCount > 0;
+    return (result.rowCount || 0) > 0;
   }
 
   // Attendance operations
