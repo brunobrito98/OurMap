@@ -1,7 +1,5 @@
-// Configure Node.js to accept self-signed certificates in development
-if (process.env.NODE_ENV === 'development') {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-}
+// TLS verification should always be enabled for security
+// Remove NODE_TLS_REJECT_UNAUTHORIZED=0 setting for security compliance
 
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";

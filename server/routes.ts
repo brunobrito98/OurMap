@@ -217,7 +217,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Delete old image if exists
         if (existingEvent.coverImageUrl) {
-          const oldPath = path.join(process.cwd(), existingEvent.coverImageUrl);
+          const oldPath = path.join(process.cwd(), existingEvent.coverImageUrl.replace(/^\//, ''));
           if (fs.existsSync(oldPath)) {
             fs.unlinkSync(oldPath);
           }
