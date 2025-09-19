@@ -215,81 +215,91 @@ export class DatabaseStorage implements IStorage {
     userLng?: number;
     userId?: string;
   }): Promise<EventWithDetails[]> {
-    let query = db
-      .select({
-        event: events,
-        organizer: users,
-      })
-      .from(events)
-      .innerJoin(users, eq(events.organizerId, users.id))
-      .where(sql`${events.startDate} >= NOW()`);
+    try {
+      let query = db
+        .select({
+          event: events,
+          organizer: users,
+        })
+        .from(events)
+        .innerJoin(users, eq(events.organizerId, users.id))
+        .where(sql`${events.startDate} >= NOW()`);
 
-    if (filters?.category) {
-      query = query.where(eq(events.category, filters.category));
-    }
+      if (filters?.category) {
+        query = query.where(eq(events.category, filters.category));
+      }
 
-    const results = await query.orderBy(desc(events.createdAt));
+      const results = await query.orderBy(desc(events.createdAt));
+      
+      if (!results || !Array.isArray(results)) {
+        console.log('No results or invalid results from query');
+        return [];
+      }
 
-    // Enhance with attendance counts and user data
-    const enhancedEvents = await Promise.all(
-      results.map(async (result) => {
-        const [attendanceCountResult] = await db
-          .select({ count: count() })
-          .from(eventAttendances)
-          .where(and(
-            eq(eventAttendances.eventId, result.event.id),
-            eq(eventAttendances.status, 'confirmed')
-          ));
-
-        let userAttendance: EventAttendance | undefined;
-        if (filters?.userId) {
-          [userAttendance] = await db
-            .select()
+      // Enhance with attendance counts and user data
+      const enhancedEvents = await Promise.all(
+        results.map(async (result) => {
+          const [attendanceCountResult] = await db
+            .select({ count: count() })
             .from(eventAttendances)
             .where(and(
               eq(eventAttendances.eventId, result.event.id),
-              eq(eventAttendances.userId, filters.userId)
+              eq(eventAttendances.status, 'confirmed')
             ));
-        }
 
-        // Calculate distance if user coordinates provided
-        let distance: number | undefined;
-        if (filters?.userLat && filters?.userLng) {
-          // Haversine formula for distance calculation
-          const R = 6371; // Earth's radius in km
-          const dLat = (result.event.latitude - filters.userLat) * Math.PI / 180;
-          const dLng = (result.event.longitude - filters.userLng) * Math.PI / 180;
-          const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                    Math.cos(filters.userLat * Math.PI / 180) * Math.cos(result.event.latitude * Math.PI / 180) *
-                    Math.sin(dLng/2) * Math.sin(dLng/2);
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-          distance = R * c;
-        }
+          let userAttendance: EventAttendance | undefined;
+          if (filters?.userId) {
+            [userAttendance] = await db
+              .select()
+              .from(eventAttendances)
+              .where(and(
+                eq(eventAttendances.eventId, result.event.id),
+                eq(eventAttendances.userId, filters.userId)
+              ));
+          }
 
-        return {
-          ...result.event,
-          organizer: result.organizer,
-          attendanceCount: attendanceCountResult.count,
-          userAttendance,
-          distance,
-        };
-      })
-    );
+          // Calculate distance if user coordinates provided
+          let distance: number | undefined;
+          if (filters?.userLat && filters?.userLng) {
+            // Haversine formula for distance calculation
+            const R = 6371; // Earth's radius in km
+            const dLat = (result.event.latitude - filters.userLat) * Math.PI / 180;
+            const dLng = (result.event.longitude - filters.userLng) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(filters.userLat * Math.PI / 180) * Math.cos(result.event.latitude * Math.PI / 180) *
+                      Math.sin(dLng/2) * Math.sin(dLng/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            distance = R * c;
+          }
 
-    // Filter events by proximity (same city) and sort by distance if coordinates provided
-    if (filters?.userLat && filters?.userLng) {
-      // Filter events within 50km (same city/region)
-      const nearbyEvents = enhancedEvents.filter(event => 
-        event.distance === undefined || event.distance <= 50
+          return {
+            ...result.event,
+            organizer: result.organizer,
+            attendanceCount: attendanceCountResult.count,
+            userAttendance,
+            distance,
+          };
+        })
       );
-      
-      // Sort by distance
-      nearbyEvents.sort((a, b) => (a.distance || 0) - (b.distance || 0));
-      
-      return nearbyEvents;
-    }
 
-    return enhancedEvents;
+      // Filter events by proximity (same city) and sort by distance if coordinates provided
+      if (filters?.userLat && filters?.userLng) {
+        // Filter events within 50km (same city/region)
+        const nearbyEvents = enhancedEvents.filter(event => 
+          event.distance === undefined || event.distance <= 50
+        );
+        
+        // Sort by distance
+        nearbyEvents.sort((a, b) => (a.distance || 0) - (b.distance || 0));
+        
+        return nearbyEvents;
+      }
+
+      return enhancedEvents;
+    } catch (error) {
+      console.error('Error in getEvents:', error);
+      return [];
+    }
   }
 
   async updateEvent(id: string, event: Partial<InsertEvent>, coordinates?: { lat: number; lng: number }): Promise<Event | undefined> {
