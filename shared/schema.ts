@@ -151,8 +151,8 @@ export const insertEventSchema = createInsertSchema(events).omit({
   latitude: true,
   longitude: true,
 }).extend({
-  startDate: z.string().datetime("Data de início é obrigatória"),
-  endDate: z.string().datetime().optional(),
+  startDate: z.string().min(1, "Data de início é obrigatória").regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, "Formato de data inválido"),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, "Formato de data inválido").optional().or(z.literal("")),
 });
 
 export const insertEventAttendanceSchema = createInsertSchema(eventAttendances).omit({

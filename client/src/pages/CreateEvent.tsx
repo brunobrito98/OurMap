@@ -42,7 +42,7 @@ export default function CreateEvent() {
   const isEditing = !!id;
 
   // Fetch event data if editing
-  const { data: eventData } = useQuery({
+  const { data: eventData } = useQuery<any>({
     queryKey: ['/api/events', id],
     enabled: isEditing,
   });
@@ -261,6 +261,7 @@ export default function CreateEvent() {
                         placeholder="Descreva seu evento..."
                         rows={4}
                         {...field}
+                        value={field.value || ""}
                         data-testid="input-description"
                       />
                     </FormControl>

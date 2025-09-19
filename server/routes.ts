@@ -116,9 +116,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.claims.sub;
       const eventData = insertEventSchema.parse(req.body);
       
-      // Use the event data as is since schema expects string dates
+      // Convert date strings from datetime-local format to Date objects for database storage
       const processedEventData = {
         ...eventData,
+        startDate: new Date(eventData.startDate),
+        endDate: eventData.endDate ? new Date(eventData.endDate) : undefined,
       };
       
       // Geocode the address
@@ -169,9 +171,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const eventData = insertEventSchema.partial().parse(req.body);
       
-      // Use the event data as is since schema expects string dates  
+      // Convert date strings from datetime-local format to Date objects for database storage
       const processedEventData = {
         ...eventData,
+        startDate: new Date(eventData.startDate),
+        endDate: eventData.endDate ? new Date(eventData.endDate) : undefined,
       };
       
       // Geocode address if it changed
