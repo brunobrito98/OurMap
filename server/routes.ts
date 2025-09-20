@@ -3,6 +3,7 @@ import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupLocalAuth, isAuthenticatedLocal } from "./auth";
+import session from "express-session";
 import { insertEventSchema, insertEventAttendanceSchema, insertEventRatingSchema } from "@shared/schema";
 import multer from "multer";
 import path from "path";
@@ -52,9 +53,9 @@ async function geocodeAddress(address: string): Promise<{ lat: number; lng: numb
   return { lat, lng };
 }
 
-// Combined auth middleware that works with both Replit Auth and Local Auth
+// Auth middleware
 function isAuthenticatedAny(req: any, res: any, next: any) {
-  if (req.isAuthenticated()) {
+  if (req.isAuthenticated && req.isAuthenticated()) {
     return next();
   }
   res.status(401).json({ message: "Unauthorized" });
@@ -69,6 +70,19 @@ function getUserId(req: any): string | undefined {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Setup session and passport
+  app.set("trust proxy", 1);
+  app.use(session({
+    secret: process.env.SESSION_SECRET || 'fallback-secret-key',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
+    },
+  }));
+
   // Setup auth system
   setupLocalAuth(app);
 

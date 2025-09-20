@@ -24,7 +24,7 @@ export default function Landing() {
     });
   };
 
-  const handleLocalAuth = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
@@ -95,42 +95,44 @@ export default function Landing() {
             {isRegistering ? "Criar Conta" : "Entrar"}
           </h2>
           
-            {/* Local Auth Form */}
-              <form onSubmit={handleLocalAuth} className="space-y-4">
-                <div>
-                  <Label htmlFor="username" className="text-sm font-medium">
-                    Usuário
-                  </Label>
-                  <Input
-                    id="username"
-                    name="username"
-                    type="text"
-                    value={formData.username}
-                    onChange={handleInputChange}
-                    required
-                    className="mt-1"
-                    data-testid="input-username"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="password" className="text-sm font-medium">
-                    Senha
-                  </Label>
-                  <Input
-                    id="password"
-                    name="password"
-                    type="password"
-                    value={formData.password}
-                    onChange={handleInputChange}
-                    required
-                    className="mt-1"
-                    data-testid="input-password"
-                  />
-                </div>
+            {/* Auth Form */}
+              <form onSubmit={handleAuth} className="space-y-4">
+                {!isRegistering && (
+                  <div>
+                    <Label htmlFor="username" className="text-sm font-medium">
+                      Email ou Usuário
+                    </Label>
+                    <Input
+                      id="username"
+                      name="username"
+                      type="text"
+                      value={formData.username}
+                      onChange={handleInputChange}
+                      required
+                      className="mt-1"
+                      data-testid="input-username"
+                    />
+                  </div>
+                )}
 
                 {isRegistering && (
                   <>
+                    <div>
+                      <Label htmlFor="username" className="text-sm font-medium">
+                        Usuário
+                      </Label>
+                      <Input
+                        id="username"
+                        name="username"
+                        type="text"
+                        value={formData.username}
+                        onChange={handleInputChange}
+                        required
+                        className="mt-1"
+                        data-testid="input-username"
+                      />
+                    </div>
+
                     <div>
                       <Label htmlFor="email" className="text-sm font-medium">
                         Email
@@ -180,6 +182,23 @@ export default function Landing() {
                     </div>
                   </>
                 )}
+
+                <div>
+                  <Label htmlFor="password" className="text-sm font-medium">
+                    Senha
+                  </Label>
+                  <Input
+                    id="password"
+                    name="password"
+                    type="password"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    required
+                    className="mt-1"
+                    data-testid="input-password"
+                  />
+                </div>
+
 
                 <Button
                   type="submit"

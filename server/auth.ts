@@ -40,52 +40,30 @@ export function setupLocalAuth(app: Express) {
     })
   );
 
-  // Override passport serialization to work with both auth types
+  // Setup passport serialization for local auth only
   passport.serializeUser((user: any, done) => {
     try {
-      // For local users, store the user ID directly
-      if (user.authType === 'local') {
-        console.log('Serializing local user:', user.id);
-        return done(null, { type: 'local', id: user.id });
-      }
-      // For Replit users, store the full user object (existing behavior)
-      if (user.claims && user.claims.sub) {
-        console.log('Serializing Replit user:', user.claims.sub);
-        return done(null, { type: 'replit', data: user });
-      }
-      // Fallback
-      console.log('Serializing unknown user type:', user);
-      done(null, user);
+      console.log('Serializing local user:', user.id);
+      return done(null, user.id);
     } catch (error) {
       console.error('Serialization error:', error);
       done(error);
     }
   });
 
-  passport.deserializeUser(async (serialized: any, done) => {
+  passport.deserializeUser(async (id: string, done) => {
     try {
-      if (serialized.type === 'local') {
-        // For local users, fetch from database
-        const user = await storage.getUser(serialized.id);
-        if (user) {
-          console.log('Deserialized local user:', user.id);
-          return done(null, user);
-        } else {
-          console.log('Local user not found:', serialized.id);
-          return done(null, null);
-        }
-      } else if (serialized.type === 'replit') {
-        // For Replit users, return the stored data
-        console.log('Deserialized Replit user:', serialized.data.claims?.sub);
-        return done(null, serialized.data);
+      const user = await storage.getUser(id);
+      if (user) {
+        console.log('Deserialized local user:', user.id);
+        return done(null, user);
       } else {
-        // Fallback for existing sessions (backward compatibility)
-        console.log('Deserializing legacy session:', serialized);
-        return done(null, serialized);
+        console.log('Local user not found:', id);
+        return done(null, null);
       }
     } catch (error) {
       console.error('Deserialization error:', error);
-      return done(error);
+      done(error);
     }
   });
 
