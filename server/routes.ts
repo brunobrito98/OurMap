@@ -3,6 +3,7 @@ import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
+import { setupLocalAuth, isAuthenticatedLocal } from "./auth";
 import { insertEventSchema, insertEventAttendanceSchema, insertEventRatingSchema } from "@shared/schema";
 import multer from "multer";
 import path from "path";
@@ -52,9 +53,33 @@ async function geocodeAddress(address: string): Promise<{ lat: number; lng: numb
   return { lat, lng };
 }
 
+// Combined auth middleware that works with both Replit Auth and Local Auth
+function isAuthenticatedAny(req: any, res: any, next: any) {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  res.status(401).json({ message: "Unauthorized" });
+}
+
+// Get user ID from either auth type
+function getUserId(req: any): string | undefined {
+  if (req.user) {
+    // For local auth, user.id is directly available
+    if (req.user.id && req.user.authType === 'local') {
+      return req.user.id;
+    }
+    // For Replit auth, user ID is in claims.sub
+    if (req.user.claims && req.user.claims.sub) {
+      return req.user.claims.sub;
+    }
+  }
+  return undefined;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Auth middleware
+  // Setup both auth systems
   await setupAuth(app);
+  setupLocalAuth(app);
 
   // Serve uploaded files
   app.use('/uploads', (req, res, next) => {
@@ -63,10 +88,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   app.use('/uploads', express.static(uploadsDir));
 
-  // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  // Auth routes (unified for both auth types)
+  app.get('/api/auth/user', isAuthenticatedAny, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
+      const user = await storage.getUserWithStats(userId);
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // Fallback route for /api/user (used by some components)
+  app.get('/api/user', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
       const user = await storage.getUserWithStats(userId);
       res.json(user);
     } catch (error) {
@@ -79,7 +122,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/events', async (req, res) => {
     try {
       const { category, lat, lng } = req.query;
-      const userId = (req.user as any)?.claims?.sub;
+      const userId = getUserId(req);
       
       const events = await storage.getEvents({
         category: category as string,
@@ -95,9 +138,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/events/my-events', isAuthenticated, async (req: any, res) => {
+  app.get('/api/events/my-events', isAuthenticatedAny, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
       const events = await storage.getUserEvents(userId);
       res.json(events);
     } catch (error) {
@@ -108,7 +154,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/events/:id', async (req, res) => {
     try {
-      const userId = (req.user as any)?.claims?.sub;
+      const userId = getUserId(req);
       const event = await storage.getEventWithDetails(req.params.id, userId);
       
       if (!event) {
@@ -122,9 +168,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/events', isAuthenticated, upload.single('coverImage'), async (req: any, res) => {
+  app.post('/api/events', isAuthenticatedAny, upload.single('coverImage'), async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
       
       // Convert FormData string values back to their proper types
       const formData = { ...req.body };
@@ -180,9 +229,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/events/:id', isAuthenticated, upload.single('coverImage'), async (req: any, res) => {
+  app.put('/api/events/:id', isAuthenticatedAny, upload.single('coverImage'), async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
       const eventId = req.params.id;
       
       // Check if user owns the event
@@ -247,9 +299,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete('/api/events/:id', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/events/:id', isAuthenticatedAny, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
       const success = await storage.deleteEvent(req.params.id, userId);
       
       if (!success) {
@@ -264,9 +319,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Attendance routes
-  app.post('/api/events/:id/attend', isAuthenticated, async (req: any, res) => {
+  app.post('/api/events/:id/attend', isAuthenticatedAny, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
       const eventId = req.params.id;
       const { status } = req.body;
       
@@ -295,9 +353,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Friend routes
-  app.get('/api/friends', isAuthenticated, async (req: any, res) => {
+  app.get('/api/friends', isAuthenticatedAny, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
       const friends = await storage.getFriends(userId);
       res.json(friends);
     } catch (error) {
@@ -306,9 +367,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/friend-requests', isAuthenticated, async (req: any, res) => {
+  app.get('/api/friend-requests', isAuthenticatedAny, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
       const requests = await storage.getFriendRequests(userId);
       res.json(requests);
     } catch (error) {
@@ -317,9 +381,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/friend-requests', isAuthenticated, async (req: any, res) => {
+  app.post('/api/friend-requests', isAuthenticatedAny, async (req: any, res) => {
     try {
-      const requesterId = req.user.claims.sub;
+      const requesterId = getUserId(req);
+      if (!requesterId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
       const { addresseeId } = req.body;
       
       if (requesterId === addresseeId) {
@@ -340,7 +407,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put('/api/friend-requests/:id', isAuthenticated, async (req: any, res) => {
+  app.put('/api/friend-requests/:id', isAuthenticatedAny, async (req: any, res) => {
     try {
       const { status } = req.body;
       const friendship = await storage.respondToFriendRequest(req.params.id, status);
@@ -357,9 +424,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Rating routes
-  app.post('/api/events/:id/rate', isAuthenticated, async (req: any, res) => {
+  app.post('/api/events/:id/rate', isAuthenticatedAny, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
       const eventId = req.params.id;
       
       const ratingData = insertEventRatingSchema.parse({

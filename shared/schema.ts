@@ -35,6 +35,10 @@ export const users = pgTable("users", {
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
+  // Additional fields for username/password authentication
+  username: varchar("username").unique(),
+  password: varchar("password"),
+  authType: varchar("auth_type").default("replit"), // 'replit' or 'local'
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -171,9 +175,32 @@ export const insertEventRatingSchema = createInsertSchema(eventRatings).omit({
   createdAt: true,
 });
 
+// User schemas for different auth types
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertLocalUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  profileImageUrl: true,
+  authType: true,
+}).extend({
+  username: z.string().min(3, "Username deve ter pelo menos 3 caracteres"),
+  password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
+  email: z.string().email("Email deve ser válido"),
+  firstName: z.string().min(1, "Nome é obrigatório"),
+  lastName: z.string().min(1, "Sobrenome é obrigatório"),
+});
+
 // Types
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type InsertLocalUser = z.infer<typeof insertLocalUserSchema>;
 export type Event = typeof events.$inferSelect;
 export type InsertEvent = z.infer<typeof insertEventSchema>;
 export type EventAttendance = typeof eventAttendances.$inferSelect;
