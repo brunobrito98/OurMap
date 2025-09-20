@@ -27,26 +27,31 @@ export default function MapComponent({
   const map = useRef<any>(null);
   const marker = useRef<any>(null);
 
-  useEffect(() => {
-    if (!mapContainer.current) return;
-
-    // Set Mapbox access token
-    mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
-    
-    if (!mapboxgl.accessToken) {
-      // Fallback to a simple placeholder if no token
-      mapContainer.current.innerHTML = `
-        <div class="w-full h-full bg-secondary rounded-xl flex items-center justify-center border border-border">
-          <div class="text-center p-4">
-            <i class="fas fa-map text-2xl text-muted-foreground mb-2"></i>
-            <p class="text-sm text-muted-foreground">Mapa Interativo</p>
-            ${address ? `<p class="text-xs text-muted-foreground mt-1">${address}</p>` : ''}
-            ${draggableMarker ? `<p class="text-xs text-muted-foreground mt-1">Clique para definir localização</p>` : ''}
+  // Set Mapbox access token
+  mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
+  
+  // If no access token, render fallback placeholder directly
+  if (!mapboxgl.accessToken) {
+    return (
+      <div 
+        style={{ height: `${height}px` }}
+        className="w-full rounded-xl overflow-hidden"
+        data-testid="map-component"
+      >
+        <div className="w-full h-full bg-secondary rounded-xl flex items-center justify-center border border-border">
+          <div className="text-center p-4">
+            <i className="fas fa-map text-2xl text-muted-foreground mb-2"></i>
+            <p className="text-sm text-muted-foreground">Mapa Interativo</p>
+            {address && <p className="text-xs text-muted-foreground mt-1">{address}</p>}
+            {draggableMarker && <p className="text-xs text-muted-foreground mt-1">Clique para definir localização</p>}
           </div>
         </div>
-      `;
-      return;
-    }
+      </div>
+    );
+  }
+
+  useEffect(() => {
+    if (!mapContainer.current) return;
 
     // Initialize map
     map.current = new mapboxgl.Map({
