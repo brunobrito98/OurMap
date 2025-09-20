@@ -95,6 +95,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/events/my-events', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const events = await storage.getUserEvents(userId);
+      res.json(events);
+    } catch (error) {
+      console.error("Error fetching user events:", error);
+      res.status(500).json({ message: "Failed to fetch user events" });
+    }
+  });
+
   app.get('/api/events/:id', async (req, res) => {
     try {
       const userId = (req.user as any)?.claims?.sub;

@@ -37,6 +37,7 @@ export interface IStorage {
     userLng?: number;
     userId?: string;
   }): Promise<EventWithDetails[]>;
+  getUserEvents(userId: string): Promise<EventWithDetails[]>;
   updateEvent(id: string, event: Partial<InsertEvent>, coordinates?: { lat: number; lng: number }): Promise<Event | undefined>;
   deleteEvent(id: string, organizerId: string): Promise<boolean>;
 
@@ -302,6 +303,51 @@ export class DatabaseStorage implements IStorage {
       return enhancedEvents;
     } catch (error) {
       console.error('Error in getEvents:', error);
+      return [];
+    }
+  }
+
+  async getUserEvents(userId: string): Promise<EventWithDetails[]> {
+    try {
+      const query = db
+        .select({
+          event: events,
+          organizer: users,
+        })
+        .from(events)
+        .innerJoin(users, eq(events.organizerId, users.id))
+        .where(eq(events.organizerId, userId));
+
+      const results = await query.orderBy(desc(events.createdAt));
+      
+      if (!results || !Array.isArray(results)) {
+        return [];
+      }
+
+      // Enhance with attendance counts
+      const enhancedEvents = await Promise.all(
+        results.map(async (result) => {
+          const [attendanceCountResult] = await db
+            .select({ count: count() })
+            .from(eventAttendances)
+            .where(and(
+              eq(eventAttendances.eventId, result.event.id),
+              eq(eventAttendances.status, 'confirmed')
+            ));
+
+          return {
+            ...result.event,
+            organizer: result.organizer,
+            attendanceCount: attendanceCountResult.count,
+            userAttendance: undefined,
+            friendsGoing: [],
+          };
+        })
+      );
+
+      return enhancedEvents;
+    } catch (error) {
+      console.error('Error in getUserEvents:', error);
       return [];
     }
   }

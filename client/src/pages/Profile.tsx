@@ -107,6 +107,7 @@ export default function Profile() {
         <div className="px-4 space-y-3">
           <div className="bg-card border border-border rounded-2xl overflow-hidden">
             <Button
+              onClick={() => navigate("/my-events")}
               variant="ghost"
               className="w-full flex items-center space-x-4 p-4 h-auto justify-start"
               data-testid="button-my-events"
