@@ -6,7 +6,6 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function Landing() {
   const [isRegistering, setIsRegistering] = useState(false);
-  const [showLocalAuth, setShowLocalAuth] = useState(false);
   const [formData, setFormData] = useState({
     username: "",
     password: "",
@@ -17,9 +16,6 @@ export default function Landing() {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  const handleSocialLogin = () => {
-    window.location.href = "/api/login";
-  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -96,75 +92,10 @@ export default function Landing() {
         {/* Login Form */}
         <div className="bg-white rounded-3xl p-8 shadow-2xl">
           <h2 className="text-2xl font-semibold text-foreground mb-6 text-center">
-            {showLocalAuth ? (isRegistering ? "Criar Conta" : "Entrar") : "Entrar"}
+            {isRegistering ? "Criar Conta" : "Entrar"}
           </h2>
           
-          {!showLocalAuth ? (
-            <>
-              {/* Social Login Buttons */}
-              <div className="space-y-3 mb-6">
-                <Button
-                  onClick={handleSocialLogin}
-                  variant="outline"
-                  className="w-full flex items-center justify-center space-x-3 h-12"
-                  data-testid="button-login-google"
-                >
-                  <i className="fab fa-google text-xl text-red-500"></i>
-                  <span className="font-medium">Continuar com Google</span>
-                </Button>
-                
-                <Button
-                  onClick={handleSocialLogin}
-                  className="w-full flex items-center justify-center space-x-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 h-12"
-                  data-testid="button-login-instagram"
-                >
-                  <i className="fab fa-instagram text-xl"></i>
-                  <span className="font-medium">Continuar com Instagram</span>
-                </Button>
-              </div>
-
-              <div className="relative mb-6">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-border"></div>
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-4 bg-white text-muted-foreground">ou</span>
-                </div>
-              </div>
-
-              {/* Replit Auth Button */}
-              <Button
-                onClick={handleSocialLogin}
-                className="w-full flex items-center justify-center space-x-3 bg-primary hover:bg-primary/90 h-12"
-                data-testid="button-login-replit"
-              >
-                <i className="fas fa-code text-xl"></i>
-                <span className="font-medium">Entrar com Replit</span>
-              </Button>
-
-              <div className="relative my-6">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-border"></div>
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-4 bg-white text-muted-foreground">ou</span>
-                </div>
-              </div>
-
-              {/* Local Auth Option */}
-              <Button
-                onClick={() => setShowLocalAuth(true)}
-                variant="outline"
-                className="w-full flex items-center justify-center space-x-3 h-12"
-                data-testid="button-login-local"
-              >
-                <i className="fas fa-user text-xl"></i>
-                <span className="font-medium">Entrar com usuário e senha</span>
-              </Button>
-            </>
-          ) : (
-            <>
-              {/* Local Auth Form */}
+            {/* Local Auth Form */}
               <form onSubmit={handleLocalAuth} className="space-y-4">
                 <div>
                   <Label htmlFor="username" className="text-sm font-medium">
@@ -274,18 +205,6 @@ export default function Landing() {
                     : "Não tem conta? Cadastre-se"}
                 </button>
               </div>
-
-              <div className="text-center mt-4">
-                <button
-                  onClick={() => setShowLocalAuth(false)}
-                  className="text-muted-foreground text-sm hover:underline bg-transparent border-none p-0 cursor-pointer"
-                  data-testid="button-back-social"
-                >
-                  ← Voltar para outras opções
-                </button>
-              </div>
-            </>
-          )}
         </div>
       </div>
     </div>

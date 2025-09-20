@@ -2,7 +2,6 @@ import type { Express } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
 import { setupLocalAuth, isAuthenticatedLocal } from "./auth";
 import { insertEventSchema, insertEventAttendanceSchema, insertEventRatingSchema } from "@shared/schema";
 import multer from "multer";
@@ -61,24 +60,16 @@ function isAuthenticatedAny(req: any, res: any, next: any) {
   res.status(401).json({ message: "Unauthorized" });
 }
 
-// Get user ID from either auth type
+// Get user ID from auth
 function getUserId(req: any): string | undefined {
-  if (req.user) {
-    // For local auth, user.id is directly available
-    if (req.user.id && req.user.authType === 'local') {
-      return req.user.id;
-    }
-    // For Replit auth, user ID is in claims.sub
-    if (req.user.claims && req.user.claims.sub) {
-      return req.user.claims.sub;
-    }
+  if (req.user && req.user.id) {
+    return req.user.id;
   }
   return undefined;
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Setup both auth systems
-  await setupAuth(app);
+  // Setup auth system
   setupLocalAuth(app);
 
   // Serve uploaded files
