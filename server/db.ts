@@ -3,7 +3,7 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import * as schema from "@shared/schema";
 
 // Use DATABASE_URL for Supabase connection
-let databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
   throw new Error(
@@ -11,18 +11,40 @@ if (!databaseUrl) {
   );
 }
 
-console.log('Original DATABASE_URL length:', databaseUrl.length);
-console.log('DATABASE_URL starts with:', databaseUrl.substring(0, 50));
-
-// URL encode special characters in password if needed
-if (databaseUrl.includes('*') || databaseUrl.includes('#')) {
-  console.log('Encoding special characters in password...');
-  databaseUrl = databaseUrl.replace(/\*/g, '%2A').replace(/#/g, '%23');
+// Parse connection string manually to handle special characters
+function parseConnectionString(connectionString: string) {
+  try {
+    // Try to parse as URL first
+    const url = new URL(connectionString);
+    return {
+      connectionString: connectionString,
+      ssl: { rejectUnauthorized: false }
+    };
+  } catch {
+    // If URL parsing fails, try to extract components manually
+    const match = connectionString.match(/^postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)$/);
+    if (match) {
+      const [, username, password, host, port, database] = match;
+      return {
+        user: username,
+        password: password,
+        host: host,
+        port: parseInt(port),
+        database: database,
+        ssl: { rejectUnauthorized: false }
+      };
+    } else {
+      // Fallback to original string
+      return {
+        connectionString: connectionString,
+        ssl: { rejectUnauthorized: false }
+      };
+    }
+  }
 }
 
-export const pool = new Pool({ 
-  connectionString: databaseUrl,
-  ssl: { rejectUnauthorized: false }
-});
+const poolConfig = parseConnectionString(databaseUrl);
+console.log('Pool config type:', poolConfig.connectionString ? 'connectionString' : 'manual');
 
+export const pool = new Pool(poolConfig);
 export const db = drizzle(pool, { schema });
