@@ -219,7 +219,7 @@ export class DatabaseStorage implements IStorage {
     userId?: string;
   }): Promise<EventWithDetails[]> {
     try {
-      const conditions = [sql`${events.startDate} >= NOW()`];
+      const conditions = [sql`DATE(${events.startDate}) >= DATE(NOW())`];
       
       if (filters?.category) {
         conditions.push(eq(events.category, filters.category));
