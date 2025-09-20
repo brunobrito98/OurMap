@@ -28,6 +28,7 @@ export interface IStorage {
   getUserWithStats(id: string): Promise<UserWithStats | undefined>;
   // Additional user operations for local authentication from javascript_auth_all_persistance blueprint
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   createLocalUser(user: { username: string; password: string; email: string; firstName: string; lastName: string }): Promise<User>;
 
   // Event operations
@@ -531,6 +532,11 @@ export class DatabaseStorage implements IStorage {
   // Additional user operations for local authentication from javascript_auth_all_persistance blueprint
   async getUserByUsername(username: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
     return user;
   }
 
