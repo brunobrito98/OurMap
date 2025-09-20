@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
 
 interface MapComponentProps {
   latitude: number;
@@ -28,78 +30,87 @@ export default function MapComponent({
   useEffect(() => {
     if (!mapContainer.current) return;
 
-    // Check if Mapbox GL JS is available
-    if (typeof window !== 'undefined' && (window as any).mapboxgl) {
-      const mapboxgl = (window as any).mapboxgl;
-      
-      mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || process.env.MAPBOX_ACCESS_TOKEN;
-      
-      if (!mapboxgl.accessToken) {
-        // Fallback to a simple placeholder if no token
-        mapContainer.current.innerHTML = `
-          <div class="w-full h-full bg-secondary rounded-xl flex items-center justify-center">
-            <div class="text-center">
-              <i class="fas fa-map text-2xl text-muted-foreground mb-2"></i>
-              <p class="text-sm text-muted-foreground">Mapa Interativo</p>
-              ${address ? `<p class="text-xs text-muted-foreground mt-1">${address}</p>` : ''}
-            </div>
-          </div>
-        `;
-        return;
-      }
-
-      map.current = new mapboxgl.Map({
-        container: mapContainer.current,
-        style: 'mapbox://styles/mapbox/streets-v12',
-        center: [longitude, latitude],
-        zoom: 15,
-      });
-
-      if (showMarker) {
-        marker.current = new mapboxgl.Marker({
-          draggable: draggableMarker,
-        })
-          .setLngLat([longitude, latitude])
-          .addTo(map.current);
-
-        if (draggableMarker && onMarkerDrag) {
-          marker.current.on('dragend', () => {
-            const lngLat = marker.current.getLngLat();
-            onMarkerDrag(lngLat.lat, lngLat.lng);
-          });
-        }
-      }
-
-      if (onClick) {
-        map.current.on('click', (e: any) => {
-          const { lng, lat } = e.lngLat;
-          onClick(lat, lng);
-          
-          if (marker.current) {
-            marker.current.setLngLat([lng, lat]);
-          }
-        });
-      }
-
-      // Clean up on unmount
-      return () => {
-        if (map.current) {
-          map.current.remove();
-        }
-      };
-    } else {
-      // Fallback if Mapbox GL JS is not loaded
+    // Set Mapbox access token
+    mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
+    
+    if (!mapboxgl.accessToken) {
+      // Fallback to a simple placeholder if no token
       mapContainer.current.innerHTML = `
-        <div class="w-full h-full bg-secondary rounded-xl flex items-center justify-center">
-          <div class="text-center">
+        <div class="w-full h-full bg-secondary rounded-xl flex items-center justify-center border border-border">
+          <div class="text-center p-4">
             <i class="fas fa-map text-2xl text-muted-foreground mb-2"></i>
             <p class="text-sm text-muted-foreground">Mapa Interativo</p>
             ${address ? `<p class="text-xs text-muted-foreground mt-1">${address}</p>` : ''}
-            ${draggableMarker ? `<p class="text-xs text-muted-foreground mt-1">Arraste o pin para definir localização</p>` : ''}
+            ${draggableMarker ? `<p class="text-xs text-muted-foreground mt-1">Clique para definir localização</p>` : ''}
           </div>
         </div>
       `;
+      return;
     }
+
+    // Initialize map
+    map.current = new mapboxgl.Map({
+      container: mapContainer.current,
+      style: 'mapbox://styles/mapbox/streets-v12',
+      center: [longitude, latitude],
+      zoom: 15,
+      attributionControl: false,
+    });
+
+    // Add marker if requested
+    if (showMarker) {
+      marker.current = new mapboxgl.Marker({
+        draggable: draggableMarker,
+        color: draggableMarker ? '#3b82f6' : '#ef4444',
+      })
+        .setLngLat([longitude, latitude])
+        .addTo(map.current);
+
+      if (draggableMarker && onMarkerDrag) {
+        marker.current.on('dragend', () => {
+          const lngLat = marker.current.getLngLat();
+          onMarkerDrag(lngLat.lat, lngLat.lng);
+        });
+      }
+    }
+
+    // Add click handler if provided
+    if (onClick) {
+      map.current.on('click', (e: any) => {
+        const { lng, lat } = e.lngLat;
+        onClick(lat, lng);
+        
+        if (marker.current) {
+          marker.current.setLngLat([lng, lat]);
+        } else if (showMarker) {
+          // Create marker on click if none exists
+          marker.current = new mapboxgl.Marker({
+            draggable: draggableMarker,
+            color: '#3b82f6',
+          })
+            .setLngLat([lng, lat])
+            .addTo(map.current);
+            
+          if (draggableMarker && onMarkerDrag) {
+            marker.current.on('dragend', () => {
+              const lngLat = marker.current.getLngLat();
+              onMarkerDrag(lngLat.lat, lngLat.lng);
+            });
+          }
+        }
+      });
+    }
+
+    // Clean up on unmount
+    return () => {
+      if (marker.current) {
+        marker.current.remove();
+      }
+      if (map.current) {
+        map.current.remove();
+        map.current = null;
+      }
+    };
   }, [latitude, longitude, showMarker, draggableMarker, onMarkerDrag, onClick, address]);
 
   // Update marker position when coordinates change

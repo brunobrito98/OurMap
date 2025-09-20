@@ -82,7 +82,7 @@ export default function EventDetails() {
     );
   }
 
-  const isOrganizer = user?.id === event.organizer?.id;
+  const isOrganizer = user?.id === event?.organizer?.id;
   const userAttendance = event.userAttendance?.status;
   const isConfirmed = userAttendance === 'confirmed';
 

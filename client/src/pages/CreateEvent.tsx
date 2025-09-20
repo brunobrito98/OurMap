@@ -361,7 +361,7 @@ export default function CreateEvent() {
                     <FormItem className="flex flex-row items-start space-x-3 space-y-0">
                       <FormControl>
                         <Checkbox
-                          checked={field.value}
+                          checked={field.value || false}
                           onCheckedChange={field.onChange}
                           data-testid="checkbox-recurring"
                         />
@@ -380,7 +380,7 @@ export default function CreateEvent() {
                       name="recurringType"
                       render={({ field }) => (
                         <FormItem>
-                          <Select onValueChange={field.onChange} value={field.value}>
+                          <Select onValueChange={field.onChange} value={field.value || ""}>
                             <FormControl>
                               <SelectTrigger data-testid="select-recurring-type">
                                 <SelectValue placeholder="Selecione a frequência" />
@@ -499,6 +499,7 @@ export default function CreateEvent() {
                             step="0.01"
                             min="0"
                             {...field}
+                            value={field.value || ""}
                             data-testid="input-price"
                           />
                         </div>
@@ -528,7 +529,7 @@ export default function CreateEvent() {
                       </div>
                       <FormControl>
                         <Checkbox
-                          checked={field.value}
+                          checked={field.value || false}
                           onCheckedChange={field.onChange}
                           data-testid="checkbox-allow-rsvp"
                         />
