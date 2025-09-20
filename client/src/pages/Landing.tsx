@@ -20,7 +20,7 @@ export default function Landing() {
           <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-lg">
             <i className="fas fa-calendar-alt text-3xl text-primary"></i>
           </div>
-          <h1 className="text-4xl font-bold text-white mb-2">EventHub</h1>
+          <h1 className="text-4xl font-bold text-white mb-2">OurMap</h1>
           <p className="text-white/80 text-lg">Descubra e organize eventos incríveis</p>
         </div>
 
