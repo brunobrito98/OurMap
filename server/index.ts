@@ -1,8 +1,4 @@
-// In development, we need to allow self-signed certificates for Neon database and OIDC
-// This is safe in development environment, but should be removed in production
-if (process.env.NODE_ENV === 'development') {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-}
+// TLS security: Using proper certificate verification for all connections
 
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
