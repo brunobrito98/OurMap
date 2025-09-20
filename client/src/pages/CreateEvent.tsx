@@ -209,9 +209,20 @@ export default function CreateEvent() {
           <Button
             onClick={form.handleSubmit(onSubmit)}
             disabled={createEventMutation.isPending}
+            className="flex items-center space-x-2"
             data-testid="button-save"
           >
-            {createEventMutation.isPending ? "Salvando..." : "Salvar"}
+            {createEventMutation.isPending ? (
+              <>
+                <i className="fas fa-spinner fa-spin"></i>
+                <span>Salvando...</span>
+              </>
+            ) : (
+              <>
+                <i className="fas fa-save"></i>
+                <span>Salvar</span>
+              </>
+            )}
           </Button>
         </div>
       </div>

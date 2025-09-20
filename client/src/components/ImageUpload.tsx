@@ -137,8 +137,9 @@ export default function ImageUpload({
               </p>
               <p className="text-xs text-muted-foreground">JPG, PNG, WebP até 5MB</p>
             </div>
-            <Button type="button" className="mt-3" data-testid="button-select-image">
-              Selecionar foto
+            <Button type="button" className="mt-3 flex items-center space-x-2" data-testid="button-select-image">
+              <i className="fas fa-image"></i>
+              <span>Selecionar foto</span>
             </Button>
           </div>
         </div>

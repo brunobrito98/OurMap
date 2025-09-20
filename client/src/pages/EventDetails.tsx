@@ -82,11 +82,11 @@ export default function EventDetails() {
     );
   }
 
-  const isOrganizer = user?.id === event.organizer.id;
+  const isOrganizer = user?.id === event.organizer?.id;
   const userAttendance = event.userAttendance?.status;
   const isConfirmed = userAttendance === 'confirmed';
 
-  const formatDate = (date: string) => {
+  const formatDate = (date: string | Date) => {
     return new Date(date).toLocaleDateString('pt-BR', {
       day: 'numeric',
       month: 'long',
@@ -94,7 +94,7 @@ export default function EventDetails() {
     });
   };
 
-  const formatTime = (date: string) => {
+  const formatTime = (date: string | Date) => {
     return new Date(date).toLocaleTimeString('pt-BR', {
       hour: '2-digit',
       minute: '2-digit',

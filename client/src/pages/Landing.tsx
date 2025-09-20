@@ -62,10 +62,11 @@ export default function Landing() {
           {/* Replit Auth Button */}
           <Button
             onClick={handleLogin}
-            className="w-full bg-primary hover:bg-primary/90 h-12"
+            className="w-full flex items-center justify-center space-x-3 bg-primary hover:bg-primary/90 h-12"
             data-testid="button-login-replit"
           >
-            Entrar com Replit
+            <i className="fas fa-code text-xl"></i>
+            <span className="font-medium">Entrar com Replit</span>
           </Button>
 
           <div className="text-center mt-6">
