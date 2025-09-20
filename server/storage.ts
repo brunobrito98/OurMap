@@ -1,7 +1,7 @@
 import {
   users,
   events,
-  eventAttendances,
+  eventAttendees,
   friendships,
   eventRatings,
   type User,
@@ -93,14 +93,14 @@ export class DatabaseStorage implements IStorage {
     const [eventsCreatedResult] = await db
       .select({ count: count() })
       .from(events)
-      .where(eq(events.organizerId, id));
+      .where(eq(events.creatorId, id));
 
     const [eventsAttendedResult] = await db
       .select({ count: count() })
-      .from(eventAttendances)
+      .from(eventAttendees)
       .where(and(
-        eq(eventAttendances.userId, id),
-        eq(eventAttendances.status, 'confirmed')
+        eq(eventAttendees.userId, id),
+        eq(eventAttendees.status, 'attending')
       ));
 
     const [friendsResult] = await db
@@ -118,7 +118,7 @@ export class DatabaseStorage implements IStorage {
       .select({ avg: avg(eventRatings.organizerRating) })
       .from(eventRatings)
       .innerJoin(events, eq(eventRatings.eventId, events.id))
-      .where(eq(events.organizerId, id));
+      .where(eq(events.creatorId, id));
 
     return {
       ...user,
@@ -134,12 +134,22 @@ export class DatabaseStorage implements IStorage {
     const [newEvent] = await db
       .insert(events)
       .values({
-        ...event,
-        startDate: new Date(event.startDate),
-        endDate: event.endDate ? new Date(event.endDate) : undefined,
-        organizerId,
-        latitude: coordinates.lat,
-        longitude: coordinates.lng,
+        title: event.title,
+        description: event.description,
+        category: event.category,
+        dateTime: new Date(event.dateTime),
+        location: event.location,
+        creatorId: organizerId,
+        latitude: coordinates.lat.toString(),
+        longitude: coordinates.lng.toString(),
+        maxAttendees: event.maxAttendees,
+        imageUrl: event.imageUrl,
+        iconEmoji: event.iconEmoji,
+        coverImageUrl: event.coverImageUrl,
+        isRecurring: event.isRecurring,
+        recurrenceType: event.recurrenceType,
+        recurrenceInterval: event.recurrenceInterval,
+        recurrenceEndDate: event.recurrenceEndDate ? new Date(event.recurrenceEndDate) : undefined,
       })
       .returning();
     return newEvent;
@@ -157,27 +167,27 @@ export class DatabaseStorage implements IStorage {
         organizer: users,
       })
       .from(events)
-      .innerJoin(users, eq(events.organizerId, users.id))
+      .innerJoin(users, eq(events.creatorId, users.id))
       .where(eq(events.id, id));
 
     if (!result) return undefined;
 
     const [attendanceCountResult] = await db
       .select({ count: count() })
-      .from(eventAttendances)
+      .from(eventAttendees)
       .where(and(
-        eq(eventAttendances.eventId, id),
-        eq(eventAttendances.status, 'confirmed')
+        eq(eventAttendees.eventId, id),
+        eq(eventAttendees.status, 'attending')
       ));
 
     let userAttendance: EventAttendance | undefined;
     if (userId) {
       [userAttendance] = await db
         .select()
-        .from(eventAttendances)
+        .from(eventAttendees)
         .where(and(
-          eq(eventAttendances.eventId, id),
-          eq(eventAttendances.userId, userId)
+          eq(eventAttendees.eventId, id),
+          eq(eventAttendees.userId, userId)
         ));
     }
 
@@ -186,8 +196,8 @@ export class DatabaseStorage implements IStorage {
     if (userId) {
       const friendsGoingResult = await db
         .select({ user: users })
-        .from(eventAttendances)
-        .innerJoin(users, eq(eventAttendances.userId, users.id))
+        .from(eventAttendees)
+        .innerJoin(users, eq(eventAttendees.userId, users.id))
         .innerJoin(friendships, or(
           and(
             eq(friendships.requesterId, userId),
@@ -199,8 +209,8 @@ export class DatabaseStorage implements IStorage {
           )
         ))
         .where(and(
-          eq(eventAttendances.eventId, id),
-          eq(eventAttendances.status, 'confirmed'),
+          eq(eventAttendees.eventId, id),
+          eq(eventAttendees.status, 'attending'),
           eq(friendships.status, 'accepted')
         ));
 
@@ -223,7 +233,7 @@ export class DatabaseStorage implements IStorage {
     userId?: string;
   }): Promise<EventWithDetails[]> {
     try {
-      const conditions = [sql`DATE(${events.startDate}) >= DATE(NOW())`];
+      const conditions = [sql`DATE(${events.dateTime}) >= DATE(NOW())`];
       
       if (filters?.category) {
         conditions.push(eq(events.category, filters.category));
@@ -235,7 +245,7 @@ export class DatabaseStorage implements IStorage {
           organizer: users,
         })
         .from(events)
-        .innerJoin(users, eq(events.organizerId, users.id))
+        .innerJoin(users, eq(events.creatorId, users.id))
         .where(and(...conditions));
 
       const results = await query.orderBy(desc(events.createdAt));
@@ -250,32 +260,34 @@ export class DatabaseStorage implements IStorage {
         results.map(async (result) => {
           const [attendanceCountResult] = await db
             .select({ count: count() })
-            .from(eventAttendances)
+            .from(eventAttendees)
             .where(and(
-              eq(eventAttendances.eventId, result.event.id),
-              eq(eventAttendances.status, 'confirmed')
+              eq(eventAttendees.eventId, result.event.id),
+              eq(eventAttendees.status, 'attending')
             ));
 
           let userAttendance: EventAttendance | undefined;
           if (filters?.userId) {
             [userAttendance] = await db
               .select()
-              .from(eventAttendances)
+              .from(eventAttendees)
               .where(and(
-                eq(eventAttendances.eventId, result.event.id),
-                eq(eventAttendances.userId, filters.userId)
+                eq(eventAttendees.eventId, result.event.id),
+                eq(eventAttendees.userId, filters.userId)
               ));
           }
 
           // Calculate distance if user coordinates provided
           let distance: number | undefined;
-          if (filters?.userLat && filters?.userLng) {
+          if (filters?.userLat && filters?.userLng && result.event.latitude && result.event.longitude) {
             // Haversine formula for distance calculation
             const R = 6371; // Earth's radius in km
-            const dLat = (result.event.latitude - filters.userLat) * Math.PI / 180;
-            const dLng = (result.event.longitude - filters.userLng) * Math.PI / 180;
+            const eventLat = parseFloat(result.event.latitude);
+            const eventLng = parseFloat(result.event.longitude);
+            const dLat = (eventLat - filters.userLat) * Math.PI / 180;
+            const dLng = (eventLng - filters.userLng) * Math.PI / 180;
             const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                      Math.cos(filters.userLat * Math.PI / 180) * Math.cos(result.event.latitude * Math.PI / 180) *
+                      Math.cos(filters.userLat * Math.PI / 180) * Math.cos(eventLat * Math.PI / 180) *
                       Math.sin(dLng/2) * Math.sin(dLng/2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
             distance = R * c;
@@ -319,8 +331,8 @@ export class DatabaseStorage implements IStorage {
           organizer: users,
         })
         .from(events)
-        .innerJoin(users, eq(events.organizerId, users.id))
-        .where(eq(events.organizerId, userId));
+        .innerJoin(users, eq(events.creatorId, users.id))
+        .where(eq(events.creatorId, userId));
 
       const results = await query.orderBy(desc(events.createdAt));
       
@@ -333,10 +345,10 @@ export class DatabaseStorage implements IStorage {
         results.map(async (result) => {
           const [attendanceCountResult] = await db
             .select({ count: count() })
-            .from(eventAttendances)
+            .from(eventAttendees)
             .where(and(
-              eq(eventAttendances.eventId, result.event.id),
-              eq(eventAttendances.status, 'confirmed')
+              eq(eventAttendees.eventId, result.event.id),
+              eq(eventAttendees.status, 'attending')
             ));
 
           return {
@@ -360,12 +372,12 @@ export class DatabaseStorage implements IStorage {
     const updateData: any = { 
       ...event, 
       updatedAt: new Date(),
-      ...(event.startDate && { startDate: new Date(event.startDate) }),
-      ...(event.endDate && { endDate: new Date(event.endDate) }),
+      ...(event.dateTime && { dateTime: new Date(event.dateTime) }),
+      ...(event.recurrenceEndDate && { recurrenceEndDate: new Date(event.recurrenceEndDate) }),
     };
     if (coordinates) {
-      updateData.latitude = coordinates.lat;
-      updateData.longitude = coordinates.lng;
+      updateData.latitude = coordinates.lat.toString();
+      updateData.longitude = coordinates.lng.toString();
     }
 
     const [updatedEvent] = await db
@@ -379,17 +391,17 @@ export class DatabaseStorage implements IStorage {
   async deleteEvent(id: string, organizerId: string): Promise<boolean> {
     const result = await db
       .delete(events)
-      .where(and(eq(events.id, id), eq(events.organizerId, organizerId)));
+      .where(and(eq(events.id, id), eq(events.creatorId, organizerId)));
     return (result.rowCount || 0) > 0;
   }
 
   // Attendance operations
   async createAttendance(attendance: InsertEventAttendance): Promise<EventAttendance> {
     const [newAttendance] = await db
-      .insert(eventAttendances)
+      .insert(eventAttendees)
       .values(attendance)
       .onConflictDoUpdate({
-        target: [eventAttendances.eventId, eventAttendances.userId],
+        target: [eventAttendees.eventId, eventAttendees.userId],
         set: { status: attendance.status },
       })
       .returning();
@@ -399,21 +411,21 @@ export class DatabaseStorage implements IStorage {
   async getAttendance(eventId: string, userId: string): Promise<EventAttendance | undefined> {
     const [attendance] = await db
       .select()
-      .from(eventAttendances)
+      .from(eventAttendees)
       .where(and(
-        eq(eventAttendances.eventId, eventId),
-        eq(eventAttendances.userId, userId)
+        eq(eventAttendees.eventId, eventId),
+        eq(eventAttendees.userId, userId)
       ));
     return attendance;
   }
 
   async updateAttendance(eventId: string, userId: string, status: string): Promise<EventAttendance | undefined> {
     const [attendance] = await db
-      .update(eventAttendances)
+      .update(eventAttendees)
       .set({ status })
       .where(and(
-        eq(eventAttendances.eventId, eventId),
-        eq(eventAttendances.userId, userId)
+        eq(eventAttendees.eventId, eventId),
+        eq(eventAttendees.userId, userId)
       ))
       .returning();
     return attendance;
@@ -422,11 +434,11 @@ export class DatabaseStorage implements IStorage {
   async getEventAttendees(eventId: string): Promise<User[]> {
     const results = await db
       .select({ user: users })
-      .from(eventAttendances)
-      .innerJoin(users, eq(eventAttendances.userId, users.id))
+      .from(eventAttendees)
+      .innerJoin(users, eq(eventAttendees.userId, users.id))
       .where(and(
-        eq(eventAttendances.eventId, eventId),
-        eq(eventAttendances.status, 'confirmed')
+        eq(eventAttendees.eventId, eventId),
+        eq(eventAttendees.status, 'attending')
       ));
     
     return results.map(r => r.user);
