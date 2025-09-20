@@ -18,7 +18,7 @@ function parseConnectionString(connectionString: string) {
     const url = new URL(connectionString);
     return {
       connectionString: connectionString,
-      ssl: { rejectUnauthorized: false }
+      ssl: true
     };
   } catch {
     // If URL parsing fails, try to extract components manually
@@ -31,13 +31,13 @@ function parseConnectionString(connectionString: string) {
         host: host,
         port: parseInt(port),
         database: database,
-        ssl: { rejectUnauthorized: false }
+        ssl: true
       };
     } else {
       // Fallback to original string
       return {
         connectionString: connectionString,
-        ssl: { rejectUnauthorized: false }
+        ssl: true
       };
     }
   }
