@@ -200,7 +200,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const processedEventData = eventData;
       
       // Geocode the address
-      const coordinates = await geocodeAddress(eventData.address);
+      const coordinates = await geocodeAddress(eventData.location);
       
       // Handle cover image if uploaded
       let coverImageUrl = null;
@@ -244,7 +244,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Check if user owns the event
       const existingEvent = await storage.getEvent(eventId);
-      if (!existingEvent || existingEvent.organizerId !== userId) {
+      if (!existingEvent || existingEvent.creatorId !== userId) {
         return res.status(403).json({ message: "Not authorized to edit this event" });
       }
       
@@ -267,10 +267,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Use eventData directly - dates are already strings from form validation
       const processedEventData = { ...eventData };
       
-      // Geocode address if it changed
+      // Geocode location if it changed
       let coordinates;
-      if (eventData.address && eventData.address !== existingEvent.address) {
-        coordinates = await geocodeAddress(eventData.address);
+      if (eventData.location && eventData.location !== existingEvent.location) {
+        coordinates = await geocodeAddress(eventData.location);
       }
       
       // Handle cover image if uploaded
@@ -437,6 +437,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const eventId = req.params.id;
       
+      // Check if user can rate this event
+      const canRate = await storage.canUserRateEvent(eventId, userId);
+      if (!canRate.canRate) {
+        return res.status(400).json({ message: canRate.reason });
+      }
+      
       const ratingData = insertEventRatingSchema.parse({
         ...req.body,
         eventId,
@@ -458,6 +464,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching ratings:", error);
       res.status(500).json({ message: "Failed to fetch ratings" });
+    }
+  });
+
+  app.get('/api/events/:id/ratings/average', async (req, res) => {
+    try {
+      const average = await storage.getEventRatingsAverage(req.params.id);
+      res.json(average);
+    } catch (error) {
+      console.error("Error fetching ratings average:", error);
+      res.status(500).json({ message: "Failed to fetch ratings average" });
+    }
+  });
+
+  app.get('/api/events/:id/can-rate', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
+      
+      const canRate = await storage.canUserRateEvent(req.params.id, userId);
+      res.json(canRate);
+    } catch (error) {
+      console.error("Error checking if user can rate:", error);
+      res.status(500).json({ message: "Failed to check rating permission" });
+    }
+  });
+
+  app.get('/api/events/:id/my-rating', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
+      
+      const rating = await storage.getUserEventRating(req.params.id, userId);
+      res.json(rating || null);
+    } catch (error) {
+      console.error("Error fetching user rating:", error);
+      res.status(500).json({ message: "Failed to fetch user rating" });
+    }
+  });
+
+  app.get('/api/users/:id/organizer-rating', async (req, res) => {
+    try {
+      const organizerRating = await storage.getOrganizerRatingsAverage(req.params.id);
+      res.json(organizerRating);
+    } catch (error) {
+      console.error("Error fetching organizer rating:", error);
+      res.status(500).json({ message: "Failed to fetch organizer rating" });
     }
   });
 
