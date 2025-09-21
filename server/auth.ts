@@ -24,6 +24,10 @@ async function comparePasswords(supplied: string, stored: string) {
 }
 
 export function setupLocalAuth(app: Express) {
+  // Initialize passport middleware
+  app.use(passport.initialize());
+  app.use(passport.session());
+
   // Setup local strategy for passport
   passport.use(
     "local",
