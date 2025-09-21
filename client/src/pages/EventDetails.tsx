@@ -86,7 +86,7 @@ export default function EventDetails() {
     );
   }
 
-  const isOrganizer = user && typeof user === 'object' && user !== null && 'id' in user && user.id === event?.organizer?.id;
+  const isOrganizer = Boolean(user && typeof user === 'object' && user !== null && 'id' in user && user.id === event?.organizer?.id);
   const userAttendance = event.userAttendance?.status;
   const isConfirmed = userAttendance === 'confirmed';
 
