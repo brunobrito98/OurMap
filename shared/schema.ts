@@ -98,7 +98,9 @@ export const eventRatings = pgTable("event_ratings", {
   eventRating: integer("event_rating"), // 1-5 stars for event
   comment: text("comment"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  uniqueUserEventRating: unique().on(table.eventId, table.userId),
+}));
 
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
