@@ -511,6 +511,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // City search endpoint for autocomplete
+  app.post('/api/search-cities', async (req, res) => {
+    try {
+      const { query } = req.body;
+      if (!query || query.length < 2) {
+        return res.json({ suggestions: [] });
+      }
+      
+      const mapboxToken = process.env.MAPBOX_ACCESS_TOKEN || process.env.VITE_MAPBOX_ACCESS_TOKEN;
+      if (!mapboxToken) {
+        return res.status(500).json({ message: 'Mapbox access token not configured' });
+      }
+
+      const encodedQuery = encodeURIComponent(query);
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedQuery}.json?access_token=${mapboxToken}&types=place&limit=5&language=pt`
+      );
+
+      if (!response.ok) {
+        throw new Error('City search failed');
+      }
+
+      const data = await response.json();
+      const suggestions = data.features?.map((feature: any) => ({
+        place_name: feature.place_name,
+        center: feature.center,
+        text: feature.text,
+      })) || [];
+      
+      res.json({ suggestions });
+    } catch (error) {
+      console.error("City search error:", error);
+      res.status(500).json({ message: "Failed to search cities" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
