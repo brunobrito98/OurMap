@@ -5,12 +5,12 @@ import { Express, RequestHandler } from "express";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
-import { User as SelectUser, InsertLocalUser, insertLocalUserSchema } from "@shared/schema";
+import { User as SelectUser, InsertLocalUser, InsertAdminUser, insertLocalUserSchema, insertAdminUserSchema } from "@shared/schema";
 import { z } from "zod";
 
 const scryptAsync = promisify(scrypt);
 
-async function hashPassword(password: string) {
+export async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   const buf = (await scryptAsync(password, salt, 64)) as Buffer;
   return `${buf.toString("hex")}.${salt}`;
@@ -151,6 +151,81 @@ export function setupLocalAuth(app: Express) {
       res.json({ message: "Logout realizado com sucesso" });
     });
   });
+
+  // Bootstrap admin creation endpoint - secure with setup token
+  app.post("/api/auth/bootstrap-admin", async (req, res) => {
+    try {
+      // Require setup token for security - fail closed if not set
+      const setupToken = req.headers['x-setup-token'] as string;
+      const expectedToken = process.env.ADMIN_SETUP_TOKEN;
+      
+      if (!expectedToken) {
+        return res.status(500).json({ message: "Sistema não configurado para criação de administrador" });
+      }
+      
+      if (!setupToken || setupToken !== expectedToken) {
+        return res.status(401).json({ message: "Token de configuração inválido" });
+      }
+
+      // Check if any admin already exists
+      const existingAdmins = await storage.getAdminUsers();
+      if (existingAdmins.length > 0) {
+        return res.status(403).json({ 
+          message: "Já existe um administrador no sistema." 
+        });
+      }
+
+      // Use schema without role (force super_admin)
+      const userSchema = insertLocalUserSchema.extend({
+        password: z.string().min(8, "Senha deve ter pelo menos 8 caracteres"),
+      });
+      
+      const validatedData = userSchema.parse(req.body);
+      
+      const existingUser = await storage.getUserByUsername(validatedData.username);
+      if (existingUser) {
+        return res.status(400).json({ message: "Username já existe" });
+      }
+
+      const existingEmail = await storage.getUserByEmail(validatedData.email);
+      if (existingEmail) {
+        return res.status(400).json({ message: "Email já está em uso" });
+      }
+
+      // Force super_admin role on server side
+      const user = await storage.createAdminUser({
+        ...validatedData,
+        password: await hashPassword(validatedData.password),
+        authType: 'local',
+        role: 'super_admin', // Force super_admin role
+      });
+
+      req.login(user, (err) => {
+        if (err) {
+          console.error("Login error:", err);
+          return res.status(500).json({ message: "Usuário criado mas erro no login automático" });
+        }
+        res.status(201).json({
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          username: user.username,
+          role: user.role,
+          authType: user.authType,
+          message: "Super administrador criado com sucesso"
+        });
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: error.errors[0]?.message || "Dados inválidos" 
+        });
+      }
+      console.error("Bootstrap admin creation error:", error);
+      res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
 }
 
 // Middleware to check if user is authenticated (works with both auth types)
@@ -159,4 +234,19 @@ export const isAuthenticatedLocal: RequestHandler = (req, res, next) => {
     return next();
   }
   res.status(401).json({ message: "Unauthorized" });
+};
+
+// Admin middleware
+export const isAdmin: RequestHandler = (req, res, next) => {
+  if (req.isAuthenticated() && (req.user?.role === 'admin' || req.user?.role === 'super_admin')) {
+    return next();
+  }
+  res.status(403).json({ message: "Acesso negado. Apenas administradores." });
+};
+
+export const isSuperAdmin: RequestHandler = (req, res, next) => {
+  if (req.isAuthenticated() && req.user?.role === 'super_admin') {
+    return next();
+  }
+  res.status(403).json({ message: "Acesso negado. Apenas super administradores." });
 };
