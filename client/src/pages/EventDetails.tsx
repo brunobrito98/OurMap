@@ -9,6 +9,10 @@ import { useToast } from "@/hooks/use-toast";
 import { isUnauthorizedError } from "@/lib/authUtils";
 import { apiRequest } from "@/lib/queryClient";
 import type { EventWithDetails } from "@shared/schema";
+import EventRatingForm from "@/components/EventRatingForm";
+import Rating from "@/components/ui/rating";
+import OrganizerRating from "@/components/OrganizerRating";
+import EventRatingsDisplay from "@/components/EventRatingsDisplay";
 
 export default function EventDetails() {
   const { id } = useParams();
@@ -193,13 +197,13 @@ export default function EventDetails() {
                 <div className="flex items-center space-x-1 text-white/90">
                   <i className="fas fa-calendar text-sm"></i>
                   <span className="text-sm" data-testid="text-event-date">
-                    {formatDate(event.startDate)}
+                    {formatDate(event.dateTime)}
                   </span>
                 </div>
                 <div className="flex items-center space-x-1 text-white/90">
                   <i className="fas fa-clock text-sm"></i>
                   <span className="text-sm" data-testid="text-event-time">
-                    {formatTime(event.startDate)}
+                    {formatTime(event.dateTime)}
                   </span>
                 </div>
               </div>
@@ -223,10 +227,7 @@ export default function EventDetails() {
               </p>
               <p className="text-sm text-muted-foreground">Organizador</p>
             </div>
-            <div className="flex items-center space-x-1">
-              <i className="fas fa-star text-yellow-400 text-sm"></i>
-              <span className="text-sm font-medium" data-testid="text-organizer-rating">4.8</span>
-            </div>
+            <OrganizerRating organizerId={event.organizer.id} />
           </div>
 
           {/* Category and Distance */}
@@ -269,17 +270,17 @@ export default function EventDetails() {
             </div>
             
             <p className="text-muted-foreground text-sm mb-3" data-testid="text-event-address">
-              {event.address}
+              {event.location}
             </p>
             
             {/* Interactive Map */}
             <div className="rounded-xl overflow-hidden mb-3">
               <MapComponent
-                latitude={event.latitude}
-                longitude={event.longitude}
+                latitude={event.latitude ? parseFloat(event.latitude) : 0}
+                longitude={event.longitude ? parseFloat(event.longitude) : 0}
                 height={128}
                 showMarker
-                address={event.address}
+                address={event.location}
               />
             </div>
             
@@ -336,6 +337,16 @@ export default function EventDetails() {
               </div>
             </div>
           )}
+
+          {/* Event Rating Section */}
+          <EventRatingsDisplay eventId={event.id} />
+          
+          {/* Rating Form */}
+          <EventRatingForm 
+            eventId={event.id} 
+            eventTitle={event.title}
+            organizerName={`${event.organizer.firstName} ${event.organizer.lastName}`}
+          />
         </div>
       </div>
 
@@ -344,10 +355,10 @@ export default function EventDetails() {
         <div className="max-w-sm mx-auto flex items-center space-x-3">
           <div className="flex-1 text-center">
             <p className="text-2xl font-bold text-primary" data-testid="text-event-price">
-              {event.isFree ? "Gratuito" : `R$ ${event.price}`}
+              Gratuito
             </p>
             <p className="text-xs text-muted-foreground">
-              {event.isFree ? "Entrada livre" : "Por pessoa"}
+              Entrada livre
             </p>
           </div>
           <Button
