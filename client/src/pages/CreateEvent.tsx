@@ -53,12 +53,10 @@ export default function CreateEvent() {
       title: "",
       description: "",
       category: "",
-      address: "",
-      isFree: true,
-      price: "0",
-      allowRsvp: true,
+      dateTime: "",
+      location: "",
       isRecurring: false,
-      iconType: "calendar",
+      iconEmoji: "📅",
     },
   });
 
@@ -69,20 +67,16 @@ export default function CreateEvent() {
         title: eventData.title,
         description: eventData.description || "",
         category: eventData.category,
-        startDate: new Date(eventData.startDate).toISOString().slice(0, 16),
-        endDate: eventData.endDate ? new Date(eventData.endDate).toISOString().slice(0, 16) : undefined,
-        address: eventData.address,
-        price: eventData.price || "0",
-        isFree: eventData.isFree,
-        allowRsvp: eventData.allowRsvp,
+        dateTime: new Date(eventData.dateTime).toISOString().slice(0, 16),
+        location: eventData.location,
         isRecurring: eventData.isRecurring,
-        recurringType: eventData.recurringType || undefined,
-        iconType: eventData.iconType || "calendar",
+        recurrenceType: eventData.recurrenceType || undefined,
+        iconEmoji: eventData.iconEmoji || "📅",
       });
       
       setMapCoordinates({
-        lat: eventData.latitude,
-        lng: eventData.longitude,
+        lat: parseFloat(eventData.latitude),
+        lng: parseFloat(eventData.longitude),
       });
     }
   }, [eventData, isEditing, form]);
@@ -136,12 +130,27 @@ export default function CreateEvent() {
   const onSubmit = (data: InsertEvent) => {
     const formData = new FormData();
     
-    // Append all form fields
-    Object.entries(data).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        formData.append(key, value.toString());
+    // Append form fields
+    formData.append('title', data.title);
+    formData.append('dateTime', data.dateTime);
+    formData.append('location', data.location);
+    formData.append('category', data.category);
+    
+    if (data.description) {
+      formData.append('description', data.description);
+    }
+    if (data.isRecurring) {
+      formData.append('isRecurring', 'true');
+      if (data.recurrenceType) {
+        formData.append('recurrenceType', data.recurrenceType);
       }
-    });
+    }
+    
+    // Add coordinates if available
+    if (mapCoordinates) {
+      formData.append('latitude', mapCoordinates.lat.toString());
+      formData.append('longitude', mapCoordinates.lng.toString());
+    }
     
     // Append cover image if selected
     if (coverImage) {
@@ -183,7 +192,7 @@ export default function CreateEvent() {
       
       if (response.ok) {
         const data = await response.json();
-        form.setValue('address', data.address);
+        form.setValue('location', data.address);
       }
     } catch (error) {
       console.error('Reverse geocoding error:', error);
@@ -314,43 +323,24 @@ export default function CreateEvent() {
             <div className="space-y-4">
               <h3 className="font-semibold text-foreground">Data e Horário</h3>
               
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="startDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Data e Hora de Início *</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="datetime-local"
-                          {...field}
-                          data-testid="input-start-date"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="endDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Data e Hora de Término</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="datetime-local"
-                          {...field}
-                          data-testid="input-end-date"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+              <FormField
+                control={form.control}
+                name="dateTime"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Data e Hora do Evento *</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="datetime-local"
+                        {...field}
+                        value={field.value || ""}
+                        data-testid="input-datetime"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               {/* Recurring Event Option */}
               <div className="bg-secondary rounded-xl p-4">
@@ -377,12 +367,12 @@ export default function CreateEvent() {
                   <div className="mt-3">
                     <FormField
                       control={form.control}
-                      name="recurringType"
+                      name="recurrenceType"
                       render={({ field }) => (
                         <FormItem>
                           <Select onValueChange={field.onChange} value={field.value || ""}>
                             <FormControl>
-                              <SelectTrigger data-testid="select-recurring-type">
+                              <SelectTrigger data-testid="select-recurrence-type">
                                 <SelectValue placeholder="Selecione a frequência" />
                               </SelectTrigger>
                             </FormControl>
@@ -409,7 +399,7 @@ export default function CreateEvent() {
               
               <FormField
                 control={form.control}
-                name="address"
+                name="location"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Endereço *</FormLabel>
@@ -417,8 +407,9 @@ export default function CreateEvent() {
                       <Input
                         placeholder="Ex: Parque Ibirapuera, São Paulo - SP"
                         {...field}
+                        value={field.value || ""}
                         onBlur={() => handleAddressChange(field.value)}
-                        data-testid="input-address"
+                        data-testid="input-location"
                       />
                     </FormControl>
                     <p className="text-xs text-muted-foreground">
@@ -446,99 +437,6 @@ export default function CreateEvent() {
               </p>
             </div>
 
-            {/* Pricing */}
-            <div className="space-y-4">
-              <h3 className="font-semibold text-foreground">Preço</h3>
-              
-              <FormField
-                control={form.control}
-                name="isFree"
-                render={({ field }) => (
-                  <FormItem className="space-y-3">
-                    <div className="flex items-center space-x-3">
-                      <FormControl>
-                        <input
-                          type="radio"
-                          checked={field.value === true}
-                          onChange={() => field.onChange(true)}
-                          className="text-primary focus:ring-ring"
-                          data-testid="radio-free"
-                        />
-                      </FormControl>
-                      <FormLabel>Gratuito</FormLabel>
-                    </div>
-                    
-                    <div className="flex items-center space-x-3">
-                      <FormControl>
-                        <input
-                          type="radio"
-                          checked={field.value === false}
-                          onChange={() => field.onChange(false)}
-                          className="text-primary focus:ring-ring"
-                          data-testid="radio-paid"
-                        />
-                      </FormControl>
-                      <FormLabel>Pago</FormLabel>
-                    </div>
-                  </FormItem>
-                )}
-              />
-              
-              {!form.watch("isFree") && (
-                <FormField
-                  control={form.control}
-                  name="price"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormControl>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-sm text-muted-foreground">R$</span>
-                          <Input
-                            type="number"
-                            placeholder="0,00"
-                            step="0.01"
-                            min="0"
-                            {...field}
-                            value={field.value || ""}
-                            data-testid="input-price"
-                          />
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
-            </div>
-
-            {/* Attendance Settings */}
-            <div className="space-y-4">
-              <h3 className="font-semibold text-foreground">Configurações</h3>
-              
-              <div className="space-y-3">
-                <FormField
-                  control={form.control}
-                  name="allowRsvp"
-                  render={({ field }) => (
-                    <FormItem className="flex items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <FormLabel>Permitir confirmação de presença</FormLabel>
-                        <p className="text-sm text-muted-foreground">
-                          Usuários podem confirmar que vão ao evento
-                        </p>
-                      </div>
-                      <FormControl>
-                        <Checkbox
-                          checked={field.value || false}
-                          onCheckedChange={field.onChange}
-                          data-testid="checkbox-allow-rsvp"
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
           </form>
         </Form>
       </div>
