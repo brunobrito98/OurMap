@@ -42,6 +42,7 @@ export const users = pgTable("users", {
   username: varchar("username").unique(),
   password: varchar("password"),
   authType: varchar("auth_type").default("replit"), // 'replit' or 'local'
+  role: varchar("role").default("user"), // 'user', 'admin', 'super_admin'
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -98,7 +99,9 @@ export const eventRatings = pgTable("event_ratings", {
   eventRating: integer("event_rating"), // 1-5 stars for event
   comment: text("comment"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  uniqueUserEventRating: unique().on(table.eventId, table.userId),
+}));
 
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
@@ -196,6 +199,7 @@ export const insertLocalUserSchema = createInsertSchema(users).omit({
   updatedAt: true,
   profileImageUrl: true,
   authType: true,
+  role: true,
 }).extend({
   username: z.string().min(3, "Username deve ter pelo menos 3 caracteres"),
   password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
@@ -204,11 +208,28 @@ export const insertLocalUserSchema = createInsertSchema(users).omit({
   lastName: z.string().min(1, "Sobrenome é obrigatório"),
 });
 
+// Admin user creation schema
+export const insertAdminUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  profileImageUrl: true,
+  authType: true,
+}).extend({
+  username: z.string().min(3, "Username deve ter pelo menos 3 caracteres"),
+  password: z.string().min(8, "Senha deve ter pelo menos 8 caracteres"),
+  email: z.string().email("Email deve ser válido"),
+  firstName: z.string().min(1, "Nome é obrigatório"),
+  lastName: z.string().min(1, "Sobrenome é obrigatório"),
+  role: z.enum(["admin", "super_admin"]),
+});
+
 // Types
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertLocalUser = z.infer<typeof insertLocalUserSchema>;
+export type InsertAdminUser = z.infer<typeof insertAdminUserSchema>;
 export type Event = typeof events.$inferSelect;
 export type InsertEvent = z.infer<typeof insertEventSchema>;
 export type EventAttendance = typeof eventAttendees.$inferSelect;

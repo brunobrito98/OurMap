@@ -7,6 +7,8 @@ import EventCard from "@/components/EventCard";
 import CategoryFilter from "@/components/CategoryFilter";
 import BottomNavigation from "@/components/BottomNavigation";
 import FloatingCreateButton from "@/components/FloatingCreateButton";
+import CitySearchModal from "@/components/CitySearchModal";
+import { MapIcon } from "lucide-react";
 import type { EventWithDetails } from "@shared/schema";
 
 export default function Home() {
@@ -15,6 +17,7 @@ export default function Home() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationName, setLocationName] = useState("São Paulo, SP");
   const [searchQuery, setSearchQuery] = useState("");
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
 
   // Get user's location
   useEffect(() => {
@@ -69,22 +72,13 @@ export default function Home() {
     !searchQuery || event.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const handleLocationSelect = (location: { lat: number; lng: number }, cityName: string) => {
+    setUserLocation(location);
+    setLocationName(cityName);
+  };
+
   const handleChangeLocation = () => {
-    const newLocation = prompt("Digite uma nova localização:", locationName);
-    if (newLocation) {
-      // Geocode the new location
-      fetch('/api/geocode', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address: newLocation }),
-      })
-        .then(res => res.json())
-        .then(data => {
-          setUserLocation(data);
-          setLocationName(newLocation);
-        })
-        .catch(console.error);
-    }
+    setIsLocationModalOpen(true);
   };
 
   return (
@@ -93,7 +87,7 @@ export default function Home() {
       <div className="bg-white border-b border-border p-4 sticky top-0 z-30">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <i className="fas fa-map-marker-alt text-primary"></i>
+            <MapIcon className="w-5 h-5 text-primary" />
             <div>
               <p className="text-sm text-muted-foreground">Sua localização</p>
               <p className="font-semibold text-foreground" data-testid="text-location">{locationName}</p>
@@ -106,7 +100,7 @@ export default function Home() {
             className="text-primary hover:bg-secondary"
             data-testid="button-change-location"
           >
-            <i className="fas fa-edit"></i>
+            <MapIcon className="w-4 h-4" />
           </Button>
         </div>
       </div>
@@ -173,6 +167,13 @@ export default function Home() {
 
       <FloatingCreateButton />
       <BottomNavigation activeTab="home" />
+      
+      <CitySearchModal
+        open={isLocationModalOpen}
+        onOpenChange={setIsLocationModalOpen}
+        onLocationSelect={handleLocationSelect}
+        currentLocation={locationName}
+      />
     </div>
   );
 }

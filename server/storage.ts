@@ -30,6 +30,11 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createLocalUser(user: { username: string; password: string; email: string; firstName: string; lastName: string }): Promise<User>;
+  
+  // Admin functions
+  getAdminUsers(): Promise<User[]>;
+  createAdminUser(userData: { username: string; password: string; email: string; firstName: string; lastName: string; role: string; authType: string }): Promise<User>;
+  getAllUsers(): Promise<User[]>;
 
   // Event operations
   createEvent(event: InsertEvent, organizerId: string, coordinates: { lat: number; lng: number }): Promise<Event>;
@@ -62,6 +67,10 @@ export interface IStorage {
   createRating(rating: InsertEventRating): Promise<EventRating>;
   getEventRatings(eventId: string): Promise<EventRating[]>;
   getUserRatings(userId: string): Promise<EventRating[]>;
+  getUserEventRating(eventId: string, userId: string): Promise<EventRating | undefined>;
+  canUserRateEvent(eventId: string, userId: string): Promise<{ canRate: boolean; reason?: string }>;
+  getEventRatingsAverage(eventId: string): Promise<{ eventAverage: number; organizerAverage: number; totalRatings: number }>;
+  getOrganizerRatingsAverage(organizerId: string): Promise<{ average: number; totalRatings: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -164,7 +173,17 @@ export class DatabaseStorage implements IStorage {
     const [result] = await db
       .select({
         event: events,
-        organizer: users,
+        organizer: {
+          id: users.id,
+          username: users.username,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          profileImageUrl: users.profileImageUrl,
+          role: users.role,
+          authType: users.authType,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+        },
       })
       .from(events)
       .innerJoin(users, eq(events.creatorId, users.id))
@@ -242,7 +261,17 @@ export class DatabaseStorage implements IStorage {
       const query = db
         .select({
           event: events,
-          organizer: users,
+          organizer: {
+            id: users.id,
+            username: users.username,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            profileImageUrl: users.profileImageUrl,
+            role: users.role,
+            authType: users.authType,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+          },
         })
         .from(events)
         .innerJoin(users, eq(events.creatorId, users.id))
@@ -328,7 +357,17 @@ export class DatabaseStorage implements IStorage {
       const query = db
         .select({
           event: events,
-          organizer: users,
+          organizer: {
+            id: users.id,
+            username: users.username,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            profileImageUrl: users.profileImageUrl,
+            role: users.role,
+            authType: users.authType,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+          },
         })
         .from(events)
         .innerJoin(users, eq(events.creatorId, users.id))
@@ -541,6 +580,77 @@ export class DatabaseStorage implements IStorage {
       .where(eq(eventRatings.userId, userId));
   }
 
+  async getUserEventRating(eventId: string, userId: string): Promise<EventRating | undefined> {
+    const [rating] = await db
+      .select()
+      .from(eventRatings)
+      .where(and(
+        eq(eventRatings.eventId, eventId),
+        eq(eventRatings.userId, userId)
+      ));
+    return rating;
+  }
+
+  async canUserRateEvent(eventId: string, userId: string): Promise<{ canRate: boolean; reason?: string }> {
+    // Check if event exists and has ended
+    const event = await this.getEvent(eventId);
+    if (!event) {
+      return { canRate: false, reason: "Evento não encontrado" };
+    }
+
+    const now = new Date();
+    if (event.dateTime > now) {
+      return { canRate: false, reason: "Só é possível avaliar após o término do evento" };
+    }
+
+    // Check if user attended the event
+    const attendance = await this.getAttendance(eventId, userId);
+    if (!attendance || attendance.status !== 'attending') {
+      return { canRate: false, reason: "Apenas usuários que confirmaram presença podem avaliar" };
+    }
+
+    // Check if user already rated this event
+    const existingRating = await this.getUserEventRating(eventId, userId);
+    if (existingRating) {
+      return { canRate: false, reason: "Você já avaliou este evento" };
+    }
+
+    return { canRate: true };
+  }
+
+  async getEventRatingsAverage(eventId: string): Promise<{ eventAverage: number; organizerAverage: number; totalRatings: number }> {
+    const [result] = await db
+      .select({
+        eventAverage: avg(eventRatings.eventRating),
+        organizerAverage: avg(eventRatings.organizerRating),
+        totalRatings: count(),
+      })
+      .from(eventRatings)
+      .where(eq(eventRatings.eventId, eventId));
+
+    return {
+      eventAverage: result.eventAverage ? Number(result.eventAverage) : 0,
+      organizerAverage: result.organizerAverage ? Number(result.organizerAverage) : 0,
+      totalRatings: result.totalRatings,
+    };
+  }
+
+  async getOrganizerRatingsAverage(organizerId: string): Promise<{ average: number; totalRatings: number }> {
+    const [result] = await db
+      .select({
+        average: avg(eventRatings.organizerRating),
+        totalRatings: count(),
+      })
+      .from(eventRatings)
+      .innerJoin(events, eq(eventRatings.eventId, events.id))
+      .where(eq(events.creatorId, organizerId));
+
+    return {
+      average: result.average ? Number(result.average) : 0,
+      totalRatings: result.totalRatings,
+    };
+  }
+
   // Additional user operations for local authentication from javascript_auth_all_persistance blueprint
   async getUserByUsername(username: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.username, username));
@@ -561,6 +671,26 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return user;
+  }
+
+  async getAdminUsers(): Promise<User[]> {
+    const adminUsers = await db
+      .select()
+      .from(users)
+      .where(or(eq(users.role, 'admin'), eq(users.role, 'super_admin')));
+    return adminUsers;
+  }
+
+  async createAdminUser(userData: { username: string; password: string; email: string; firstName: string; lastName: string; role: string; authType: string }): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(userData)
+      .returning();
+    return user;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users);
   }
 }
 
