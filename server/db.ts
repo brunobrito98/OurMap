@@ -11,46 +11,12 @@ if (!databaseUrl) {
   );
 }
 
-// Parse connection string for Supabase with proper SSL
+// For Supabase, use the connection string directly with SSL
 function parseConnectionString(connectionString: string) {
-  // For Supabase, use the connection string directly with proper SSL
   return {
-    connectionString:
-      connectionString +
-      (connectionString.includes("?") ? "&" : "?") +
-      "sslmode=require",
+    connectionString: connectionString,
+    ssl: { rejectUnauthorized: false }
   };
-
-  try {
-    // Try to parse as URL first
-    const url = new URL(connectionString);
-    return {
-      connectionString: connectionString,
-      ssl: true,
-    };
-  } catch {
-    // If URL parsing fails, try to extract components manually
-    const match = connectionString.match(
-      /^postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)$/,
-    );
-    if (match) {
-      const [, username, password, host, port, database] = match;
-      return {
-        user: username,
-        password: password,
-        host: host,
-        port: parseInt(port),
-        database: database,
-        ssl: true,
-      };
-    } else {
-      // Fallback to original string
-      return {
-        connectionString: connectionString,
-        ssl: true,
-      };
-    }
-  }
 }
 
 const poolConfig = parseConnectionString(databaseUrl);
