@@ -30,6 +30,11 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createLocalUser(user: { username: string; password: string; email: string; firstName: string; lastName: string }): Promise<User>;
+  
+  // Admin functions
+  getAdminUsers(): Promise<User[]>;
+  createAdminUser(userData: { username: string; password: string; email: string; firstName: string; lastName: string; role: string; authType: string }): Promise<User>;
+  getAllUsers(): Promise<User[]>;
 
   // Event operations
   createEvent(event: InsertEvent, organizerId: string, coordinates: { lat: number; lng: number }): Promise<Event>;
@@ -168,7 +173,17 @@ export class DatabaseStorage implements IStorage {
     const [result] = await db
       .select({
         event: events,
-        organizer: users,
+        organizer: {
+          id: users.id,
+          username: users.username,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          profileImageUrl: users.profileImageUrl,
+          role: users.role,
+          authType: users.authType,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+        },
       })
       .from(events)
       .innerJoin(users, eq(events.creatorId, users.id))
@@ -246,7 +261,17 @@ export class DatabaseStorage implements IStorage {
       const query = db
         .select({
           event: events,
-          organizer: users,
+          organizer: {
+            id: users.id,
+            username: users.username,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            profileImageUrl: users.profileImageUrl,
+            role: users.role,
+            authType: users.authType,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+          },
         })
         .from(events)
         .innerJoin(users, eq(events.creatorId, users.id))
@@ -332,7 +357,17 @@ export class DatabaseStorage implements IStorage {
       const query = db
         .select({
           event: events,
-          organizer: users,
+          organizer: {
+            id: users.id,
+            username: users.username,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            profileImageUrl: users.profileImageUrl,
+            role: users.role,
+            authType: users.authType,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+          },
         })
         .from(events)
         .innerJoin(users, eq(events.creatorId, users.id))
@@ -636,6 +671,26 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return user;
+  }
+
+  async getAdminUsers(): Promise<User[]> {
+    const adminUsers = await db
+      .select()
+      .from(users)
+      .where(or(eq(users.role, 'admin'), eq(users.role, 'super_admin')));
+    return adminUsers;
+  }
+
+  async createAdminUser(userData: { username: string; password: string; email: string; firstName: string; lastName: string; role: string; authType: string }): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(userData)
+      .returning();
+    return user;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users);
   }
 }
 

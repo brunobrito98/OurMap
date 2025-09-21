@@ -17,6 +17,58 @@ function parseConnectionString(connectionString: string) {
     connectionString: connectionString,
     ssl: { rejectUnauthorized: false }
   };
+
+
+
+  try {
+    // Try to parse as URL first
+    const url = new URL(connectionString);
+    return {
+      connectionString: connectionString,
+
+      ssl: {
+        rejectUnauthorized: false
+      }
+
+      ssl: true,
+
+    };
+  } catch {
+    // If URL parsing fails, try to extract components manually
+    const match = connectionString.match(
+      /^postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)$/,
+    );
+    if (match) {
+      const [, username, password, host, port, database] = match;
+      return {
+        user: username,
+        password: password,
+        host: host,
+        port: parseInt(port),
+        database: database,
+
+        ssl: {
+          rejectUnauthorized: false
+        }
+
+        ssl: true,
+
+      };
+    } else {
+      // Fallback to original string
+      return {
+        connectionString: connectionString,
+
+        ssl: {
+          rejectUnauthorized: false
+        }
+
+        ssl: true,
+
+      };
+    }
+  }
+
 }
 
 const poolConfig = parseConnectionString(databaseUrl);

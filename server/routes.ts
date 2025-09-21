@@ -2,9 +2,10 @@ import type { Express } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupLocalAuth, isAuthenticatedLocal } from "./auth";
+import { setupLocalAuth, isAuthenticatedLocal, isAdmin, isSuperAdmin, hashPassword } from "./auth";
 import session from "express-session";
-import { insertEventSchema, insertEventAttendanceSchema, insertEventRatingSchema } from "@shared/schema";
+import { insertEventSchema, insertEventAttendanceSchema, insertEventRatingSchema, insertAdminUserSchema, insertLocalUserSchema } from "@shared/schema";
+import { z } from "zod";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -72,19 +73,94 @@ function getUserId(req: any): string | undefined {
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup session and passport
   app.set("trust proxy", 1);
+  // Require session secret for security
+  const sessionSecret = process.env.SESSION_SECRET;
+  if (!sessionSecret) {
+    console.error("SESSION_SECRET environment variable is required for secure sessions");
+    process.exit(1);
+  }
+  
   app.use(session({
-    secret: process.env.SESSION_SECRET || 'fallback-secret-key',
+    secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax', // CSRF protection
       maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
     },
   }));
 
   // Setup auth system
   setupLocalAuth(app);
+
+  // Protected admin routes
+  app.post('/api/admin/create-admin', isSuperAdmin, async (req, res) => {
+    try {
+      // Only super_admin can create new admins
+      const userSchema = insertLocalUserSchema.extend({
+        password: z.string().min(8, "Senha deve ter pelo menos 8 caracteres"),
+      });
+      
+      const validatedData = userSchema.parse(req.body);
+      
+      const existingUser = await storage.getUserByUsername(validatedData.username);
+      if (existingUser) {
+        return res.status(400).json({ message: "Username já existe" });
+      }
+
+      const existingEmail = await storage.getUserByEmail(validatedData.email);
+      if (existingEmail) {
+        return res.status(400).json({ message: "Email já está em uso" });
+      }
+
+      // Create admin user (force role = admin)
+      const user = await storage.createAdminUser({
+        ...validatedData,
+        password: await hashPassword(validatedData.password),
+        authType: 'local',
+        role: 'admin', // Force admin role (not super_admin)
+      });
+
+      res.status(201).json({
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        username: user.username,
+        role: user.role,
+        message: "Administrador criado com sucesso"
+      });
+    } catch (error) {
+      console.error("Admin creation error:", error);
+      res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  // Protected admin route to list all users (sanitized)
+  app.get('/api/admin/users', isAdmin, async (req, res) => {
+    try {
+      // Only admins can list users
+      const allUsers = await storage.getAllUsers();
+      // Sanitize user data - remove sensitive fields
+      const sanitizedUsers = allUsers.map(user => ({
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        username: user.username,
+        role: user.role,
+        authType: user.authType,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
+      }));
+      res.json(sanitizedUsers);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
 
   // Serve uploaded files
   app.use('/uploads', (req, res, next) => {
@@ -93,7 +169,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   app.use('/uploads', express.static(uploadsDir));
 
-  // Auth routes (unified for both auth types)
+  // Auth routes (unified for both auth types) - sanitized
   app.get('/api/auth/user', isAuthenticatedAny, async (req: any, res) => {
     try {
       const userId = getUserId(req);
@@ -101,14 +177,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "User ID not found" });
       }
       const user = await storage.getUserWithStats(userId);
-      res.json(user);
+      if (user) {
+        // Remove sensitive fields before returning
+        const { password, ...sanitizedUser } = user;
+        res.json(sanitizedUser);
+      } else {
+        res.status(404).json({ message: "User not found" });
+      }
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
     }
   });
 
-  // Fallback route for /api/user (used by some components)
+  // Fallback route for /api/user (used by some components) - sanitized
   app.get('/api/user', isAuthenticatedAny, async (req: any, res) => {
     try {
       const userId = getUserId(req);
@@ -116,7 +198,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "User ID not found" });
       }
       const user = await storage.getUserWithStats(userId);
-      res.json(user);
+      if (user) {
+        // Remove sensitive fields before returning
+        const { password, ...sanitizedUser } = user;
+        res.json(sanitizedUser);
+      } else {
+        res.status(404).json({ message: "User not found" });
+      }
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
@@ -564,6 +652,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Reverse geocoding error:", error);
       res.status(500).json({ message: "Failed to reverse geocode coordinates" });
+    }
+  });
+
+  // City search endpoint for autocomplete
+  app.post('/api/search-cities', async (req, res) => {
+    try {
+      const { query } = req.body;
+      if (!query || query.length < 2) {
+        return res.json({ suggestions: [] });
+      }
+      
+      const mapboxToken = process.env.MAPBOX_ACCESS_TOKEN || process.env.VITE_MAPBOX_ACCESS_TOKEN;
+      if (!mapboxToken) {
+        return res.status(500).json({ message: 'Mapbox access token not configured' });
+      }
+
+      const encodedQuery = encodeURIComponent(query);
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedQuery}.json?access_token=${mapboxToken}&types=place&limit=5&language=pt`
+      );
+
+      if (!response.ok) {
+        throw new Error('City search failed');
+      }
+
+      const data = await response.json();
+      const suggestions = data.features?.map((feature: any) => ({
+        place_name: feature.place_name,
+        center: feature.center,
+        text: feature.text,
+      })) || [];
+      
+      res.json({ suggestions });
+    } catch (error) {
+      console.error("City search error:", error);
+      res.status(500).json({ message: "Failed to search cities" });
     }
   });
 
