@@ -11,11 +11,23 @@ if (!databaseUrl) {
   );
 }
 
-// For Supabase, use the connection string directly with SSL
+// Configure connection based on environment
 function parseConnectionString(connectionString: string) {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  
+  // For local development in Replit, don't use SSL
+  if (isDevelopment && connectionString.includes('localhost')) {
+    return {
+      connectionString: connectionString.replace('?sslmode=require', ''),
+      ssl: false,
+    };
+  }
+  
+  // For production or external databases, use SSL
   return {
     connectionString: connectionString,
-    ssl: { rejectUnauthorized: false },
+    ssl: isProduction ? { rejectUnauthorized: false } : false,
   };
 }
 
