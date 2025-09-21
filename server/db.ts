@@ -1,5 +1,5 @@
-import { Pool } from 'pg';
-import { drizzle } from 'drizzle-orm/node-postgres';
+import { Pool } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "@shared/schema";
 
 // Use DATABASE_URL for Supabase connection
@@ -11,20 +11,34 @@ if (!databaseUrl) {
   );
 }
 
-// Parse connection string manually to handle special characters
+// Parse connection string for Supabase with proper SSL
 function parseConnectionString(connectionString: string) {
+  // For Supabase, use the connection string directly with proper SSL
+  return {
+    connectionString:
+      connectionString +
+      (connectionString.includes("?") ? "&" : "?") +
+      "sslmode=require",
+  };
+
   try {
     // Try to parse as URL first
     const url = new URL(connectionString);
     return {
       connectionString: connectionString,
+
       ssl: {
         rejectUnauthorized: false
       }
+
+      ssl: true,
+
     };
   } catch {
     // If URL parsing fails, try to extract components manually
-    const match = connectionString.match(/^postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)$/);
+    const match = connectionString.match(
+      /^postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)$/,
+    );
     if (match) {
       const [, username, password, host, port, database] = match;
       return {
@@ -33,24 +47,35 @@ function parseConnectionString(connectionString: string) {
         host: host,
         port: parseInt(port),
         database: database,
+
         ssl: {
           rejectUnauthorized: false
         }
+
+        ssl: true,
+
       };
     } else {
       // Fallback to original string
       return {
         connectionString: connectionString,
+
         ssl: {
           rejectUnauthorized: false
         }
+
+        ssl: true,
+
       };
     }
   }
 }
 
 const poolConfig = parseConnectionString(databaseUrl);
-console.log('Pool config type:', poolConfig.connectionString ? 'connectionString' : 'manual');
+console.log(
+  "Pool config type:",
+  poolConfig.connectionString ? "connectionString" : "manual",
+);
 
 export const pool = new Pool(poolConfig);
 export const db = drizzle(pool, { schema });

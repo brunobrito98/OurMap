@@ -10,6 +10,9 @@ import {
   decimal,
   boolean,
   real,
+  uuid,
+  numeric,
+  unique,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
@@ -30,7 +33,7 @@ export const sessions = pgTable(
 // User storage table.
 // (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
 export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   email: varchar("email").unique(),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
@@ -45,49 +48,53 @@ export const users = pgTable("users", {
 });
 
 export const events = pgTable("events", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  title: varchar("title").notNull(),
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
   description: text("description"),
-  category: varchar("category").notNull(),
-  startDate: timestamp("start_date").notNull(),
-  endDate: timestamp("end_date"),
-  address: text("address").notNull(),
-  latitude: real("latitude").notNull(),
-  longitude: real("longitude").notNull(),
-  price: decimal("price", { precision: 10, scale: 2 }),
-  isFree: boolean("is_free").default(true),
-  coverImageUrl: varchar("cover_image_url"),
-  iconType: varchar("icon_type").default("calendar"),
+  category: text("category").notNull().default("outros"),
+  dateTime: timestamp("date_time", { withTimezone: true }).notNull(),
+  location: text("location").notNull(),
+  latitude: numeric("latitude"),
+  longitude: numeric("longitude"),
+  creatorId: uuid("creator_id").notNull(),
   maxAttendees: integer("max_attendees"),
-  allowRsvp: boolean("allow_rsvp").default(true),
+  imageUrl: text("image_url"),
+  iconEmoji: text("icon_emoji").default("🎉"),
+  coverImageUrl: text("cover_image_url"),
+  popularityScore: integer("popularity_score").default(0),
   isRecurring: boolean("is_recurring").default(false),
-  recurringType: varchar("recurring_type"), // weekly, monthly, yearly
-  organizerId: varchar("organizer_id").notNull().references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  recurrenceType: text("recurrence_type"),
+  recurrenceInterval: integer("recurrence_interval").default(1),
+  recurrenceEndDate: timestamp("recurrence_end_date", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
-export const eventAttendances = pgTable("event_attendances", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  eventId: varchar("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  status: varchar("status").notNull(), // confirmed, interested, not_going
-  createdAt: timestamp("created_at").defaultNow(),
-});
+export const eventAttendees = pgTable("event_attendees", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("attending"), // attending, interested, not_going
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqueEventUser: unique().on(table.eventId, table.userId),
+}));
 
 export const friendships = pgTable("friendships", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  requesterId: varchar("requester_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  addresseeId: varchar("addressee_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  status: varchar("status").notNull(), // pending, accepted, declined
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  requesterId: uuid("requester_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  addresseeId: uuid("addressee_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending"), // pending, accepted, declined
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqueFriendship: unique().on(table.requesterId, table.addresseeId),
+}));
 
 export const eventRatings = pgTable("event_ratings", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  eventId: varchar("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   organizerRating: integer("organizer_rating"), // 1-5 stars for organizer
   eventRating: integer("event_rating"), // 1-5 stars for event
   comment: text("comment"),
@@ -97,7 +104,7 @@ export const eventRatings = pgTable("event_ratings", {
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   organizedEvents: many(events),
-  attendances: many(eventAttendances),
+  attendances: many(eventAttendees),
   sentFriendRequests: many(friendships, { relationName: "requester" }),
   receivedFriendRequests: many(friendships, { relationName: "addressee" }),
   ratings: many(eventRatings),
@@ -105,20 +112,20 @@ export const usersRelations = relations(users, ({ many }) => ({
 
 export const eventsRelations = relations(events, ({ one, many }) => ({
   organizer: one(users, {
-    fields: [events.organizerId],
+    fields: [events.creatorId],
     references: [users.id],
   }),
-  attendances: many(eventAttendances),
+  attendances: many(eventAttendees),
   ratings: many(eventRatings),
 }));
 
-export const eventAttendancesRelations = relations(eventAttendances, ({ one }) => ({
+export const eventAttendeesRelations = relations(eventAttendees, ({ one }) => ({
   event: one(events, {
-    fields: [eventAttendances.eventId],
+    fields: [eventAttendees.eventId],
     references: [events.id],
   }),
   user: one(users, {
-    fields: [eventAttendances.userId],
+    fields: [eventAttendees.userId],
     references: [users.id],
   }),
 }));
@@ -152,15 +159,16 @@ export const insertEventSchema = createInsertSchema(events).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
-  organizerId: true,
+  creatorId: true,
   latitude: true,
   longitude: true,
 }).extend({
-  startDate: z.string().min(1, "Data de início é obrigatória").regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, "Formato de data inválido"),
-  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, "Formato de data inválido").optional().or(z.literal("")),
+  dateTime: z.string().min(1, "Data e hora são obrigatórias").regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, "Formato de data inválido"),
+  location: z.string().min(1, "Localização é obrigatória"),
+  recurrenceEndDate: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, "Formato de data inválido").optional().or(z.literal("")),
 });
 
-export const insertEventAttendanceSchema = createInsertSchema(eventAttendances).omit({
+export const insertEventAttendanceSchema = createInsertSchema(eventAttendees).omit({
   id: true,
   createdAt: true,
 });
@@ -222,7 +230,7 @@ export type InsertLocalUser = z.infer<typeof insertLocalUserSchema>;
 export type InsertAdminUser = z.infer<typeof insertAdminUserSchema>;
 export type Event = typeof events.$inferSelect;
 export type InsertEvent = z.infer<typeof insertEventSchema>;
-export type EventAttendance = typeof eventAttendances.$inferSelect;
+export type EventAttendance = typeof eventAttendees.$inferSelect;
 export type InsertEventAttendance = z.infer<typeof insertEventAttendanceSchema>;
 export type Friendship = typeof friendships.$inferSelect;
 export type InsertFriendship = z.infer<typeof insertFriendshipSchema>;
