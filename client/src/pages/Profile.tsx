@@ -9,7 +9,7 @@ import type { UserWithStats } from "@shared/schema";
 
 export default function Profile() {
   const [, navigate] = useLocation();
-  const { user: authUser } = useAuth();
+  const { user: authUser, logout } = useAuth();
 
   const { data: user, isLoading } = useQuery<UserWithStats>({
     queryKey: ['/api/auth/user'],
@@ -18,6 +18,9 @@ export default function Profile() {
 
   const handleLogout = async () => {
     try {
+      // Use the logout function from useAuth hook
+      await logout();
+      
       // Primeiro, tenta encerrar a sessão do Supabase de forma segura
       try {
         await supabase.auth.signOut();
@@ -25,17 +28,7 @@ export default function Profile() {
         console.log("Supabase logout não disponível:", supabaseError);
       }
       
-      // Chama o endpoint correto do backend para encerrar a sessão do servidor
-      const response = await fetch("/api/auth/logout", { 
-        method: "POST", 
-        credentials: "same-origin" 
-      });
-      
-      if (!response.ok) {
-        console.error("Erro ao fazer logout no servidor:", response.statusText);
-      }
-      
-      // Imediatamente após o signOut, redireciona para a tela de login
+      // Redireciona para a tela de login após o logout
       navigate("/");
     } catch (error) {
       console.error("Erro ao fazer logout:", error);

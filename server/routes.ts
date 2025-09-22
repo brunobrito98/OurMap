@@ -275,6 +275,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Logout route - clears server session
+  app.post('/api/auth/logout', async (req, res) => {
+    try {
+      req.logout((err) => {
+        if (err) {
+          console.error("Logout error:", err);
+          return res.status(500).json({ message: "Erro ao fazer logout" });
+        }
+        
+        req.session.destroy((err) => {
+          if (err) {
+            console.error("Session destroy error:", err);
+            return res.status(500).json({ message: "Erro ao encerrar sessão" });
+          }
+          
+          res.clearCookie('connect.sid');
+          res.json({ message: "Logout realizado com sucesso" });
+        });
+      });
+    } catch (error) {
+      console.error("Logout error:", error);
+      res.status(500).json({ message: "Erro ao fazer logout" });
+    }
+  });
+
   // Phone authentication routes
   app.post('/api/auth/phone/start', async (req, res) => {
     try {
