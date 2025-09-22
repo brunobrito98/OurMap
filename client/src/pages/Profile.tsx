@@ -1,20 +1,106 @@
+import { useState } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import BottomNavigation from "@/components/BottomNavigation";
+import ProfileImageUpload from "@/components/ProfileImageUpload";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
+import { apiRequest } from "@/lib/queryClient";
 import type { UserWithStats } from "@shared/schema";
 
 export default function Profile() {
   const [, navigate] = useLocation();
   const { user: authUser, logout } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [isEditingProfileImage, setIsEditingProfileImage] = useState(false);
 
   const { data: user, isLoading } = useQuery<UserWithStats>({
     queryKey: ['/api/auth/user'],
     enabled: !!authUser,
   });
+
+  // Profile image upload mutation
+  const profileImageMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('profileImage', file);
+      
+      const response = await fetch('/api/user/profile-image', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error);
+      }
+      
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
+      setIsEditingProfileImage(false);
+      toast({
+        title: "Sucesso",
+        description: "Foto de perfil atualizada com sucesso!",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Erro",
+        description: "Falha ao atualizar foto de perfil",
+        variant: "destructive",
+      });
+      console.error("Error uploading profile image:", error);
+    },
+  });
+
+  // Profile image delete mutation
+  const deleteProfileImageMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch('/api/user/profile-image', {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(error);
+      }
+      
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
+      setIsEditingProfileImage(false);
+      toast({
+        title: "Sucesso",
+        description: "Foto de perfil removida com sucesso!",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Erro",
+        description: "Falha ao remover foto de perfil",
+        variant: "destructive",
+      });
+      console.error("Error removing profile image:", error);
+    },
+  });
+
+  const handleProfileImageSelect = (file: File | null) => {
+    if (file) {
+      profileImageMutation.mutate(file);
+    } else {
+      // Handle remove image
+      deleteProfileImageMutation.mutate();
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -78,12 +164,44 @@ export default function Profile() {
       <div>
         {/* Profile Header */}
         <div className="bg-gradient-to-r from-primary to-accent p-6 text-center">
-          <Avatar className="w-24 h-24 mx-auto border-4 border-white shadow-lg mb-4">
-            <AvatarImage src={user.profileImageUrl || undefined} />
-            <AvatarFallback className="text-xl">
-              {user.firstName?.[0]}{user.lastName?.[0]}
-            </AvatarFallback>
-          </Avatar>
+          {isEditingProfileImage ? (
+            <div className="mb-4">
+              <ProfileImageUpload
+                onImageSelect={handleProfileImageSelect}
+                currentImageUrl={user.profileImageUrl || undefined}
+                size="lg"
+                className="flex justify-center"
+              />
+              <div className="flex justify-center space-x-2 mt-4">
+                <Button
+                  onClick={() => setIsEditingProfileImage(false)}
+                  variant="secondary"
+                  size="sm"
+                  disabled={profileImageMutation.isPending}
+                  data-testid="button-cancel-edit-photo"
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="relative inline-block mb-4">
+              <Avatar className="w-24 h-24 mx-auto border-4 border-white shadow-lg">
+                <AvatarImage src={user.profileImageUrl || undefined} />
+                <AvatarFallback className="text-xl">
+                  {user.firstName?.[0]}{user.lastName?.[0]}
+                </AvatarFallback>
+              </Avatar>
+              <Button
+                onClick={() => setIsEditingProfileImage(true)}
+                size="sm"
+                className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full p-0 bg-white text-primary border-2 border-white shadow-lg hover:bg-gray-50"
+                data-testid="button-edit-profile-photo"
+              >
+                <i className="fas fa-camera text-sm"></i>
+              </Button>
+            </div>
+          )}
           <h1 className="text-2xl font-bold text-white mb-1" data-testid="text-user-name">
             {user.firstName} {user.lastName}
           </h1>

@@ -214,6 +214,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         firstName: user.firstName,
         lastName: user.lastName,
         username: user.username,
+        profileImageUrl: user.profileImageUrl,
         role: user.role,
         authType: user.authType,
         createdAt: user.createdAt,
@@ -272,6 +273,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // Profile image upload endpoint
+  app.post('/api/user/profile-image', isAuthenticatedAny, upload.single('profileImage'), async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ message: "Nenhuma imagem foi enviada" });
+      }
+
+      // Process uploaded file - use safe extension based on mimetype
+      const mimeToExtension: Record<string, string> = {
+        'image/jpeg': '.jpg',
+        'image/png': '.png', 
+        'image/webp': '.webp'
+      };
+      
+      const safeExtension = mimeToExtension[req.file.mimetype];
+      if (!safeExtension) {
+        return res.status(400).json({ message: "Tipo de arquivo não suportado" });
+      }
+      
+      const fileName = `profile_${userId}_${Date.now()}${safeExtension}`;
+      const filePath = path.join(uploadsDir, fileName);
+      
+      // Rename file to include extension and user info
+      fs.renameSync(req.file.path, filePath);
+      const profileImageUrl = `/uploads/${fileName}`;
+
+      // Get current user to check for existing profile image
+      const currentUser = await storage.getUser(userId);
+      
+      // Update user profile image URL in database
+      const updatedUser = await storage.updateUserProfileImage(userId, profileImageUrl);
+      
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Clean up old profile image if it exists
+      if (currentUser?.profileImageUrl && currentUser.profileImageUrl.startsWith('/uploads/')) {
+        const oldImagePath = path.join(process.cwd(), currentUser.profileImageUrl.replace(/^\//, ''));
+        if (fs.existsSync(oldImagePath)) {
+          try {
+            fs.unlinkSync(oldImagePath);
+          } catch (error) {
+            console.warn("Failed to delete old profile image:", error);
+          }
+        }
+      }
+
+      // Return sanitized user data
+      const { password, ...sanitizedUser } = updatedUser;
+      res.json({ 
+        message: "Foto de perfil atualizada com sucesso",
+        user: sanitizedUser 
+      });
+    } catch (error) {
+      console.error("Error uploading profile image:", error);
+      if (error instanceof Error) {
+        res.status(400).json({ message: error.message });
+      } else {
+        res.status(500).json({ message: "Failed to upload profile image" });
+      }
+    }
+  });
+
+  // Profile image delete endpoint
+  app.delete('/api/user/profile-image', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
+
+      // Update user profile image URL to null in database
+      const updatedUser = await storage.updateUserProfileImage(userId, null);
+      
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Return sanitized user data
+      const { password, ...sanitizedUser } = updatedUser;
+      res.json({ 
+        message: "Foto de perfil removida com sucesso",
+        user: sanitizedUser 
+      });
+    } catch (error) {
+      console.error("Error removing profile image:", error);
+      res.status(500).json({ message: "Failed to remove profile image" });
     }
   });
 
@@ -616,8 +713,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Handle cover image if uploaded
       let coverImageUrl = null;
       if (req.file) {
-        const fileExtension = path.extname(req.file.originalname);
-        const fileName = `${req.file.filename}${fileExtension}`;
+        const mimeToExtension: Record<string, string> = {
+          'image/jpeg': '.jpg',
+          'image/png': '.png', 
+          'image/webp': '.webp'
+        };
+        
+        const safeExtension = mimeToExtension[req.file.mimetype];
+        if (!safeExtension) {
+          return res.status(400).json({ message: "Tipo de arquivo não suportado para capa do evento" });
+        }
+        
+        const fileName = `${req.file.filename}${safeExtension}`;
         const filePath = path.join(uploadsDir, fileName);
         
         // Rename file to include extension
@@ -692,8 +799,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Handle cover image if uploaded
       if (req.file) {
-        const fileExtension = path.extname(req.file.originalname);
-        const fileName = `${req.file.filename}${fileExtension}`;
+        const mimeToExtension: Record<string, string> = {
+          'image/jpeg': '.jpg',
+          'image/png': '.png', 
+          'image/webp': '.webp'
+        };
+        
+        const safeExtension = mimeToExtension[req.file.mimetype];
+        if (!safeExtension) {
+          return res.status(400).json({ message: "Tipo de arquivo não suportado para capa do evento" });
+        }
+        
+        const fileName = `${req.file.filename}${safeExtension}`;
         const filePath = path.join(uploadsDir, fileName);
         
         // Rename file to include extension

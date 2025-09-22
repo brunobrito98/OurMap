@@ -26,12 +26,19 @@ export default function EventDetails() {
     enabled: !!id,
   });
 
+  // Fetch attendees with their profile photos
+  const { data: attendees = [] } = useQuery({
+    queryKey: ['/api/events', id, 'attendees'],
+    enabled: !!id,
+  });
+
   const attendMutation = useMutation({
     mutationFn: async (status: string) => {
       await apiRequest('POST', `/api/events/${id}/attend`, { status });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/events', id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/events', id, 'attendees'] });
       toast({
         title: "Sucesso",
         description: "Sua confirmação foi atualizada!",
@@ -299,16 +306,28 @@ export default function EventDetails() {
               <h3 className="font-semibold text-foreground">
                 Confirmados ({event.attendanceCount})
               </h3>
-              <button className="text-primary text-sm font-medium" data-testid="button-view-all-attendees">
-                Ver todos
-              </button>
+              {attendees.length > 5 && (
+                <button className="text-primary text-sm font-medium" data-testid="button-view-all-attendees">
+                  Ver todos
+                </button>
+              )}
             </div>
             
             <div className="flex space-x-3 overflow-x-auto pb-2">
-              {/* Show placeholder attendees since we don't fetch the full list */}
-              {[...Array(Math.min(5, event.attendanceCount))].map((_, i) => (
-                <div key={i} className="w-12 h-12 bg-muted rounded-full flex-shrink-0"></div>
+              {attendees.slice(0, 5).map((attendee: any) => (
+                <Avatar key={attendee.id} className="w-12 h-12 flex-shrink-0" data-testid={`avatar-attendee-${attendee.id}`}>
+                  <AvatarImage src={attendee.profileImageUrl || undefined} />
+                  <AvatarFallback>
+                    {attendee.firstName?.[0]}{attendee.lastName?.[0]}
+                  </AvatarFallback>
+                </Avatar>
               ))}
+              {attendees.length === 0 && event.attendanceCount > 0 && (
+                <div className="flex items-center justify-center text-muted-foreground text-sm">
+                  <i className="fas fa-spinner fa-spin mr-2"></i>
+                  Carregando confirmados...
+                </div>
+              )}
             </div>
           </div>
 

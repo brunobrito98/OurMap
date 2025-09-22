@@ -43,6 +43,9 @@ export interface IStorage {
   getAdminUsers(): Promise<User[]>;
   createAdminUser(userData: { username: string; password: string; email: string; firstName: string; lastName: string; role: string; authType: string }): Promise<User>;
   getAllUsers(): Promise<User[]>;
+  
+  // Profile management
+  updateUserProfileImage(userId: string, profileImageUrl: string | null): Promise<User | undefined>;
 
   // Event operations
   createEvent(event: InsertEvent, organizerId: string, coordinates: { lat: number; lng: number }): Promise<Event>;
@@ -782,6 +785,18 @@ export class DatabaseStorage implements IStorage {
 
   async getAllUsers(): Promise<User[]> {
     return await db.select().from(users);
+  }
+
+  async updateUserProfileImage(userId: string, profileImageUrl: string | null): Promise<User | undefined> {
+    const [user] = await db
+      .update(users)
+      .set({
+        profileImageUrl,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
   }
 
   // Search operations
