@@ -60,8 +60,14 @@ export default function MapComponent({
     if (!mapContainer.current || !mapboxToken) return;
 
     let isMounted = true;
+    let mapInitialized = false;
 
     try {
+      // Check if container is still available
+      if (!mapContainer.current || mapContainer.current.children.length > 0) {
+        return;
+      }
+
       // Initialize map with error handling
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
@@ -72,14 +78,37 @@ export default function MapComponent({
         // Add specific configurations for Replit environment
         transformRequest: (url, resourceType) => {
           // Handle mapbox requests properly in Replit environment
+          if (!isMounted) {
+            // If component is unmounted, abort request
+            return null;
+          }
           return { url: url };
         }
       });
 
+      mapInitialized = true;
+
       // Add error handling for map load
       map.current.on('error', (e: any) => {
         if (isMounted) {
+          // Suppress common network-related errors that don't affect functionality
+          if (e?.type === 'error' && e?.error?.message?.includes('aborted')) {
+            console.warn('Mapbox request aborted (component unmounted)');
+            return;
+          }
           console.error('Mapbox map error:', e);
+        }
+      });
+
+      // Add load event to ensure map is ready
+      map.current.on('load', () => {
+        if (!isMounted) {
+          try {
+            map.current?.remove();
+          } catch (e) {
+            // Ignore cleanup errors
+          }
+          return;
         }
       });
     } catch (error) {
@@ -135,41 +164,45 @@ export default function MapComponent({
     return () => {
       isMounted = false;
       
+      // Cleanup marker first
       try {
         if (marker.current) {
           marker.current.remove();
           marker.current = null;
         }
       } catch (error) {
-        console.warn('Error removing marker:', error);
+        // Silent cleanup - don't log unnecessary warnings
       }
       
+      // Cleanup map with improved error handling
       try {
         if (map.current) {
-          // Remove all event listeners first
+          // Remove all event listeners first to prevent callback errors
           map.current.off();
           
-          // Check if map is still loaded before removing
-          if (map.current.isStyleLoaded && map.current.isStyleLoaded()) {
-            map.current.remove();
-          } else {
-            // If style is not loaded, wait a bit and try again
-            setTimeout(() => {
-              try {
-                if (map.current) {
-                  map.current.remove();
-                }
-              } catch (error) {
-                console.warn('Error removing map after timeout:', error);
-              }
-            }, 100);
-          }
+          // Force immediate removal without waiting for style load
+          map.current.remove();
           map.current = null;
         }
       } catch (error) {
-        console.warn('Error removing map:', error);
-        // Force set to null even if removal failed
-        map.current = null;
+        // Silent cleanup - many errors during unmount are harmless
+        try {
+          // Force cleanup even if remove() failed
+          if (map.current) {
+            map.current = null;
+          }
+        } catch (e) {
+          // Ignore nested cleanup errors
+        }
+      }
+      
+      // Clear container if it exists
+      try {
+        if (mapContainer.current) {
+          mapContainer.current.innerHTML = '';
+        }
+      } catch (error) {
+        // Ignore container cleanup errors
       }
     };
   }, [latitude, longitude, showMarker, draggableMarker, onMarkerDrag, onClick, address]);
