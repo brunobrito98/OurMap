@@ -58,6 +58,7 @@ export const events = pgTable("events", {
   longitude: numeric("longitude"),
   creatorId: uuid("creator_id").notNull(),
   maxAttendees: integer("max_attendees"),
+  price: numeric("price", { precision: 10, scale: 2 }).default("0"),
   imageUrl: text("image_url"),
   iconEmoji: text("icon_emoji").default("🎉"),
   coverImageUrl: text("cover_image_url"),
@@ -167,6 +168,7 @@ export const insertEventSchema = createInsertSchema(events).omit({
 }).extend({
   dateTime: z.string().min(1, "Data e hora são obrigatórias").regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, "Formato de data inválido"),
   location: z.string().min(1, "Localização é obrigatória"),
+  price: z.string().regex(/^\d+(\.\d{1,2})?$/, "Preço deve ser um valor numérico válido").optional(),
   recurrenceEndDate: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, "Formato de data inválido").optional().or(z.literal("")),
 });
 
