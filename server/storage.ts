@@ -18,7 +18,7 @@ import {
   type UserWithStats,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, desc, asc, count, avg, sql } from "drizzle-orm";
+import { eq, and, or, desc, asc, count, avg, sql, like } from "drizzle-orm";
 
 // Interface for storage operations
 export interface IStorage {
@@ -71,6 +71,10 @@ export interface IStorage {
   canUserRateEvent(eventId: string, userId: string): Promise<{ canRate: boolean; reason?: string }>;
   getEventRatingsAverage(eventId: string): Promise<{ eventAverage: number; organizerAverage: number; totalRatings: number }>;
   getOrganizerRatingsAverage(organizerId: string): Promise<{ average: number; totalRatings: number }>;
+
+  // Search operations
+  searchUsers(query: string): Promise<User[]>;
+  searchEvents(query: string): Promise<EventWithDetails[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -691,6 +695,85 @@ export class DatabaseStorage implements IStorage {
 
   async getAllUsers(): Promise<User[]> {
     return await db.select().from(users);
+  }
+
+  // Search operations
+  async searchUsers(query: string): Promise<User[]> {
+    const searchTerm = `%${query}%`;
+    const results = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        profileImageUrl: users.profileImageUrl,
+        username: users.username,
+        authType: users.authType,
+        role: users.role,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      })
+      .from(users)
+      .where(or(
+        like(users.firstName, searchTerm),
+        like(users.lastName, searchTerm),
+        like(users.username, searchTerm),
+        like(users.email, searchTerm)
+      ));
+    
+    return results;
+  }
+
+  async searchEvents(query: string): Promise<EventWithDetails[]> {
+    const searchTerm = `%${query}%`;
+    const results = await db
+      .select({
+        event: events,
+        organizer: {
+          id: users.id,
+          username: users.username,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          profileImageUrl: users.profileImageUrl,
+          role: users.role,
+          authType: users.authType,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+        },
+      })
+      .from(events)
+      .innerJoin(users, eq(events.creatorId, users.id))
+      .where(and(
+        or(
+          like(events.title, searchTerm),
+          like(events.description, searchTerm),
+          like(events.location, searchTerm)
+        ),
+        sql`DATE(${events.dateTime}) >= DATE(NOW())`
+      ));
+
+    // Enhance with attendance counts
+    const enhancedEvents = await Promise.all(
+      results.map(async (result) => {
+        const [attendanceCountResult] = await db
+          .select({ count: count() })
+          .from(eventAttendees)
+          .where(and(
+            eq(eventAttendees.eventId, result.event.id),
+            eq(eventAttendees.status, 'attending')
+          ));
+
+        return {
+          ...result.event,
+          organizer: result.organizer,
+          attendanceCount: attendanceCountResult.count,
+          userAttendance: undefined,
+          friendsGoing: [],
+        };
+      })
+    );
+
+    return enhancedEvents;
   }
 }
 

@@ -691,6 +691,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Search endpoints
+  app.get('/api/search/users', async (req, res) => {
+    try {
+      const { query } = req.query;
+      if (!query || typeof query !== 'string' || query.length < 2) {
+        return res.json([]);
+      }
+      
+      const users = await storage.searchUsers(query);
+      res.json(users);
+    } catch (error) {
+      console.error("Error searching users:", error);
+      res.status(500).json({ message: "Failed to search users" });
+    }
+  });
+
+  app.get('/api/search/events', async (req, res) => {
+    try {
+      const { query } = req.query;
+      if (!query || typeof query !== 'string' || query.length < 2) {
+        return res.json([]);
+      }
+      
+      const events = await storage.searchEvents(query);
+      res.json(events);
+    } catch (error) {
+      console.error("Error searching events:", error);
+      res.status(500).json({ message: "Failed to search events" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
