@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import ImageUpload from "@/components/ImageUpload";
 import MapComponent from "@/components/MapComponent";
@@ -38,6 +40,7 @@ export default function CreateEvent() {
   const queryClient = useQueryClient();
   const [coverImage, setCoverImage] = useState<File | null>(null);
   const [mapCoordinates, setMapCoordinates] = useState<{ lat: number; lng: number } | null>(null);
+  const [isPaid, setIsPaid] = useState(false);
 
   const isEditing = !!id;
 
@@ -55,6 +58,7 @@ export default function CreateEvent() {
       category: "",
       dateTime: "",
       location: "",
+      price: "0",
       isRecurring: false,
       iconEmoji: "📅",
     },
@@ -69,10 +73,14 @@ export default function CreateEvent() {
         category: eventData.category,
         dateTime: new Date(eventData.dateTime).toISOString().slice(0, 16),
         location: eventData.location,
+        price: eventData.price || "0",
         isRecurring: eventData.isRecurring,
         recurrenceType: eventData.recurrenceType || undefined,
         iconEmoji: eventData.iconEmoji || "📅",
       });
+      
+      // Set isPaid state based on event price
+      setIsPaid(parseFloat(eventData.price || "0") > 0);
       
       setMapCoordinates({
         lat: parseFloat(eventData.latitude),
@@ -131,20 +139,24 @@ export default function CreateEvent() {
     const formData = new FormData();
     
     // Append form fields
-    formData.append('title', data.title);
-    formData.append('dateTime', data.dateTime);
-    formData.append('location', data.location);
-    formData.append('category', data.category);
+    formData.append('title', data.title || '');
+    formData.append('dateTime', data.dateTime || '');
+    formData.append('location', data.location || '');
+    formData.append('category', data.category || '');
     
     if (data.description) {
       formData.append('description', data.description);
     }
     if (data.isRecurring) {
       formData.append('isRecurring', 'true');
-      if (data.recurrenceType) {
+      if (data.recurrenceType && data.recurrenceType.trim() !== '') {
         formData.append('recurrenceType', data.recurrenceType);
       }
     }
+    
+    // Add price - if not paid, set to 0
+    const price = isPaid ? (data.price || "0") : "0";
+    formData.append('price', price);
     
     // Add coordinates if available
     if (mapCoordinates) {
@@ -435,6 +447,71 @@ export default function CreateEvent() {
               <p className="text-xs text-muted-foreground">
                 Clique ou arraste o pin para definir localização exata
               </p>
+            </div>
+
+            {/* Ticket Type Section */}
+            <div className="space-y-4">
+              <h3 className="font-semibold text-foreground">Tipo de Ingresso</h3>
+              
+              <div className="bg-secondary rounded-xl p-4">
+                <div className="space-y-4">
+                  <RadioGroup
+                    value={isPaid ? "paid" : "free"}
+                    onValueChange={(value) => {
+                      setIsPaid(value === "paid");
+                      if (value === "free") {
+                        form.setValue("price", "0");
+                      }
+                    }}
+                    className="space-y-3"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="free" id="free" data-testid="radio-free" />
+                      <Label htmlFor="free" className="flex items-center space-x-2 cursor-pointer">
+                        <i className="fas fa-gift text-green-600"></i>
+                        <span>Evento Gratuito</span>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="paid" id="paid" data-testid="radio-paid" />
+                      <Label htmlFor="paid" className="flex items-center space-x-2 cursor-pointer">
+                        <i className="fas fa-ticket-alt text-blue-600"></i>
+                        <span>Evento Pago</span>
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                  
+                  {/* Price field - only show when paid is selected */}
+                  {isPaid && (
+                    <div className="mt-4">
+                      <FormField
+                        control={form.control}
+                        name="price"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Preço do Ingresso (R$) *</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0.01"
+                                placeholder="Ex: 25.00"
+                                {...field}
+                                value={field.value || ""}
+                                data-testid="input-price"
+                              />
+                            </FormControl>
+                            <p className="text-xs text-muted-foreground">
+                              Digite o valor do ingresso em reais
+                            </p>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
           </form>
