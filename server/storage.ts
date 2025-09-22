@@ -16,6 +16,8 @@ import {
   type InsertEventRating,
   type EventWithDetails,
   type UserWithStats,
+  type OrganizerSanitized,
+  type UserSanitized,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, desc, asc, count, avg, sql, like } from "drizzle-orm";
@@ -30,6 +32,12 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createLocalUser(user: { username: string; password: string; email: string; firstName: string; lastName: string }): Promise<User>;
+  
+  // Phone authentication operations
+  getUserByPhone(phoneE164: string): Promise<User | undefined>;
+  createUser(userData: Partial<UpsertUser>): Promise<User>;
+  updateUserPhone(userId: string, phoneData: { phoneE164: string; phoneVerified: boolean; phoneCountry?: string; phoneHmac: string }): Promise<void>;
+  getUsersByPhoneHmacs(phoneHmacs: string[], excludeUserId?: string): Promise<User[]>;
   
   // Admin functions
   getAdminUsers(): Promise<User[]>;
@@ -62,6 +70,7 @@ export interface IStorage {
   getFriends(userId: string): Promise<User[]>;
   getFriendRequests(userId: string): Promise<(Friendship & { requester: User })[]>;
   areFriends(userId1: string, userId2: string): Promise<boolean>;
+  hasPendingFriendRequest(userId1: string, userId2: string): Promise<boolean>;
 
   // Rating operations
   createRating(rating: InsertEventRating): Promise<EventRating>;
@@ -73,7 +82,7 @@ export interface IStorage {
   getOrganizerRatingsAverage(organizerId: string): Promise<{ average: number; totalRatings: number }>;
 
   // Search operations
-  searchUsers(query: string): Promise<User[]>;
+  searchUsers(query: string): Promise<UserSanitized[]>;
   searchEvents(query: string): Promise<EventWithDetails[]>;
 }
 
@@ -179,12 +188,10 @@ export class DatabaseStorage implements IStorage {
         event: events,
         organizer: {
           id: users.id,
-          email: users.email,
           username: users.username,
           firstName: users.firstName,
           lastName: users.lastName,
           profileImageUrl: users.profileImageUrl,
-          password: users.password,
           role: users.role,
           authType: users.authType,
           createdAt: users.createdAt,
@@ -217,10 +224,22 @@ export class DatabaseStorage implements IStorage {
     }
 
     // Get friends going to this event
-    let friendsGoing: User[] = [];
+    let friendsGoing: UserSanitized[] = [];
     if (userId) {
       const friendsGoingResult = await db
-        .select({ user: users })
+        .select({
+          user: {
+            id: users.id,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            profileImageUrl: users.profileImageUrl,
+            username: users.username,
+            authType: users.authType,
+            role: users.role,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+          }
+        })
         .from(eventAttendees)
         .innerJoin(users, eq(eventAttendees.userId, users.id))
         .innerJoin(friendships, or(
@@ -679,6 +698,72 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  // Phone authentication operations
+  async getUserByPhone(phoneE164: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.phoneE164, phoneE164));
+    return user;
+  }
+
+  async createUser(userData: Partial<UpsertUser>): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(userData)
+      .returning();
+    return user;
+  }
+
+  async updateUserPhone(userId: string, phoneData: { phoneE164: string; phoneVerified: boolean; phoneCountry?: string; phoneHmac: string }): Promise<void> {
+    await db
+      .update(users)
+      .set({
+        phoneE164: phoneData.phoneE164,
+        phoneVerified: phoneData.phoneVerified,
+        phoneCountry: phoneData.phoneCountry,
+        phoneHmac: phoneData.phoneHmac,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+  }
+
+  async getUsersByPhoneHmacs(phoneHmacs: string[], excludeUserId?: string): Promise<User[]> {
+    let whereConditions = sql`${users.phoneHmac} = ANY(${phoneHmacs})`;
+    
+    if (excludeUserId) {
+      whereConditions = sql`${whereConditions} AND ${users.id} != ${excludeUserId}`;
+    }
+
+    return await db
+      .select({
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        profileImageUrl: users.profileImageUrl,
+        username: users.username,
+        authType: users.authType,
+        role: users.role,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      })
+      .from(users)
+      .where(whereConditions);
+  }
+
+  async hasPendingFriendRequest(userId1: string, userId2: string): Promise<boolean> {
+    const [friendship] = await db
+      .select()
+      .from(friendships)
+      .where(
+        and(
+          or(
+            and(eq(friendships.requesterId, userId1), eq(friendships.addresseeId, userId2)),
+            and(eq(friendships.requesterId, userId2), eq(friendships.addresseeId, userId1))
+          ),
+          eq(friendships.status, 'pending')
+        )
+      );
+    return !!friendship;
+  }
+
   async getAdminUsers(): Promise<User[]> {
     const adminUsers = await db
       .select()
@@ -700,17 +785,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Search operations
-  async searchUsers(query: string): Promise<User[]> {
+  async searchUsers(query: string): Promise<UserSanitized[]> {
     const searchTerm = `%${query}%`;
     const results = await db
       .select({
         id: users.id,
-        email: users.email,
         firstName: users.firstName,
         lastName: users.lastName,
         profileImageUrl: users.profileImageUrl,
         username: users.username,
-        password: users.password,
         authType: users.authType,
         role: users.role,
         createdAt: users.createdAt,
@@ -720,8 +803,7 @@ export class DatabaseStorage implements IStorage {
       .where(or(
         like(users.firstName, searchTerm),
         like(users.lastName, searchTerm),
-        like(users.username, searchTerm),
-        like(users.email, searchTerm)
+        like(users.username, searchTerm)
       ));
     
     return results;
@@ -734,12 +816,10 @@ export class DatabaseStorage implements IStorage {
         event: events,
         organizer: {
           id: users.id,
-          email: users.email,
           username: users.username,
           firstName: users.firstName,
           lastName: users.lastName,
           profileImageUrl: users.profileImageUrl,
-          password: users.password,
           role: users.role,
           authType: users.authType,
           createdAt: users.createdAt,

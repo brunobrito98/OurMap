@@ -44,8 +44,11 @@ Preferred communication style: Simple, everyday language.
 ### Security & Authentication
 - **Replit Auth Integration**: Secure OAuth-based authentication
 - **Session Management**: Server-side session storage with PostgreSQL
+- **Phone Authentication**: SMS verification with Twilio integration, OTP hashing with HMAC-SHA256
+- **Data Protection**: Comprehensive sanitization of user data in API responses to prevent sensitive field exposure
+- **Rate Limiting**: IP and phone-based rate limiting for authentication endpoints
 - **File Upload Security**: Type and size validation for image uploads
-- **API Security**: Authenticated route protection with middleware
+- **API Security**: Authenticated route protection with middleware and sanitized data projections
 
 ## External Dependencies
 

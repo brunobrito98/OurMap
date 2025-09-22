@@ -274,13 +274,38 @@ export type InsertFriendship = z.infer<typeof insertFriendshipSchema>;
 export type EventRating = typeof eventRatings.$inferSelect;
 export type InsertEventRating = z.infer<typeof insertEventRatingSchema>;
 
+// Sanitized types for API responses (excludes sensitive fields)
+export type OrganizerSanitized = {
+  id: string;
+  username: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  profileImageUrl: string | null;
+  role: string | null;
+  authType: string | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+};
+
+export type UserSanitized = {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  profileImageUrl: string | null;
+  username: string | null;
+  authType: string | null;
+  role: string | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+};
+
 // Extended types for API responses
 export type EventWithDetails = Event & {
-  organizer: User;
+  organizer: OrganizerSanitized;
   attendanceCount: number;
   userAttendance?: EventAttendance;
   distance?: number;
-  friendsGoing?: User[];
+  friendsGoing?: UserSanitized[];
 };
 
 export type UserWithStats = User & {
