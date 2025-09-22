@@ -61,60 +61,63 @@ export default function MapComponent({
 
     let isMounted = true;
     let mapInitialized = false;
+    let cleanupAttempted = false;
 
-    try {
-      // Check if container is still available
-      if (!mapContainer.current || mapContainer.current.children.length > 0) {
-        return;
-      }
-
-      // Initialize map with error handling
-      map.current = new mapboxgl.Map({
-        container: mapContainer.current,
-        style: 'mapbox://styles/mapbox/streets-v12',
-        center: [longitude, latitude],
-        zoom: 15,
-        attributionControl: false,
-        // Add specific configurations for Replit environment
-        transformRequest: (url, resourceType) => {
-          // Handle mapbox requests properly in Replit environment
-          if (!isMounted) {
-            // If component is unmounted, abort request
-            return null;
-          }
-          return { url: url };
-        }
-      });
-
-      mapInitialized = true;
-
-      // Add error handling for map load
-      map.current.on('error', (e: any) => {
-        if (isMounted) {
-          // Suppress common network-related errors that don't affect functionality
-          if (e?.type === 'error' && e?.error?.message?.includes('aborted')) {
-            console.warn('Mapbox request aborted (component unmounted)');
-            return;
-          }
-          console.error('Mapbox map error:', e);
-        }
-      });
-
-      // Add load event to ensure map is ready
-      map.current.on('load', () => {
-        if (!isMounted) {
-          try {
-            map.current?.remove();
-          } catch (e) {
-            // Ignore cleanup errors
-          }
+    const initializeMap = async () => {
+      try {
+        // Check if container is still available
+        if (!mapContainer.current || mapContainer.current.children.length > 0) {
           return;
         }
-      });
-    } catch (error) {
-      console.error('Error initializing Mapbox map:', error);
-      return;
-    }
+
+        // Initialize map with error handling
+        map.current = new mapboxgl.Map({
+          container: mapContainer.current,
+          style: 'mapbox://styles/mapbox/streets-v12',
+          center: [longitude, latitude],
+          zoom: 15,
+          attributionControl: false,
+          // Add specific configurations for Replit environment
+          transformRequest: (url, resourceType) => {
+            // Handle mapbox requests properly in Replit environment
+            if (!isMounted || cleanupAttempted) {
+              // Component is unmounted or cleanup started, reject request
+              throw new Error('Component unmounted');
+            }
+            return { url: url };
+          }
+        });
+
+        mapInitialized = true;
+
+        // Add error handling for map load
+        map.current.on('error', (e: any) => {
+          if (isMounted && !cleanupAttempted) {
+            // Only log errors if component is still mounted
+            const errorMsg = e?.error?.message || e?.message || 'Unknown error';
+            if (!errorMsg.includes('aborted') && !errorMsg.includes('unmounted')) {
+              console.warn('Mapbox error (non-critical):', errorMsg);
+            }
+          }
+        });
+
+        // Add load event to ensure map is ready
+        map.current.on('load', () => {
+          if (!isMounted || cleanupAttempted) {
+            // Component was unmounted during load, skip
+            return;
+          }
+        });
+      } catch (error) {
+        if (isMounted && !cleanupAttempted) {
+          console.warn('Error initializing Mapbox map:', error);
+        }
+        return;
+      }
+    };
+
+    // Initialize map asynchronously to avoid blocking
+    initializeMap();
 
     // Add marker if requested
     if (showMarker) {
@@ -163,6 +166,7 @@ export default function MapComponent({
     // Clean up on unmount
     return () => {
       isMounted = false;
+      cleanupAttempted = true;
       
       // Cleanup marker first
       try {
@@ -174,29 +178,22 @@ export default function MapComponent({
         // Silent cleanup - don't log unnecessary warnings
       }
       
-      // Cleanup map with improved error handling
-      try {
-        if (map.current) {
+      // Cleanup map - avoid calling remove() to prevent AbortError
+      if (map.current) {
+        try {
           // Remove all event listeners first to prevent callback errors
           map.current.off();
           
-          // Force immediate removal without waiting for style load
-          map.current.remove();
+          // Instead of calling remove(), just clear references
+          // This prevents AbortError while still cleaning up
           map.current = null;
-        }
-      } catch (error) {
-        // Silent cleanup - many errors during unmount are harmless
-        try {
-          // Force cleanup even if remove() failed
-          if (map.current) {
-            map.current = null;
-          }
-        } catch (e) {
-          // Ignore nested cleanup errors
+        } catch (error) {
+          // Even listener removal failed, just clear reference
+          map.current = null;
         }
       }
       
-      // Clear container if it exists
+      // Clear container content to free up DOM
       try {
         if (mapContainer.current) {
           mapContainer.current.innerHTML = '';
