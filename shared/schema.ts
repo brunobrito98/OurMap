@@ -41,8 +41,13 @@ export const users = pgTable("users", {
   // Additional fields for username/password authentication
   username: varchar("username").unique(),
   password: varchar("password"),
-  authType: varchar("auth_type").default("replit"), // 'replit' or 'local'
+  authType: varchar("auth_type").default("replit"), // 'replit', 'local', or 'phone'
   role: varchar("role").default("user"), // 'user', 'admin', 'super_admin'
+  // Phone authentication fields
+  phoneE164: varchar("phone_e164").unique(), // Phone number in E.164 format (+5511999999999)
+  phoneVerified: boolean("phone_verified").default(false), // Whether phone is verified
+  phoneCountry: varchar("phone_country", { length: 2 }), // ISO2 country code (BR, US, etc.)
+  phoneHmac: varchar("phone_hmac").unique(), // HMAC-SHA256 of phone for contact matching
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -202,12 +207,36 @@ export const insertLocalUserSchema = createInsertSchema(users).omit({
   profileImageUrl: true,
   authType: true,
   role: true,
+  phoneE164: true,
+  phoneVerified: true,
+  phoneCountry: true,
+  phoneHmac: true,
 }).extend({
   username: z.string().min(3, "Username deve ter pelo menos 3 caracteres"),
   password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
   email: z.string().email("Email deve ser válido"),
   firstName: z.string().min(1, "Nome é obrigatório"),
   lastName: z.string().min(1, "Sobrenome é obrigatório"),
+});
+
+// Phone authentication schemas
+export const phoneStartSchema = z.object({
+  phone: z.string().min(1, "Número de telefone é obrigatório"),
+  country: z.string().length(2, "Código do país deve ter 2 caracteres").optional(),
+});
+
+export const phoneVerifySchema = z.object({
+  phone: z.string().min(1, "Número de telefone é obrigatório"),
+  code: z.string().length(6, "Código deve ter 6 dígitos").regex(/^\d{6}$/, "Código deve conter apenas números"),
+});
+
+export const phoneLinkSchema = z.object({
+  phone: z.string().min(1, "Número de telefone é obrigatório"),
+  code: z.string().length(6, "Código deve ter 6 dígitos").regex(/^\d{6}$/, "Código deve conter apenas números"),
+});
+
+export const contactsMatchSchema = z.object({
+  contacts: z.array(z.string()).max(1000, "Máximo de 1000 contatos por vez"),
 });
 
 // Admin user creation schema
@@ -232,6 +261,10 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertLocalUser = z.infer<typeof insertLocalUserSchema>;
 export type InsertAdminUser = z.infer<typeof insertAdminUserSchema>;
+export type PhoneStart = z.infer<typeof phoneStartSchema>;
+export type PhoneVerify = z.infer<typeof phoneVerifySchema>;
+export type PhoneLink = z.infer<typeof phoneLinkSchema>;
+export type ContactsMatch = z.infer<typeof contactsMatchSchema>;
 export type Event = typeof events.$inferSelect;
 export type InsertEvent = z.infer<typeof insertEventSchema>;
 export type EventAttendance = typeof eventAttendees.$inferSelect;
