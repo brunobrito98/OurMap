@@ -372,6 +372,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // User profile route with conditional visibility
+  app.get('/api/users/:username', async (req: any, res) => {
+    try {
+      const { username } = req.params;
+      const viewerId = getUserId(req); // May be undefined if not authenticated
+      
+      const profileData = await storage.getUserProfileByUsername(username, viewerId);
+      
+      if (!profileData) {
+        return res.status(404).json({ message: "Usuário não encontrado" });
+      }
+      
+      const response: any = {
+        name: profileData.profile.firstName && profileData.profile.lastName 
+          ? `${profileData.profile.firstName} ${profileData.profile.lastName}` 
+          : profileData.profile.firstName || profileData.profile.lastName || 'Usuário',
+        username: profileData.profile.username,
+        profile_picture_url: profileData.profile.profileImageUrl,
+      };
+      
+      // Add full profile data if connected/can view
+      if (profileData.canViewFullProfile) {
+        response.phone_number = profileData.phoneNumber;
+        response.events = profileData.confirmedEvents || [];
+      }
+      
+      res.json(response);
+    } catch (error) {
+      console.error("Error fetching user profile:", error);
+      res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
   // Logout route - clears server session
   app.post('/api/auth/logout', async (req, res) => {
     try {
@@ -950,19 +983,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!requesterId) {
         return res.status(401).json({ message: "User ID not found" });
       }
-      const { addresseeId } = req.body;
+      const { addresseeId, username } = req.body;
       
-      if (requesterId === addresseeId) {
+      let actualAddresseeId = addresseeId;
+      
+      // If username is provided instead of addresseeId, look up the user ID
+      if (!actualAddresseeId && username) {
+        const addresseeUser = await storage.getUserByUsername(username);
+        if (!addresseeUser) {
+          return res.status(404).json({ message: "Usuário não encontrado" });
+        }
+        actualAddresseeId = addresseeUser.id;
+      }
+      
+      if (!actualAddresseeId) {
+        return res.status(400).json({ message: "addresseeId ou username deve ser fornecido" });
+      }
+      
+      if (requesterId === actualAddresseeId) {
         return res.status(400).json({ message: "Cannot send friend request to yourself" });
       }
       
       // Check if already friends or request exists
-      const areFriends = await storage.areFriends(requesterId, addresseeId);
+      const areFriends = await storage.areFriends(requesterId, actualAddresseeId);
       if (areFriends) {
         return res.status(400).json({ message: "Already friends" });
       }
       
-      const friendship = await storage.sendFriendRequest(requesterId, addresseeId);
+      // Check if a pending request already exists
+      const hasPendingRequest = await storage.hasPendingFriendRequest(requesterId, actualAddresseeId);
+      if (hasPendingRequest) {
+        return res.status(400).json({ message: "Solicitação de conexão já enviada" });
+      }
+      
+      const friendship = await storage.sendFriendRequest(requesterId, actualAddresseeId);
       res.json(friendship);
     } catch (error) {
       console.error("Error sending friend request:", error);

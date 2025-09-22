@@ -332,17 +332,36 @@ export default function EventDetails() {
               )}
             </div>
             
-            <div className="flex space-x-3 overflow-x-auto pb-2">
+            <div className="space-y-3">
               {attendees.slice(0, 5).map((attendee: any) => (
-                <Avatar key={attendee.id} className="w-12 h-12 flex-shrink-0" data-testid={`avatar-attendee-${attendee.id}`}>
-                  <AvatarImage src={attendee.profileImageUrl || undefined} />
-                  <AvatarFallback>
-                    {attendee.firstName?.[0]}{attendee.lastName?.[0]}
-                  </AvatarFallback>
-                </Avatar>
+                <button
+                  key={attendee.id}
+                  onClick={() => attendee.username && navigate(`/profile/@${attendee.username}`)}
+                  className="flex items-center space-x-3 w-full text-left p-2 rounded-lg hover:bg-accent/5 transition-colors"
+                  data-testid={`link-attendee-profile-${attendee.id}`}
+                >
+                  <Avatar className="w-10 h-10 flex-shrink-0">
+                    <AvatarImage src={attendee.profileImageUrl || undefined} />
+                    <AvatarFallback>
+                      {attendee.firstName?.[0]}{attendee.lastName?.[0]}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-foreground truncate" data-testid={`text-attendee-name-${attendee.id}`}>
+                      {attendee.firstName && attendee.lastName 
+                        ? `${attendee.firstName} ${attendee.lastName}`
+                        : attendee.firstName || attendee.lastName || 'Usuário'}
+                    </p>
+                    {attendee.username && (
+                      <p className="text-sm text-muted-foreground truncate" data-testid={`text-attendee-username-${attendee.id}`}>
+                        @{attendee.username}
+                      </p>
+                    )}
+                  </div>
+                </button>
               ))}
               {attendees.length === 0 && event.attendanceCount > 0 && (
-                <div className="flex items-center justify-center text-muted-foreground text-sm">
+                <div className="flex items-center justify-center text-muted-foreground text-sm py-4">
                   <i className="fas fa-spinner fa-spin mr-2"></i>
                   Carregando confirmados...
                 </div>

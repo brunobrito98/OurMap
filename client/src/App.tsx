@@ -10,6 +10,7 @@ import Home from "@/pages/Home";
 import EventDetails from "@/pages/EventDetails";
 import CreateEvent from "@/pages/CreateEvent";
 import Profile from "@/pages/Profile";
+import UserProfile from "@/pages/UserProfile";
 import MyEvents from "@/pages/MyEvents";
 import Friends from "@/pages/Friends";
 import Search from "@/pages/Search";
@@ -28,6 +29,7 @@ function Router() {
       <Route path="/home" component={Home} />
       <Route path="/event/:id" component={EventDetails} />
       <Route path="/search" component={Search} />
+      <Route path="/profile/:username" component={UserProfile} />
       
       {/* Rotas protegidas - exigem login para acesso */}
       <Route path="/create">

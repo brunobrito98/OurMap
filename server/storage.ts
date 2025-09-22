@@ -87,6 +87,15 @@ export interface IStorage {
   // Search operations
   searchUsers(query: string): Promise<UserSanitized[]>;
   searchEvents(query: string): Promise<EventWithDetails[]>;
+
+  // Profile operations
+  getUserProfileByUsername(username: string, viewerId?: string): Promise<{
+    profile: UserSanitized;
+    isConnected: boolean;
+    canViewFullProfile: boolean;
+    phoneNumber?: string | null;
+    confirmedEvents?: EventWithDetails[];
+  } | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -874,6 +883,158 @@ export class DatabaseStorage implements IStorage {
     );
 
     return enhancedEvents;
+  }
+
+  async getUserProfileByUsername(username: string, viewerId?: string): Promise<{
+    profile: UserSanitized;
+    isConnected: boolean;
+    canViewFullProfile: boolean;
+    phoneNumber?: string | null;
+    confirmedEvents?: EventWithDetails[];
+  } | undefined> {
+    // Get user by username
+    const user = await this.getUserByUsername(username);
+    if (!user) return undefined;
+
+    // Create sanitized profile
+    const profile: UserSanitized = {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      profileImageUrl: user.profileImageUrl,
+      username: user.username,
+      authType: user.authType,
+      role: user.role,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+
+    // If no viewer, return public profile only
+    if (!viewerId) {
+      return {
+        profile,
+        isConnected: false,
+        canViewFullProfile: false,
+      };
+    }
+
+    // If viewing own profile, show full profile
+    if (viewerId === user.id) {
+      const confirmedEvents = await db
+        .select({
+          event: events,
+          organizer: {
+            id: users.id,
+            username: users.username,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            profileImageUrl: users.profileImageUrl,
+            role: users.role,
+            authType: users.authType,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+          },
+        })
+        .from(eventAttendees)
+        .innerJoin(events, eq(eventAttendees.eventId, events.id))
+        .innerJoin(users, eq(events.creatorId, users.id))
+        .where(and(
+          eq(eventAttendees.userId, user.id),
+          eq(eventAttendees.status, 'attending')
+        ));
+
+      const enhancedEvents = await Promise.all(
+        confirmedEvents.map(async (result) => {
+          const [attendanceCountResult] = await db
+            .select({ count: count() })
+            .from(eventAttendees)
+            .where(and(
+              eq(eventAttendees.eventId, result.event.id),
+              eq(eventAttendees.status, 'attending')
+            ));
+
+          return {
+            ...result.event,
+            organizer: result.organizer,
+            attendanceCount: attendanceCountResult.count,
+            userAttendance: undefined,
+            friendsGoing: [],
+          };
+        })
+      );
+
+      return {
+        profile,
+        isConnected: true,
+        canViewFullProfile: true,
+        phoneNumber: user.phoneE164,
+        confirmedEvents: enhancedEvents,
+      };
+    }
+
+    // Check friendship status
+    const areConnected = await this.areFriends(viewerId, user.id);
+
+    if (areConnected) {
+      // Return full profile for connected friends
+      const confirmedEvents = await db
+        .select({
+          event: events,
+          organizer: {
+            id: users.id,
+            username: users.username,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            profileImageUrl: users.profileImageUrl,
+            role: users.role,
+            authType: users.authType,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+          },
+        })
+        .from(eventAttendees)
+        .innerJoin(events, eq(eventAttendees.eventId, events.id))
+        .innerJoin(users, eq(events.creatorId, users.id))
+        .where(and(
+          eq(eventAttendees.userId, user.id),
+          eq(eventAttendees.status, 'attending')
+        ));
+
+      const enhancedEvents = await Promise.all(
+        confirmedEvents.map(async (result) => {
+          const [attendanceCountResult] = await db
+            .select({ count: count() })
+            .from(eventAttendees)
+            .where(and(
+              eq(eventAttendees.eventId, result.event.id),
+              eq(eventAttendees.status, 'attending')
+            ));
+
+          return {
+            ...result.event,
+            organizer: result.organizer,
+            attendanceCount: attendanceCountResult.count,
+            userAttendance: undefined,
+            friendsGoing: [],
+          };
+        })
+      );
+
+      return {
+        profile,
+        isConnected: true,
+        canViewFullProfile: true,
+        phoneNumber: user.phoneE164,
+        confirmedEvents: enhancedEvents,
+      };
+    }
+
+    // Return public profile only for non-connected users
+    return {
+      profile,
+      isConnected: false,
+      canViewFullProfile: false,
+    };
   }
 }
 
