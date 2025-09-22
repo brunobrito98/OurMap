@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import BottomNavigation from "@/components/BottomNavigation";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/lib/supabase";
 import type { UserWithStats } from "@shared/schema";
 
 export default function Profile() {
@@ -15,8 +16,32 @@ export default function Profile() {
     enabled: !!authUser,
   });
 
-  const handleLogout = () => {
-    window.location.href = "/api/logout";
+  const handleLogout = async () => {
+    try {
+      // Primeiro, tenta encerrar a sessão do Supabase de forma segura
+      try {
+        await supabase.auth.signOut();
+      } catch (supabaseError) {
+        console.log("Supabase logout não disponível:", supabaseError);
+      }
+      
+      // Chama o endpoint correto do backend para encerrar a sessão do servidor
+      const response = await fetch("/api/auth/logout", { 
+        method: "POST", 
+        credentials: "same-origin" 
+      });
+      
+      if (!response.ok) {
+        console.error("Erro ao fazer logout no servidor:", response.statusText);
+      }
+      
+      // Imediatamente após o signOut, redireciona para a tela de login
+      navigate("/");
+    } catch (error) {
+      console.error("Erro ao fazer logout:", error);
+      // Mesmo com erro, redireciona para garantir que o usuário saia da conta
+      navigate("/");
+    }
   };
 
   if (isLoading || !user) {
