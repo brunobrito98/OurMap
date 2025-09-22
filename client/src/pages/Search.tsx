@@ -89,7 +89,7 @@ export default function Search() {
       <div className="bg-white border-b border-border p-4 sticky top-0 z-30">
         <div className="flex items-center space-x-4">
           <Button
-            onClick={() => navigate("/home")}
+            onClick={() => navigate("/")}
             variant="ghost"
             size="sm"
             data-testid="button-back"

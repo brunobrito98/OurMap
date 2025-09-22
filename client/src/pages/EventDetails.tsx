@@ -39,7 +39,10 @@ export default function EventDetails() {
         description: "Faça login para confirmar sua presença no evento!",
         variant: "destructive",
       });
-      navigate("/");
+        setTimeout(() => {
+          const fullPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+          window.location.href = `/login?redirect=${encodeURIComponent(fullPath)}`;
+        }, 500);
       return;
     }
     
@@ -67,7 +70,8 @@ export default function EventDetails() {
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = "/api/login";
+          const fullPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+          window.location.href = `/login?redirect=${encodeURIComponent(fullPath)}`;
         }, 500);
         return;
       }
@@ -100,7 +104,7 @@ export default function EventDetails() {
         <div className="text-center">
           <i className="fas fa-calendar-times text-4xl text-muted-foreground mb-4"></i>
           <p className="text-muted-foreground">Evento não encontrado</p>
-          <Button onClick={() => navigate("/home")} className="mt-4">
+          <Button onClick={() => navigate("/")} className="mt-4">
             Voltar ao início
           </Button>
         </div>
@@ -168,7 +172,7 @@ export default function EventDetails() {
           </div>
           <div className="flex items-center space-x-2">
             <Button
-              onClick={() => navigate("/home")}
+              onClick={() => navigate("/")}
               variant="ghost"
               size="sm"
               data-testid="button-home"

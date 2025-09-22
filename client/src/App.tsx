@@ -18,8 +18,11 @@ import NotFound from "@/pages/not-found";
 function Router() {
   return (
     <Switch>
-      {/* Rota pública para login/landing */}
-      <Route path="/" component={Landing} />
+      {/* Rota principal - página inicial sem exigir login */}
+      <Route path="/" component={Home} />
+      
+      {/* Rota para login/cadastro */}
+      <Route path="/login" component={Landing} />
       
       {/* Rotas públicas - visualização permitida sem login */}
       <Route path="/home" component={Home} />

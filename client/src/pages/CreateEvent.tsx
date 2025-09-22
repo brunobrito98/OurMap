@@ -122,7 +122,7 @@ export default function CreateEvent() {
         title: "Sucesso",
         description: isEditing ? "Evento atualizado com sucesso!" : "Evento criado com sucesso!",
       });
-      navigate("/home");
+      navigate("/");
     },
     onError: (error) => {
       if (isUnauthorizedError(error)) {
@@ -226,7 +226,7 @@ export default function CreateEvent() {
       <div className="bg-white border-b border-border p-4 sticky top-0 z-30">
         <div className="flex items-center space-x-4">
           <Button
-            onClick={() => navigate("/home")}
+            onClick={() => navigate("/")}
             variant="ghost"
             size="sm"
             data-testid="button-cancel"

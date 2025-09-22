@@ -12,7 +12,7 @@ export default function BottomNavigation({ activeTab }: BottomNavigationProps) {
   const { toast } = useToast();
 
   const tabs = [
-    { id: 'home', icon: 'fas fa-home', label: 'Início', path: '/home', requiresAuth: false },
+    { id: 'home', icon: 'fas fa-home', label: 'Início', path: '/', requiresAuth: false },
     { id: 'search', icon: 'fas fa-search', label: 'Buscar', path: '/search', requiresAuth: false },
     { id: 'friends', icon: 'fas fa-users', label: 'Amigos', path: '/friends', requiresAuth: true },
     { id: 'profile', icon: 'fas fa-user', label: 'Perfil', path: '/profile', requiresAuth: true },
@@ -25,7 +25,7 @@ export default function BottomNavigation({ activeTab }: BottomNavigationProps) {
         description: `Faça login para acessar ${tab.label}!`,
         variant: "destructive",
       });
-      navigate("/");
+      navigate(`/login?redirect=${encodeURIComponent(tab.path)}`);
       return;
     }
     

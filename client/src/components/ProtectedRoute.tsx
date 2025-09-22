@@ -7,14 +7,16 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const { isAuthenticated, isLoading } = useAuth();
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      navigate("/");
+      // Preserve full URL including query and hash for deep links
+      const fullPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      navigate(`/login?redirect=${encodeURIComponent(fullPath)}`);
     }
-  }, [isAuthenticated, isLoading, navigate]);
+  }, [isAuthenticated, isLoading, navigate, location]);
 
   // Mostra loading enquanto verifica autenticação
   if (isLoading) {

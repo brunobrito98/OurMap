@@ -21,10 +21,10 @@ export default function Landing() {
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
-  // Redireciona usuários já autenticados para /home
+  // Redireciona usuários já autenticados para a página inicial
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      navigate("/home");
+      navigate("/");
     }
   }, [isAuthenticated, authLoading, navigate]);
 
@@ -63,7 +63,13 @@ export default function Landing() {
           title: isRegistering ? "Cadastro realizado!" : "Login realizado!",
           description: `Bem-vindo, ${data.firstName || data.username}!`,
         });
-        window.location.href = "/";
+        
+        // Get redirect parameter from URL and validate it for security
+        const urlParams = new URLSearchParams(window.location.search);
+        const redirect = urlParams.get('redirect') || '/';
+        // Only allow same-origin relative paths to prevent open-redirect attacks
+        const safeRedirect = redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/';
+        window.location.href = safeRedirect;
       } else {
         toast({
           title: "Erro",
