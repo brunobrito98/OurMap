@@ -27,12 +27,12 @@ const categories = [
   { value: "futebol", label: "Futebol", icon: "fas fa-futbol" },
   { value: "tech", label: "Tecnologia", icon: "fas fa-laptop-code" },
   { value: "religioso", label: "Religioso", icon: "fas fa-pray" },
-  { value: "outros", label: "Outros", icon: "fas fa-calendar" },
   { value: "motoclube", label: "Encontro de Motoclube", icon: "fas fa-motorcycle" },
   { value: "encontros", label: "Encontros", icon: "fas fa-users" },
   { value: "piquenique", label: "Piquenique", icon: "fas fa-tree" },
   { value: "food", label: "Gastronomia", icon: "fas fa-utensils" },
   { value: "art", label: "Arte", icon: "fas fa-palette" },
+  { value: "outros", label: "Outros", icon: "fas fa-calendar" },
 ];
 
 const recurringOptions = [
