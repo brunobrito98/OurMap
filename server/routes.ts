@@ -282,6 +282,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         formData.isRecurring = formData.isRecurring === 'true';
       }
       
+      // Convert numeric fields from strings - price should remain as string for schema validation
+      if (formData.price !== undefined && formData.price !== '') {
+        // Ensure price is a string (FormData values are strings by default)
+        formData.price = formData.price.toString();
+      }
+      
       const eventData = insertEventSchema.parse(formData);
       
       // Use eventData directly - dates are already strings from form validation
@@ -348,6 +354,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       if (formData.isRecurring !== undefined) {
         formData.isRecurring = formData.isRecurring === 'true';
+      }
+      
+      // Convert numeric fields from strings - price should remain as string for schema validation
+      if (formData.price !== undefined && formData.price !== '') {
+        // Ensure price is a string (FormData values are strings by default)
+        formData.price = formData.price.toString();
       }
       
       const eventData = insertEventSchema.partial().parse(formData);
