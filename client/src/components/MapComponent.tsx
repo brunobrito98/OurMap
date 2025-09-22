@@ -30,9 +30,6 @@ export default function MapComponent({
   // Set Mapbox access token
   const mapboxToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
   
-  // Debug log for token (will be removed in production)
-  console.log('Mapbox token available:', !!mapboxToken);
-  
   if (!mapboxToken) {
     console.error('VITE_MAPBOX_ACCESS_TOKEN não encontrado');
   } else {
@@ -80,10 +77,6 @@ export default function MapComponent({
       // Add error handling for map load
       map.current.on('error', (e: any) => {
         console.error('Mapbox map error:', e);
-      });
-
-      map.current.on('load', () => {
-        console.log('Mapbox map loaded successfully');
       });
     } catch (error) {
       console.error('Error initializing Mapbox map:', error);
