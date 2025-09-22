@@ -74,7 +74,7 @@ export default function EventCard({ event, onClick }: EventCardProps) {
         <div className="absolute top-4 right-4">
           <button className="bg-white/90 backdrop-blur-sm rounded-full p-2 hover:bg-white transition-colors">
             <i 
-              className={`${event.userAttendance?.status === 'confirmed' ? 'fas fa-heart text-primary' : 'far fa-heart text-muted-foreground'}`}
+              className={`${event.userAttendance?.status === 'attending' ? 'fas fa-heart text-primary' : 'far fa-heart text-muted-foreground'}`}
             ></i>
           </button>
         </div>

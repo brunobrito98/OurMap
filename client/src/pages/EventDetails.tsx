@@ -88,7 +88,7 @@ export default function EventDetails() {
 
   const isOrganizer = Boolean(user && typeof user === 'object' && user !== null && 'id' in user && user.id === event?.organizer?.id);
   const userAttendance = event.userAttendance?.status;
-  const isConfirmed = userAttendance === 'confirmed';
+  const isConfirmed = userAttendance === 'attending';
 
   const formatDate = (date: string | Date) => {
     return new Date(date).toLocaleDateString('pt-BR', {
@@ -362,7 +362,7 @@ export default function EventDetails() {
             </p>
           </div>
           <Button
-            onClick={() => attendMutation.mutate(isConfirmed ? 'not_going' : 'confirmed')}
+            onClick={() => attendMutation.mutate(isConfirmed ? 'not_going' : 'attending')}
             disabled={attendMutation.isPending}
             className={`flex-1 py-4 text-lg ${isConfirmed ? 'bg-green-600 hover:bg-green-700' : ''}`}
             data-testid="button-confirm-attendance"
