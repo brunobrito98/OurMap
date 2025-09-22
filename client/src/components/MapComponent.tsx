@@ -28,10 +28,19 @@ export default function MapComponent({
   const marker = useRef<any>(null);
 
   // Set Mapbox access token
-  mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
+  const mapboxToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
+  
+  // Debug log for token (will be removed in production)
+  console.log('Mapbox token available:', !!mapboxToken);
+  
+  if (!mapboxToken) {
+    console.error('VITE_MAPBOX_ACCESS_TOKEN não encontrado');
+  } else {
+    mapboxgl.accessToken = mapboxToken;
+  }
   
   // If no access token, render fallback placeholder directly
-  if (!mapboxgl.accessToken) {
+  if (!mapboxToken) {
     return (
       <div 
         style={{ height: `${height}px` }}
@@ -51,16 +60,35 @@ export default function MapComponent({
   }
 
   useEffect(() => {
-    if (!mapContainer.current) return;
+    if (!mapContainer.current || !mapboxToken) return;
 
-    // Initialize map
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/streets-v12',
-      center: [longitude, latitude],
-      zoom: 15,
-      attributionControl: false,
-    });
+    try {
+      // Initialize map with error handling
+      map.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: 'mapbox://styles/mapbox/streets-v12',
+        center: [longitude, latitude],
+        zoom: 15,
+        attributionControl: false,
+        // Add specific configurations for Replit environment
+        transformRequest: (url, resourceType) => {
+          // Handle mapbox requests properly in Replit environment
+          return { url: url };
+        }
+      });
+
+      // Add error handling for map load
+      map.current.on('error', (e: any) => {
+        console.error('Mapbox map error:', e);
+      });
+
+      map.current.on('load', () => {
+        console.log('Mapbox map loaded successfully');
+      });
+    } catch (error) {
+      console.error('Error initializing Mapbox map:', error);
+      return;
+    }
 
     // Add marker if requested
     if (showMarker) {
