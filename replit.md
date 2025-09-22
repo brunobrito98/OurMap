@@ -4,6 +4,15 @@
 
 OurMap is a modern event management platform built for discovering, creating, and attending local events. The application features a React frontend with TypeScript, an Express.js backend, and a PostgreSQL database using Drizzle ORM. The platform includes comprehensive event management capabilities, user authentication through Replit Auth, geolocation services, image upload functionality, and social features like friend connections and event ratings.
 
+## Recent Changes
+
+**September 22, 2025**
+- **Home Page Access**: Changed main route "/" from Landing (login page) to Home component for public access without authentication
+- **Login Flow Optimization**: Implemented redirect parameters for seamless return to intended destinations after authentication
+- **Security Enhancement**: Fixed open redirect vulnerability by validating redirect parameters in Landing component
+- **Deep Link Support**: Enhanced URL preservation to capture complete paths (pathname + search + hash) for full deep link functionality
+- **User Experience**: Users can now browse events freely without login, authentication only required for interactions (RSVP, profile access)
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
@@ -49,6 +58,8 @@ Preferred communication style: Simple, everyday language.
 - **Rate Limiting**: IP and phone-based rate limiting for authentication endpoints
 - **File Upload Security**: Type and size validation for image uploads
 - **API Security**: Authenticated route protection with middleware and sanitized data projections
+- **Open Redirect Protection**: Landing page validates redirect parameters to prevent security vulnerabilities
+- **Deep Link Preservation**: Full URL (pathname + search + hash) preservation for seamless post-login redirects
 
 ## External Dependencies
 
