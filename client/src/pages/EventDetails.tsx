@@ -17,7 +17,7 @@ import EventRatingsDisplay from "@/components/EventRatingsDisplay";
 export default function EventDetails() {
   const { id } = useParams();
   const [, navigate] = useLocation();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -27,10 +27,25 @@ export default function EventDetails() {
   });
 
   // Fetch attendees with their profile photos
-  const { data: attendees = [] } = useQuery({
+  const { data: attendees = [] } = useQuery<any[]>({
     queryKey: ['/api/events', id, 'attendees'],
     enabled: !!id,
   });
+
+  const handleAttendanceAction = () => {
+    if (!isAuthenticated) {
+      toast({
+        title: "Login necessário",
+        description: "Faça login para confirmar sua presença no evento!",
+        variant: "destructive",
+      });
+      navigate("/");
+      return;
+    }
+    
+    // Se autenticado, procede com a mutation
+    attendMutation.mutate(isConfirmed ? 'not_going' : 'attending');
+  };
 
   const attendMutation = useMutation({
     mutationFn: async (status: string) => {
@@ -331,8 +346,8 @@ export default function EventDetails() {
             </div>
           </div>
 
-          {/* Friends Going Section */}
-          {event.friendsGoing && event.friendsGoing.length > 0 && (
+          {/* Friends Going Section - apenas para usuários logados */}
+          {isAuthenticated && event.friendsGoing && event.friendsGoing.length > 0 && (
             <div className="bg-accent/5 border border-accent/20 rounded-2xl p-4 mb-6">
               <div className="flex items-center space-x-2 mb-3">
                 <i className="fas fa-users text-accent"></i>
@@ -381,9 +396,11 @@ export default function EventDetails() {
             </p>
           </div>
           <Button
-            onClick={() => attendMutation.mutate(isConfirmed ? 'not_going' : 'attending')}
+            onClick={handleAttendanceAction}
             disabled={attendMutation.isPending}
-            className={`flex-1 py-4 text-lg ${isConfirmed ? 'bg-green-600 hover:bg-green-700' : ''}`}
+            className={`flex-1 py-4 text-lg ${isConfirmed ? 'bg-green-600 hover:bg-green-700' : ''} ${
+              !isAuthenticated ? 'opacity-90' : ''
+            }`}
             data-testid="button-confirm-attendance"
           >
             {attendMutation.isPending ? (

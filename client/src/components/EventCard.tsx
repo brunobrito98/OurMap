@@ -1,13 +1,39 @@
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { useLocation } from "wouter";
+import { useToast } from "@/hooks/use-toast";
 import type { EventWithDetails } from "@shared/schema";
 
 interface EventCardProps {
   event: EventWithDetails;
   onClick: () => void;
+  isAuthenticated?: boolean;
 }
 
-export default function EventCard({ event, onClick }: EventCardProps) {
+export default function EventCard({ event, onClick, isAuthenticated = false }: EventCardProps) {
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  
+  const handleFavoriteClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Evita que o clique se propague para o card
+    
+    if (!isAuthenticated) {
+      toast({
+        title: "Login necessário",
+        description: "Faça login para favoritar eventos!",
+        variant: "destructive",
+      });
+      navigate("/");
+      return;
+    }
+    
+    // TODO: Implementar lógica de favoritar para usuários logados
+    toast({
+      title: "Em breve",
+      description: "Funcionalidade de favoritos será implementada em breve!",
+    });
+  };
+  
   const formatDate = (date: string) => {
     const eventDate = new Date(date);
     return eventDate.toLocaleDateString('pt-BR', {
@@ -72,7 +98,13 @@ export default function EventCard({ event, onClick }: EventCardProps) {
           </div>
         </div>
         <div className="absolute top-4 right-4">
-          <button className="bg-white/90 backdrop-blur-sm rounded-full p-2 hover:bg-white transition-colors">
+          <button 
+            onClick={handleFavoriteClick}
+            className={`bg-white/90 backdrop-blur-sm rounded-full p-2 hover:bg-white transition-colors ${
+              !isAuthenticated ? 'opacity-75' : ''
+            }`}
+            data-testid={`button-favorite-${event.id}`}
+          >
             <i 
               className={`${event.userAttendance?.status === 'attending' ? 'fas fa-heart text-primary' : 'far fa-heart text-muted-foreground'}`}
             ></i>

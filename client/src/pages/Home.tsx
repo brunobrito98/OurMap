@@ -9,10 +9,12 @@ import BottomNavigation from "@/components/BottomNavigation";
 import FloatingCreateButton from "@/components/FloatingCreateButton";
 import CitySearchModal from "@/components/CitySearchModal";
 import { MapIcon } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 import type { EventWithDetails } from "@shared/schema";
 
 export default function Home() {
   const [, navigate] = useLocation();
+  const { isAuthenticated } = useAuth();
   const [selectedCategory, setSelectedCategory] = useState("");
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationName, setLocationName] = useState("São Paulo, SP");
@@ -159,13 +161,16 @@ export default function Home() {
                 key={event.id}
                 event={event}
                 onClick={() => navigate(`/event/${event.id}`)}
+                isAuthenticated={isAuthenticated}
               />
             ))}
           </div>
         )}
       </div>
 
-      <FloatingCreateButton />
+      {/* Botão de criar evento - apenas para usuários logados */}
+      {isAuthenticated && <FloatingCreateButton />}
+      
       <BottomNavigation activeTab="home" />
       
       <CitySearchModal

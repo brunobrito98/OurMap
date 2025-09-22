@@ -21,19 +21,12 @@ function Router() {
       {/* Rota pública para login/landing */}
       <Route path="/" component={Landing} />
       
-      {/* Rotas protegidas - envolvidas com ProtectedRoute */}
-      <Route path="/home">
-        <ProtectedRoute>
-          <Home />
-        </ProtectedRoute>
-      </Route>
+      {/* Rotas públicas - visualização permitida sem login */}
+      <Route path="/home" component={Home} />
+      <Route path="/event/:id" component={EventDetails} />
+      <Route path="/search" component={Search} />
       
-      <Route path="/event/:id">
-        <ProtectedRoute>
-          <EventDetails />
-        </ProtectedRoute>
-      </Route>
-      
+      {/* Rotas protegidas - exigem login para acesso */}
       <Route path="/create">
         <ProtectedRoute>
           <CreateEvent />
@@ -61,12 +54,6 @@ function Router() {
       <Route path="/friends">
         <ProtectedRoute>
           <Friends />
-        </ProtectedRoute>
-      </Route>
-      
-      <Route path="/search">
-        <ProtectedRoute>
-          <Search />
         </ProtectedRoute>
       </Route>
 

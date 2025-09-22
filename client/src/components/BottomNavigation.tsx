@@ -1,4 +1,6 @@
 import { useLocation } from 'wouter';
+import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
 
 interface BottomNavigationProps {
   activeTab: 'home' | 'search' | 'friends' | 'profile';
@@ -6,13 +8,29 @@ interface BottomNavigationProps {
 
 export default function BottomNavigation({ activeTab }: BottomNavigationProps) {
   const [, navigate] = useLocation();
+  const { isAuthenticated } = useAuth();
+  const { toast } = useToast();
 
   const tabs = [
-    { id: 'home', icon: 'fas fa-home', label: 'Início', path: '/home' },
-    { id: 'search', icon: 'fas fa-search', label: 'Buscar', path: '/search' },
-    { id: 'friends', icon: 'fas fa-users', label: 'Amigos', path: '/friends' },
-    { id: 'profile', icon: 'fas fa-user', label: 'Perfil', path: '/profile' },
+    { id: 'home', icon: 'fas fa-home', label: 'Início', path: '/home', requiresAuth: false },
+    { id: 'search', icon: 'fas fa-search', label: 'Buscar', path: '/search', requiresAuth: false },
+    { id: 'friends', icon: 'fas fa-users', label: 'Amigos', path: '/friends', requiresAuth: true },
+    { id: 'profile', icon: 'fas fa-user', label: 'Perfil', path: '/profile', requiresAuth: true },
   ];
+  
+  const handleTabClick = (tab: typeof tabs[0]) => {
+    if (tab.requiresAuth && !isAuthenticated) {
+      toast({
+        title: "Login necessário",
+        description: `Faça login para acessar ${tab.label}!`,
+        variant: "destructive",
+      });
+      navigate("/");
+      return;
+    }
+    
+    navigate(tab.path);
+  };
 
   return (
     <div className="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-white border-t border-border z-40">
@@ -20,10 +38,10 @@ export default function BottomNavigation({ activeTab }: BottomNavigationProps) {
         {tabs.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => navigate(tab.path)}
+            onClick={() => handleTabClick(tab)}
             className={`flex-1 py-3 px-2 text-center transition-colors ${
               activeTab === tab.id ? 'text-primary' : 'text-muted-foreground'
-            }`}
+            } ${tab.requiresAuth && !isAuthenticated ? 'opacity-60' : ''}`}
             data-testid={`nav-${tab.id}`}
           >
             <i className={`${tab.icon} text-xl mb-1 block`}></i>
