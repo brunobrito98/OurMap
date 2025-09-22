@@ -46,10 +46,7 @@ export default function Search() {
   // Send friend request mutation
   const sendFriendRequestMutation = useMutation({
     mutationFn: async (addresseeId: string) => {
-      return await apiRequest('/api/friend-requests', {
-        method: 'POST',
-        body: JSON.stringify({ addresseeId }),
-      });
+      return await apiRequest('POST', '/api/friend-requests', { addresseeId });
     },
     onSuccess: () => {
       toast({
@@ -83,7 +80,7 @@ export default function Search() {
   };
 
   const isCurrentUser = (userId: string) => {
-    return authUser?.id === userId;
+    return authUser && authUser.id === userId;
   };
 
   return (

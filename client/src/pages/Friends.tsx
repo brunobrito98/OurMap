@@ -30,10 +30,7 @@ export default function Friends() {
   // Accept/reject friend request mutation
   const respondToRequestMutation = useMutation({
     mutationFn: async ({ requestId, status }: { requestId: string; status: string }) => {
-      return await apiRequest(`/api/friend-requests/${requestId}`, {
-        method: 'PUT',
-        body: JSON.stringify({ status }),
-      });
+      return await apiRequest('PUT', `/api/friend-requests/${requestId}`, { status });
     },
     onSuccess: (_, variables) => {
       toast({
@@ -205,7 +202,7 @@ export default function Friends() {
                           @{request.requester.username}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Enviado {new Date(request.createdAt).toLocaleDateString('pt-BR')}
+                          Enviado {request.createdAt ? new Date(request.createdAt).toLocaleDateString('pt-BR') : ''}
                         </p>
                       </div>
                       <div className="flex space-x-2">
