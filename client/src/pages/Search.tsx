@@ -12,6 +12,7 @@ import EventCard from "@/components/EventCard";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { User, EventWithDetails } from "@shared/schema";
+import { ArrowLeft, Search as SearchIcon, Calendar, Users, UserPlus, Eye, Crown, Check } from "lucide-react";
 
 export default function Search() {
   const [, navigate] = useLocation();
@@ -94,7 +95,7 @@ export default function Search() {
             size="sm"
             data-testid="button-back"
           >
-            <i className="fas fa-arrow-left text-xl"></i>
+            <ArrowLeft className="w-5 h-5" />
           </Button>
           <h2 className="font-semibold text-foreground">Buscar</h2>
         </div>
@@ -104,7 +105,7 @@ export default function Search() {
         {/* Search Bar */}
         <div className="mb-4">
           <div className="relative">
-            <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground"></i>
+            <SearchIcon className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
             <Input
               type="text"
               placeholder="Digite para buscar..."
@@ -119,11 +120,11 @@ export default function Search() {
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "events" | "users")} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="events" data-testid="tab-events">
-              <i className="fas fa-calendar mr-2"></i>
+              <Calendar className="w-4 h-4 mr-2" />
               Eventos
             </TabsTrigger>
             <TabsTrigger value="users" data-testid="tab-users">
-              <i className="fas fa-users mr-2"></i>
+              <Users className="w-4 h-4 mr-2" />
               Usuários
             </TabsTrigger>
           </TabsList>
@@ -231,7 +232,7 @@ export default function Search() {
                         </p>
                         {user.role === 'admin' && (
                           <Badge variant="secondary" className="text-xs mt-1">
-                            <i className="fas fa-crown mr-1"></i>
+                            <Crown className="w-3 h-3 mr-1" />
                             Administrador
                           </Badge>
                         )}
@@ -241,7 +242,7 @@ export default function Search() {
                           <Badge variant="outline">Você</Badge>
                         ) : isAlreadyFriend(user.id) ? (
                           <Badge variant="default">
-                            <i className="fas fa-check mr-1"></i>
+                            <Check className="w-3 h-3 mr-1" />
                             Amigo
                           </Badge>
                         ) : (
@@ -251,7 +252,7 @@ export default function Search() {
                             size="sm"
                             data-testid={`button-add-friend-${user.id}`}
                           >
-                            <i className="fas fa-user-plus mr-2"></i>
+                            <UserPlus className="w-4 h-4 mr-2" />
                             Adicionar
                           </Button>
                         )}

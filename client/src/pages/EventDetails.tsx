@@ -13,6 +13,25 @@ import EventRatingForm from "@/components/EventRatingForm";
 import Rating from "@/components/ui/rating";
 import OrganizerRating from "@/components/OrganizerRating";
 import EventRatingsDisplay from "@/components/EventRatingsDisplay";
+import { 
+  ArrowLeft, 
+  Home, 
+  Edit, 
+  Share2, 
+  Calendar, 
+  Clock, 
+  MapPin, 
+  Navigation,
+  Users,
+  Check,
+  Loader2,
+  CalendarX,
+  Music,
+  Utensils,
+  Zap,
+  Palette,
+  Laptop
+} from "lucide-react";
 
 export default function EventDetails() {
   const { id } = useParams();
@@ -102,9 +121,10 @@ export default function EventDetails() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <i className="fas fa-calendar-times text-4xl text-muted-foreground mb-4"></i>
+          <CalendarX className="w-16 h-16 text-muted-foreground mb-4 mx-auto" />
           <p className="text-muted-foreground">Evento não encontrado</p>
           <Button onClick={() => navigate("/")} className="mt-4">
+            <Home className="w-4 h-4 mr-2" />
             Voltar ao início
           </Button>
         </div>
@@ -132,14 +152,14 @@ export default function EventDetails() {
   };
 
   const getCategoryIcon = (category: string) => {
-    const icons: Record<string, string> = {
-      music: 'fas fa-music',
-      food: 'fas fa-utensils',
-      sports: 'fas fa-running',
-      art: 'fas fa-palette',
-      tech: 'fas fa-laptop-code',
+    const iconMap: Record<string, React.ComponentType<{className?: string}>> = {
+      music: Music,
+      food: Utensils,
+      sports: Zap,
+      art: Palette,
+      tech: Laptop,
     };
-    return icons[category] || 'fas fa-calendar';
+    return iconMap[category] || Calendar;
   };
 
   const getCategoryColor = (category: string) => {
@@ -166,7 +186,7 @@ export default function EventDetails() {
               data-testid="button-back"
               title="Voltar"
             >
-              <i className="fas fa-arrow-left text-xl"></i>
+              <ArrowLeft className="w-5 h-5" />
             </Button>
             <h2 className="font-semibold text-foreground">Detalhes do Evento</h2>
           </div>
@@ -178,7 +198,7 @@ export default function EventDetails() {
               data-testid="button-home"
               title="Ir para início"
             >
-              <i className="fas fa-home text-xl"></i>
+              <Home className="w-5 h-5" />
             </Button>
             {isOrganizer && (
               <Button
@@ -188,7 +208,7 @@ export default function EventDetails() {
                 data-testid="button-edit"
                 title="Editar evento"
               >
-                <i className="fas fa-edit text-xl"></i>
+                <Edit className="w-5 h-5" />
               </Button>
             )}
             <Button 
@@ -197,7 +217,7 @@ export default function EventDetails() {
               data-testid="button-share"
               title="Compartilhar"
             >
-              <i className="fas fa-share text-xl"></i>
+              <Share2 className="w-5 h-5" />
             </Button>
           </div>
         </div>
@@ -221,13 +241,13 @@ export default function EventDetails() {
               </h1>
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-1 text-white/90">
-                  <i className="fas fa-calendar text-sm"></i>
+                  <Calendar className="w-4 h-4" />
                   <span className="text-sm" data-testid="text-event-date">
                     {formatDate(event.dateTime)}
                   </span>
                 </div>
                 <div className="flex items-center space-x-1 text-white/90">
-                  <i className="fas fa-clock text-sm"></i>
+                  <Clock className="w-4 h-4" />
                   <span className="text-sm" data-testid="text-event-time">
                     {formatTime(event.dateTime)}
                   </span>
@@ -259,14 +279,17 @@ export default function EventDetails() {
           {/* Category and Distance */}
           <div className="flex items-center space-x-3 mb-6">
             <Badge className={getCategoryColor(event.category)}>
-              <i className={`${getCategoryIcon(event.category)} mr-1`}></i>
+              {(() => {
+                const IconComponent = getCategoryIcon(event.category);
+                return <IconComponent className="w-3 h-3 mr-1" />;
+              })()}
               {event.category.charAt(0).toUpperCase() + event.category.slice(1)}
             </Badge>
             {event.distance && (
               <>
                 <span className="text-muted-foreground text-xs">•</span>
-                <span className="text-muted-foreground text-xs" data-testid="text-event-distance">
-                  <i className="fas fa-map-marker-alt mr-1"></i>
+                <span className="text-muted-foreground text-xs flex items-center" data-testid="text-event-distance">
+                  <MapPin className="w-3 h-3 mr-1" />
                   {event.distance.toFixed(1)} km
                 </span>
               </>
@@ -288,8 +311,8 @@ export default function EventDetails() {
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-foreground">Localização</h3>
               {event.distance && (
-                <span className="text-sm text-primary font-medium">
-                  <i className="fas fa-map-marker-alt mr-1"></i>
+                <span className="text-sm text-primary font-medium flex items-center">
+                  <MapPin className="w-4 h-4 mr-1" />
                   {event.distance.toFixed(1)} km
                 </span>
               )}
@@ -315,7 +338,7 @@ export default function EventDetails() {
               onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${event.latitude},${event.longitude}`, '_blank')}
               data-testid="button-directions"
             >
-              <i className="fas fa-directions mr-2"></i>Como chegar
+              <Navigation className="w-4 h-4 mr-2" />Como chegar
             </Button>
           </div>
 
@@ -326,7 +349,8 @@ export default function EventDetails() {
                 Confirmados ({event.attendanceCount})
               </h3>
               {attendees.length > 5 && (
-                <button className="text-primary text-sm font-medium" data-testid="button-view-all-attendees">
+                <button className="text-primary text-sm font-medium flex items-center" data-testid="button-view-all-attendees">
+                  <Users className="w-4 h-4 mr-1" />
                   Ver todos
                 </button>
               )}
@@ -343,7 +367,7 @@ export default function EventDetails() {
               ))}
               {attendees.length === 0 && event.attendanceCount > 0 && (
                 <div className="flex items-center justify-center text-muted-foreground text-sm">
-                  <i className="fas fa-spinner fa-spin mr-2"></i>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Carregando confirmados...
                 </div>
               )}
@@ -354,7 +378,7 @@ export default function EventDetails() {
           {isAuthenticated && event.friendsGoing && event.friendsGoing.length > 0 && (
             <div className="bg-accent/5 border border-accent/20 rounded-2xl p-4 mb-6">
               <div className="flex items-center space-x-2 mb-3">
-                <i className="fas fa-users text-accent"></i>
+                <Users className="w-5 h-5 text-accent" />
                 <h3 className="font-semibold text-foreground">Seus amigos vão</h3>
               </div>
               <div className="flex items-center space-x-3">
@@ -411,11 +435,11 @@ export default function EventDetails() {
               "Atualizando..."
             ) : isConfirmed ? (
               <>
-                <i className="fas fa-check mr-2"></i>Confirmado
+                <Check className="w-4 h-4 mr-2" />Confirmado
               </>
             ) : (
               <>
-                <i className="fas fa-check mr-2"></i>Confirmar Presença
+                <Check className="w-4 h-4 mr-2" />Confirmar Presença
               </>
             )}
           </Button>

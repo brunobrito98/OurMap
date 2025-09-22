@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { insertEventSchema, type InsertEvent } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { X, Save, Loader2, Gift, Ticket } from "lucide-react";
 
 const categories = [
   { value: "festas", label: "Festas", icon: "fas fa-glass-cheers" },
@@ -231,7 +232,7 @@ export default function CreateEvent() {
             size="sm"
             data-testid="button-cancel"
           >
-            <i className="fas fa-times text-xl"></i>
+            <X className="w-5 h-5" />
           </Button>
           <h2 className="font-semibold text-foreground flex-1">
             {isEditing ? "Editar Evento" : "Criar Evento"}
@@ -244,12 +245,12 @@ export default function CreateEvent() {
           >
             {createEventMutation.isPending ? (
               <>
-                <i className="fas fa-spinner fa-spin"></i>
+                <Loader2 className="w-4 h-4 animate-spin" />
                 <span>Salvando...</span>
               </>
             ) : (
               <>
-                <i className="fas fa-save"></i>
+                <Save className="w-4 h-4" />
                 <span>Salvar</span>
               </>
             )}
@@ -477,14 +478,14 @@ export default function CreateEvent() {
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="free" id="free" data-testid="radio-free" />
                       <Label htmlFor="free" className="flex items-center space-x-2 cursor-pointer">
-                        <i className="fas fa-gift text-green-600"></i>
+                        <Gift className="w-5 h-5 text-green-600" />
                         <span>Evento Gratuito</span>
                       </Label>
                     </div>
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="paid" id="paid" data-testid="radio-paid" />
                       <Label htmlFor="paid" className="flex items-center space-x-2 cursor-pointer">
-                        <i className="fas fa-ticket-alt text-blue-600"></i>
+                        <Ticket className="w-5 h-5 text-blue-600" />
                         <span>Evento Pago</span>
                       </Label>
                     </div>

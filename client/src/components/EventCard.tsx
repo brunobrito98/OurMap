@@ -3,6 +3,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import type { EventWithDetails } from "@shared/schema";
+import { Music, Utensils, Dumbbell, Palette, Laptop, Calendar, Heart, MapPin } from "lucide-react";
 
 interface EventCardProps {
   event: EventWithDetails;
@@ -50,14 +51,14 @@ export default function EventCard({ event, onClick, isAuthenticated = false }: E
   };
 
   const getCategoryIcon = (category: string) => {
-    const icons: Record<string, string> = {
-      music: 'fas fa-music',
-      food: 'fas fa-utensils',
-      sports: 'fas fa-running',
-      art: 'fas fa-palette',
-      tech: 'fas fa-laptop-code',
+    const icons: Record<string, React.ComponentType<any>> = {
+      music: Music,
+      food: Utensils,
+      sports: Dumbbell,
+      art: Palette,
+      tech: Laptop,
     };
-    return icons[category] || 'fas fa-calendar';
+    return icons[category] || Calendar;
   };
 
   const getCategoryColor = (category: string) => {
@@ -115,12 +116,15 @@ export default function EventCard({ event, onClick, isAuthenticated = false }: E
       <div className="p-4">
         <div className="flex items-center space-x-2 mb-2">
           <Badge className={`text-xs ${getCategoryColor(event.category)}`}>
-            <i className={`${getCategoryIcon(event.category)} mr-1`}></i>
+            {(() => {
+              const IconComponent = getCategoryIcon(event.category);
+              return <IconComponent className="w-3 h-3 mr-1" />;
+            })()}
             {event.category.charAt(0).toUpperCase() + event.category.slice(1)}
           </Badge>
           <span className="text-muted-foreground text-xs">•</span>
           <span className="text-muted-foreground text-xs" data-testid={`text-event-distance-${event.id}`}>
-            <i className="fas fa-map-marker-alt mr-1"></i>
+            <MapPin className="w-3 h-3 mr-1" />
             {event.distance ? `${event.distance.toFixed(1)} km` : 'N/A'}
           </span>
         </div>

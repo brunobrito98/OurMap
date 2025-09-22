@@ -10,6 +10,22 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 import { apiRequest } from "@/lib/queryClient";
 import type { UserWithStats } from "@shared/schema";
+import { 
+  ArrowLeft, 
+  Settings, 
+  Users, 
+  Calendar, 
+  Trophy, 
+  Save, 
+  X, 
+  LogOut,
+  MapPin,
+  Camera,
+  Loader2,
+  Star,
+  Heart,
+  ChevronRight
+} from "lucide-react";
 
 export default function Profile() {
   const [, navigate] = useLocation();
@@ -179,7 +195,7 @@ export default function Profile() {
             size="sm"
             data-testid="button-back"
           >
-            <i className="fas fa-arrow-left text-xl"></i>
+            <ArrowLeft className="w-5 h-5" />
           </Button>
           <h2 className="font-semibold text-foreground flex-1">Perfil</h2>
           <Button
@@ -187,7 +203,7 @@ export default function Profile() {
             size="sm"
             data-testid="button-settings"
           >
-            <i className="fas fa-cog text-xl"></i>
+            <Settings className="w-5 h-5" />
           </Button>
         </div>
       </div>
@@ -211,6 +227,7 @@ export default function Profile() {
                   disabled={profileImageMutation.isPending || deleteProfileImageMutation.isPending}
                   data-testid="button-cancel-edit-photo"
                 >
+                  <X className="w-4 h-4 mr-2" />
                   Cancelar
                 </Button>
                 <Button
@@ -222,12 +239,12 @@ export default function Profile() {
                 >
                   {profileImageMutation.isPending || deleteProfileImageMutation.isPending ? (
                     <>
-                      <i className="fas fa-spinner fa-spin mr-2"></i>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       Salvando...
                     </>
                   ) : (
                     <>
-                      <i className="fas fa-save mr-2"></i>
+                      <Save className="w-4 h-4 mr-2" />
                       Salvar
                     </>
                   )}
@@ -248,7 +265,7 @@ export default function Profile() {
                 className="absolute -bottom-2 -right-2 w-8 h-8 rounded-full p-0 bg-white text-primary border-2 border-white shadow-lg hover:bg-gray-50"
                 data-testid="button-edit-profile-photo"
               >
-                <i className="fas fa-camera text-sm"></i>
+                <Camera className="w-4 h-4" />
               </Button>
             </div>
           )}
@@ -257,7 +274,7 @@ export default function Profile() {
           </h1>
           <p className="text-white/90" data-testid="text-user-email">{user.email}</p>
           <div className="flex items-center justify-center space-x-1 mt-2">
-            <i className="fas fa-star text-yellow-300 text-sm"></i>
+            <Star className="w-4 h-4 text-yellow-300 fill-current" />
             <span className="text-white font-medium" data-testid="text-user-rating">
               {user.averageRating?.toFixed(1) || "N/A"}
             </span>
@@ -299,13 +316,13 @@ export default function Profile() {
               data-testid="button-my-events"
             >
               <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-                <i className="fas fa-calendar-alt text-primary"></i>
+                <Calendar className="w-5 h-5 text-primary" />
               </div>
               <div className="flex-1 text-left">
                 <p className="font-medium text-foreground">Meus Eventos</p>
                 <p className="text-sm text-muted-foreground">Eventos que você criou</p>
               </div>
-              <i className="fas fa-chevron-right text-muted-foreground"></i>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
             </Button>
             
             <div className="border-t border-border"></div>
@@ -316,13 +333,13 @@ export default function Profile() {
               data-testid="button-saved-events"
             >
               <div className="w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center">
-                <i className="fas fa-heart text-accent"></i>
+                <Heart className="w-5 h-5 text-accent" />
               </div>
               <div className="flex-1 text-left">
                 <p className="font-medium text-foreground">Eventos Salvos</p>
                 <p className="text-sm text-muted-foreground">Seus eventos favoritos</p>
               </div>
-              <i className="fas fa-chevron-right text-muted-foreground"></i>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
             </Button>
             
             <div className="border-t border-border"></div>
@@ -333,13 +350,13 @@ export default function Profile() {
               data-testid="button-friends"
             >
               <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
-                <i className="fas fa-users text-green-600"></i>
+                <Users className="w-5 h-5 text-green-600" />
               </div>
               <div className="flex-1 text-left">
                 <p className="font-medium text-foreground">Amigos</p>
                 <p className="text-sm text-muted-foreground">Gerenciar suas conexões</p>
               </div>
-              <i className="fas fa-chevron-right text-muted-foreground"></i>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
             </Button>
           </div>
 
@@ -356,7 +373,7 @@ export default function Profile() {
                 <p className="font-medium text-foreground">Avaliações Recebidas</p>
                 <p className="text-sm text-muted-foreground">Feedback dos participantes</p>
               </div>
-              <i className="fas fa-chevron-right text-muted-foreground"></i>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
             </Button>
             
             <div className="border-t border-border"></div>
@@ -373,7 +390,7 @@ export default function Profile() {
                 <p className="font-medium text-foreground">Notificações</p>
                 <p className="text-sm text-muted-foreground">Configurar alertas</p>
               </div>
-              <i className="fas fa-chevron-right text-muted-foreground"></i>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
             </Button>
             
             <div className="border-t border-border"></div>
@@ -390,7 +407,7 @@ export default function Profile() {
                 <p className="font-medium text-foreground">Configurações</p>
                 <p className="text-sm text-muted-foreground">Privacidade e conta</p>
               </div>
-              <i className="fas fa-chevron-right text-muted-foreground"></i>
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
             </Button>
           </div>
 

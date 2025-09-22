@@ -1,6 +1,7 @@
 import { useLocation } from 'wouter';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import { Home, Search, Users, User } from 'lucide-react';
 
 interface BottomNavigationProps {
   activeTab: 'home' | 'search' | 'friends' | 'profile';
@@ -12,10 +13,10 @@ export default function BottomNavigation({ activeTab }: BottomNavigationProps) {
   const { toast } = useToast();
 
   const tabs = [
-    { id: 'home', icon: 'fas fa-home', label: 'Início', path: '/', requiresAuth: false },
-    { id: 'search', icon: 'fas fa-search', label: 'Buscar', path: '/search', requiresAuth: false },
-    { id: 'friends', icon: 'fas fa-users', label: 'Amigos', path: '/friends', requiresAuth: true },
-    { id: 'profile', icon: 'fas fa-user', label: 'Perfil', path: '/profile', requiresAuth: true },
+    { id: 'home', icon: Home, label: 'Início', path: '/', requiresAuth: false },
+    { id: 'search', icon: Search, label: 'Buscar', path: '/search', requiresAuth: false },
+    { id: 'friends', icon: Users, label: 'Amigos', path: '/friends', requiresAuth: true },
+    { id: 'profile', icon: User, label: 'Perfil', path: '/profile', requiresAuth: true },
   ];
   
   const handleTabClick = (tab: typeof tabs[0]) => {
@@ -44,7 +45,7 @@ export default function BottomNavigation({ activeTab }: BottomNavigationProps) {
             } ${tab.requiresAuth && !isAuthenticated ? 'opacity-60' : ''}`}
             data-testid={`nav-${tab.id}`}
           >
-            <i className={`${tab.icon} text-xl mb-1 block`}></i>
+            <tab.icon className="w-5 h-5 mb-1" />
             <span className={`text-xs ${activeTab === tab.id ? 'font-medium' : ''}`}>
               {tab.label}
             </span>

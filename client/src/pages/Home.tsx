@@ -8,7 +8,7 @@ import CategoryFilter from "@/components/CategoryFilter";
 import BottomNavigation from "@/components/BottomNavigation";
 import FloatingCreateButton from "@/components/FloatingCreateButton";
 import CitySearchModal from "@/components/CitySearchModal";
-import { MapIcon } from "lucide-react";
+import { MapPin, Search, ArrowUpDown, CalendarX } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import type { EventWithDetails } from "@shared/schema";
 
@@ -89,7 +89,7 @@ export default function Home() {
       <div className="bg-white border-b border-border p-4 sticky top-0 z-30">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <MapIcon className="w-5 h-5 text-primary" />
+            <MapPin className="w-5 h-5 text-primary" />
             <div>
               <p className="text-sm text-muted-foreground">Sua localização</p>
               <p className="font-semibold text-foreground" data-testid="text-location">{locationName}</p>
@@ -102,7 +102,7 @@ export default function Home() {
             className="text-primary hover:bg-secondary"
             data-testid="button-change-location"
           >
-            <MapIcon className="w-4 h-4" />
+            <MapPin className="w-4 h-4" />
           </Button>
         </div>
       </div>
@@ -118,7 +118,7 @@ export default function Home() {
             className="pl-10 bg-secondary border-0 h-12"
             data-testid="input-search"
           />
-          <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground"></i>
+          <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" />
         </div>
       </div>
 
@@ -135,8 +135,8 @@ export default function Home() {
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-foreground">Eventos próximos</h3>
           <div className="flex space-x-2">
-            <button className="text-primary text-sm font-medium" data-testid="button-sort-distance">
-              <i className="fas fa-sort-amount-down mr-1"></i>Distância
+            <button className="text-primary text-sm font-medium flex items-center" data-testid="button-sort-distance">
+              <ArrowUpDown className="w-4 h-4 mr-1" />Distância
             </button>
           </div>
         </div>
@@ -149,7 +149,7 @@ export default function Home() {
           </div>
         ) : filteredEvents.length === 0 ? (
           <div className="text-center py-12">
-            <i className="fas fa-calendar-times text-4xl text-muted-foreground mb-4"></i>
+            <CalendarX className="w-16 h-16 text-muted-foreground mb-4 mx-auto" />
             <p className="text-muted-foreground">
               {searchQuery ? "Nenhum evento encontrado" : "Nenhum evento disponível"}
             </p>
