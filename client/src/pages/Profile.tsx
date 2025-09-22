@@ -17,6 +17,7 @@ export default function Profile() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isEditingProfileImage, setIsEditingProfileImage] = useState(false);
+  const [imageAction, setImageAction] = useState<{ action: 'none' | 'upload' | 'remove'; file?: File }>({ action: 'none' });
 
   const { data: user, isLoading } = useQuery<UserWithStats>({
     queryKey: ['/api/auth/user'],
@@ -40,11 +41,18 @@ export default function Profile() {
         throw new Error(error);
       }
       
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        throw new Error(`Resposta inválida do servidor: ${text.substring(0, 100)}...`);
+      }
+      
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
       setIsEditingProfileImage(false);
+      setImageAction({ action: 'none' });
       toast({
         title: "Sucesso",
         description: "Foto de perfil atualizada com sucesso!",
@@ -73,11 +81,18 @@ export default function Profile() {
         throw new Error(error);
       }
       
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        throw new Error(`Resposta inválida do servidor: ${text.substring(0, 100)}...`);
+      }
+      
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
       setIsEditingProfileImage(false);
+      setImageAction({ action: 'none' });
       toast({
         title: "Sucesso",
         description: "Foto de perfil removida com sucesso!",
@@ -95,11 +110,27 @@ export default function Profile() {
 
   const handleProfileImageSelect = (file: File | null) => {
     if (file) {
-      profileImageMutation.mutate(file);
+      setImageAction({ action: 'upload', file });
     } else {
-      // Handle remove image
-      deleteProfileImageMutation.mutate();
+      setImageAction({ action: 'remove' });
     }
+  };
+
+  const handleSaveProfileImage = () => {
+    if (imageAction.action === 'upload' && imageAction.file) {
+      profileImageMutation.mutate(imageAction.file);
+    } else if (imageAction.action === 'remove') {
+      deleteProfileImageMutation.mutate();
+    } else {
+      // No action needed, just exit edit mode
+      setIsEditingProfileImage(false);
+      setImageAction({ action: 'none' });
+    }
+  };
+
+  const handleCancelEditImage = () => {
+    setImageAction({ action: 'none' });
+    setIsEditingProfileImage(false);
   };
 
   const handleLogout = async () => {
@@ -174,13 +205,32 @@ export default function Profile() {
               />
               <div className="flex justify-center space-x-2 mt-4">
                 <Button
-                  onClick={() => setIsEditingProfileImage(false)}
+                  onClick={handleCancelEditImage}
                   variant="secondary"
                   size="sm"
-                  disabled={profileImageMutation.isPending}
+                  disabled={profileImageMutation.isPending || deleteProfileImageMutation.isPending}
                   data-testid="button-cancel-edit-photo"
                 >
                   Cancelar
+                </Button>
+                <Button
+                  onClick={handleSaveProfileImage}
+                  variant="default"
+                  size="sm"
+                  disabled={profileImageMutation.isPending || deleteProfileImageMutation.isPending || imageAction.action === 'none'}
+                  data-testid="button-save-profile-photo"
+                >
+                  {profileImageMutation.isPending || deleteProfileImageMutation.isPending ? (
+                    <>
+                      <i className="fas fa-spinner fa-spin mr-2"></i>
+                      Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-save mr-2"></i>
+                      Salvar
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
