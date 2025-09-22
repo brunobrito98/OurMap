@@ -82,7 +82,7 @@ export default function Friends() {
       <div className="bg-white border-b border-border p-4 sticky top-0 z-30">
         <div className="flex items-center space-x-4">
           <Button
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/home")}
             variant="ghost"
             size="sm"
             data-testid="button-back"

@@ -8,7 +8,7 @@ export default function BottomNavigation({ activeTab }: BottomNavigationProps) {
   const [, navigate] = useLocation();
 
   const tabs = [
-    { id: 'home', icon: 'fas fa-home', label: 'Início', path: '/' },
+    { id: 'home', icon: 'fas fa-home', label: 'Início', path: '/home' },
     { id: 'search', icon: 'fas fa-search', label: 'Buscar', path: '/search' },
     { id: 'friends', icon: 'fas fa-users', label: 'Amigos', path: '/friends' },
     { id: 'profile', icon: 'fas fa-user', label: 'Perfil', path: '/profile' },

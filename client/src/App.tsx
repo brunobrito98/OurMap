@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import Landing from "@/pages/Landing";
 import Home from "@/pages/Home";
 import EventDetails from "@/pages/EventDetails";
@@ -15,24 +16,60 @@ import Search from "@/pages/Search";
 import NotFound from "@/pages/not-found";
 
 function Router() {
-  const { isAuthenticated, isLoading } = useAuth();
-
   return (
     <Switch>
-      {isLoading || !isAuthenticated ? (
-        <Route path="/" component={Landing} />
-      ) : (
-        <>
-          <Route path="/" component={Home} />
-          <Route path="/event/:id" component={EventDetails} />
-          <Route path="/create" component={CreateEvent} />
-          <Route path="/edit/:id" component={CreateEvent} />
-          <Route path="/profile" component={Profile} />
-          <Route path="/my-events" component={MyEvents} />
-          <Route path="/friends" component={Friends} />
-          <Route path="/search" component={Search} />
-        </>
-      )}
+      {/* Rota pública para login/landing */}
+      <Route path="/" component={Landing} />
+      
+      {/* Rotas protegidas - envolvidas com ProtectedRoute */}
+      <Route path="/home">
+        <ProtectedRoute>
+          <Home />
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/event/:id">
+        <ProtectedRoute>
+          <EventDetails />
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/create">
+        <ProtectedRoute>
+          <CreateEvent />
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/edit/:id">
+        <ProtectedRoute>
+          <CreateEvent />
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/profile">
+        <ProtectedRoute>
+          <Profile />
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/my-events">
+        <ProtectedRoute>
+          <MyEvents />
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/friends">
+        <ProtectedRoute>
+          <Friends />
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/search">
+        <ProtectedRoute>
+          <Search />
+        </ProtectedRoute>
+      </Route>
+
       <Route component={NotFound} />
     </Switch>
   );
