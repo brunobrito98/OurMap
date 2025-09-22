@@ -59,6 +59,8 @@ export default function MapComponent({
   useEffect(() => {
     if (!mapContainer.current || !mapboxToken) return;
 
+    let isMounted = true;
+
     try {
       // Initialize map with error handling
       map.current = new mapboxgl.Map({
@@ -76,7 +78,9 @@ export default function MapComponent({
 
       // Add error handling for map load
       map.current.on('error', (e: any) => {
-        console.error('Mapbox map error:', e);
+        if (isMounted) {
+          console.error('Mapbox map error:', e);
+        }
       });
     } catch (error) {
       console.error('Error initializing Mapbox map:', error);
@@ -129,11 +133,42 @@ export default function MapComponent({
 
     // Clean up on unmount
     return () => {
-      if (marker.current) {
-        marker.current.remove();
+      isMounted = false;
+      
+      try {
+        if (marker.current) {
+          marker.current.remove();
+          marker.current = null;
+        }
+      } catch (error) {
+        console.warn('Error removing marker:', error);
       }
-      if (map.current) {
-        map.current.remove();
+      
+      try {
+        if (map.current) {
+          // Remove all event listeners first
+          map.current.off();
+          
+          // Check if map is still loaded before removing
+          if (map.current.isStyleLoaded && map.current.isStyleLoaded()) {
+            map.current.remove();
+          } else {
+            // If style is not loaded, wait a bit and try again
+            setTimeout(() => {
+              try {
+                if (map.current) {
+                  map.current.remove();
+                }
+              } catch (error) {
+                console.warn('Error removing map after timeout:', error);
+              }
+            }, 100);
+          }
+          map.current = null;
+        }
+      } catch (error) {
+        console.warn('Error removing map:', error);
+        // Force set to null even if removal failed
         map.current = null;
       }
     };
