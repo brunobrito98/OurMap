@@ -238,15 +238,21 @@ export const isAuthenticatedLocal: RequestHandler = (req, res, next) => {
 
 // Admin middleware
 export const isAdmin: RequestHandler = (req, res, next) => {
-  if (req.isAuthenticated() && (req.user?.role === 'admin' || req.user?.role === 'super_admin')) {
-    return next();
+  if (req.isAuthenticated() && req.user && 'role' in req.user) {
+    const user = req.user as SelectUser;
+    if (user.role === 'admin' || user.role === 'super_admin') {
+      return next();
+    }
   }
   res.status(403).json({ message: "Acesso negado. Apenas administradores." });
 };
 
 export const isSuperAdmin: RequestHandler = (req, res, next) => {
-  if (req.isAuthenticated() && req.user?.role === 'super_admin') {
-    return next();
+  if (req.isAuthenticated() && req.user && 'role' in req.user) {
+    const user = req.user as SelectUser;
+    if (user.role === 'super_admin') {
+      return next();
+    }
   }
   res.status(403).json({ message: "Acesso negado. Apenas super administradores." });
 };
