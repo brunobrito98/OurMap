@@ -5,12 +5,13 @@ interface CategoryFilterProps {
 
 const categories = [
   { value: "", label: "Todos", icon: "fas fa-th-large" },
-  { value: "music", label: "Música", icon: "fas fa-music" },
+  { value: "festas", label: "Festas", icon: "fas fa-glass-cheers" },
   { value: "sports", label: "Esportes", icon: "fas fa-running" },
   { value: "tech", label: "Tecnologia", icon: "fas fa-laptop-code" },
   { value: "religioso", label: "Religioso", icon: "fas fa-pray" },
   { value: "food", label: "Gastronomia", icon: "fas fa-utensils" },
   { value: "art", label: "Arte", icon: "fas fa-palette" },
+  { value: "music", label: "Música", icon: "fas fa-music" },
   { value: "outros", label: "Outros", icon: "fas fa-calendar" },
 ];
 

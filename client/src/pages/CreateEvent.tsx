@@ -19,7 +19,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
 
 const categories = [
-  { value: "music", label: "Música", icon: "fas fa-music" },
+  { value: "festas", label: "Festas", icon: "fas fa-glass-cheers" },
   { value: "sports", label: "Esportes", icon: "fas fa-running" },
   { value: "corrida", label: "Corrida", icon: "fas fa-running-fast" },
   { value: "volei", label: "Vôlei", icon: "fas fa-volleyball" },
@@ -32,6 +32,7 @@ const categories = [
   { value: "piquenique", label: "Piquenique", icon: "fas fa-tree" },
   { value: "food", label: "Gastronomia", icon: "fas fa-utensils" },
   { value: "art", label: "Arte", icon: "fas fa-palette" },
+  { value: "music", label: "Música", icon: "fas fa-music" },
   { value: "outros", label: "Outros", icon: "fas fa-calendar" },
 ];
 
