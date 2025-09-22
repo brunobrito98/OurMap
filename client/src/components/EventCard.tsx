@@ -64,10 +64,10 @@ export default function EventCard({ event, onClick }: EventCardProps) {
         <div className="absolute top-4 left-4">
           <div className="bg-white/90 backdrop-blur-sm rounded-lg px-3 py-1">
             <p className="text-xs font-semibold text-foreground" data-testid={`text-event-day-${event.id}`}>
-              {formatDate(event.startDate).split(' ')[0]}
+              {formatDate(event.dateTime.toString()).split(' ')[0]}
             </p>
             <p className="text-xs text-muted-foreground" data-testid={`text-event-month-${event.id}`}>
-              {formatDate(event.startDate).split(' ')[1]}
+              {formatDate(event.dateTime.toString()).split(' ')[1]}
             </p>
           </div>
         </div>
@@ -97,11 +97,11 @@ export default function EventCard({ event, onClick }: EventCardProps) {
           {event.title}
         </h4>
         <p className="text-muted-foreground text-sm mb-3" data-testid={`text-event-datetime-${event.id}`}>
-          {new Date(event.startDate).toLocaleDateString('pt-BR', {
+          {new Date(event.dateTime).toLocaleDateString('pt-BR', {
             weekday: 'long',
             day: 'numeric',
             month: 'long'
-          })} • {formatTime(event.startDate)}
+          })} • {formatTime(event.dateTime.toString())}
         </p>
         
         <div className="flex items-center justify-between">
@@ -123,7 +123,7 @@ export default function EventCard({ event, onClick }: EventCardProps) {
             </span>
           </div>
           <span className="text-primary font-semibold" data-testid={`text-event-price-${event.id}`}>
-            {event.isFree ? 'Gratuito' : `R$ ${event.price}`}
+            {!event.price || event.price === "0" ? 'Gratuito' : `R$ ${event.price}`}
           </span>
         </div>
       </div>
