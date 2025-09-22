@@ -10,6 +10,8 @@ import EventDetails from "@/pages/EventDetails";
 import CreateEvent from "@/pages/CreateEvent";
 import Profile from "@/pages/Profile";
 import MyEvents from "@/pages/MyEvents";
+import Friends from "@/pages/Friends";
+import Search from "@/pages/Search";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -27,6 +29,8 @@ function Router() {
           <Route path="/edit/:id" component={CreateEvent} />
           <Route path="/profile" component={Profile} />
           <Route path="/my-events" component={MyEvents} />
+          <Route path="/friends" component={Friends} />
+          <Route path="/search" component={Search} />
         </>
       )}
       <Route component={NotFound} />
