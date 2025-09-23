@@ -18,7 +18,6 @@ import Search from "@/pages/Search";
 import EditProfile from "@/pages/EditProfile";
 import ChangePassword from "@/pages/ChangePassword";
 import ChangePhone from "@/pages/ChangePhone";
-=======
 import { Notifications } from "@/pages/Notifications";
 import { NotificationSettings } from "@/pages/NotificationSettings";
 
