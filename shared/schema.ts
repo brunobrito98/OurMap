@@ -93,7 +93,9 @@ export const events = pgTable("events", {
   recurrenceEndDate: timestamp("recurrence_end_date", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
+}, (table) => ({
+  uniqueEventTitleLocationDateTime: unique().on(table.title, table.location, table.dateTime),
+}));
 
 export const eventAttendees = pgTable("event_attendees", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
