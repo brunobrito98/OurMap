@@ -1,0 +1,35 @@
+Tarefa: Implementar um sistema de perfis de usuário com visibilidade condicional baseada em conexões.
+
+Requisitos de Backend:
+
+Atualizar o Modelo de Usuário: Adicione um campo username único à tabela users. Ele deve ser usado para criar URLs de perfil (ex: @joaosilva).
+
+Criar Modelo de Conexão: Crie uma nova tabela chamada connections com os seguintes campos: requester_id (quem envia), addressee_id (quem recebe) e status (com os valores possíveis: 'pending', 'accepted', 'rejected').
+
+Modificar API de Eventos: Altere a rota que retorna a lista de usuários confirmados em um evento (GET /api/events/:id/attendees) para que, em vez de retornar apenas a foto, retorne um objeto para cada usuário contendo: id, name, username e profile_picture_url.
+
+Criar API de Perfil de Usuário: Crie uma nova rota protegida GET /api/users/:username. Esta rota deve:
+
+Verificar o status da conexão na tabela connections entre o usuário logado (visualizador) e o usuário do perfil (:username).
+
+Se o status for 'accepted', retornar o perfil completo do usuário: name, username, profile_picture_url, phone_number e uma lista de eventos que ele confirmou.
+
+Caso contrário (se o status for pending, rejected ou não existir), retornar apenas o perfil público: name, username e profile_picture_url.
+
+Criar API de Solicitação de Conexão: Crie uma rota POST /api/connections/request que recebe o username do destinatário no corpo da requisição e cria uma nova entrada na tabela connections com o status 'pending'.
+
+Requisitos de Frontend:
+
+Atualizar Página de Eventos: Na lista de participantes confirmados, exiba o name e o @username ao lado da profile_picture_url. Transforme cada item da lista em um link que navega para a página de perfil do respectivo usuário (ex: <a href="/profile/@{user.username}">).
+
+Criar Nova Página de Perfil (profile.html):
+
+Ao carregar, a página deve extrair o username da URL e fazer uma requisição para a API GET /api/users/:username.
+
+Renderize a página condicionalmente:
+
+Se a API retornar dados completos (com phone_number), exiba todas as informações e esconda o botão "Adicionar Usuário".
+
+Se a API retornar apenas dados públicos, exiba somente o nome, username e foto, e mostre um botão "Adicionar Usuário".
+
+O botão "Adicionar Usuário" deve, ao ser clicado, enviar uma requisição para a API POST /api/connections/request.
