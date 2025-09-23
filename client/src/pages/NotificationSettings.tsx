@@ -81,13 +81,7 @@ export function NotificationSettings() {
 
   const updatePreferenceMutation = useMutation({
     mutationFn: async ({ chave, valor }: { chave: keyof NotificationPreferences; valor: boolean }) => {
-      return apiRequest('/api/notifications/preferences', {
-        method: "PATCH",
-        body: JSON.stringify({ chave, valor }),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      return apiRequest('/api/notifications/preferences', 'PATCH', { chave, valor });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/notifications/preferences'] });

@@ -943,6 +943,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Use eventData directly - dates are already strings from form validation
       const processedEventData = eventData;
       
+      // Check for duplicate events
+      const duplicateEvent = await storage.checkDuplicateEvent(
+        processedEventData.title,
+        processedEventData.location,
+        processedEventData.dateTime
+      );
+      
+      if (duplicateEvent) {
+        return res.status(400).json({ 
+          message: "Este evento já foi criado. Por favor, verifique os dados." 
+        });
+      }
+      
       // Geocode the address
       const coordinates = await geocodeAddress(eventData.location);
       
@@ -1042,7 +1055,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error creating event:", error);
       if (error instanceof Error) {
-        res.status(400).json({ message: error.message });
+        // Check for unique constraint violation (PostgreSQL error code 23505)
+        if (error.message.includes('unique constraint') || 
+            error.message.includes('duplicate key value')) {
+          res.status(400).json({ 
+            message: "Este evento já foi criado. Por favor, verifique os dados." 
+          });
+        } else {
+          res.status(400).json({ message: error.message });
+        }
       } else {
         res.status(500).json({ message: "Failed to create event" });
       }
