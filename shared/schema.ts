@@ -48,6 +48,13 @@ export const users = pgTable("users", {
   phoneVerified: boolean("phone_verified").default(false), // Whether phone is verified
   phoneCountry: varchar("phone_country", { length: 2 }), // ISO2 country code (BR, US, etc.)
   phoneHmac: varchar("phone_hmac").unique(), // HMAC-SHA256 of phone for contact matching
+  // Notification preferences
+  notificarConviteAmigo: boolean("notificar_convite_amigo").default(true),
+  notificarEventoAmigo: boolean("notificar_evento_amigo").default(true), 
+  notificarAvaliacaoAmigo: boolean("notificar_avaliacao_amigo").default(true),
+  notificarContatoCadastrado: boolean("notificar_contato_cadastrado").default(true),
+  notificarConfirmacaoPresenca: boolean("notificar_confirmacao_presenca").default(true),
+  notificarAvaliacaoEventoCriado: boolean("notificar_avaliacao_evento_criado").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -120,6 +127,19 @@ export const eventRatings = pgTable("event_ratings", {
   uniqueUserEventRating: unique().on(table.eventId, table.userId),
 }));
 
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // 'friend_invite', 'event_attendance', 'event_created', 'event_reminder', 'event_rating'
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  relatedUserId: uuid("related_user_id").references(() => users.id, { onDelete: "cascade" }), // User who triggered the notification
+  relatedEventId: uuid("related_event_id").references(() => events.id, { onDelete: "cascade" }), // Related event if applicable  
+  isRead: boolean("is_read").default(false),
+  actionUrl: text("action_url"), // URL to navigate when notification is clicked
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const categoriesRelations = relations(categories, ({ one, many }) => ({
   parent: one(categories, {
@@ -137,6 +157,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   sentFriendRequests: many(friendships, { relationName: "requester" }),
   receivedFriendRequests: many(friendships, { relationName: "addressee" }),
   ratings: many(eventRatings),
+  notifications: many(notifications),
+  triggeredNotifications: many(notifications, { relationName: "relatedUser" }),
 }));
 
 export const eventsRelations = relations(events, ({ one, many }) => ({
@@ -146,6 +168,7 @@ export const eventsRelations = relations(events, ({ one, many }) => ({
   }),
   attendances: many(eventAttendees),
   ratings: many(eventRatings),
+  notifications: many(notifications, { relationName: "relatedEvent" }),
 }));
 
 export const eventAttendeesRelations = relations(eventAttendees, ({ one }) => ({
@@ -180,6 +203,23 @@ export const eventRatingsRelations = relations(eventRatings, ({ one }) => ({
   user: one(users, {
     fields: [eventRatings.userId],
     references: [users.id],
+  }),
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+  relatedUser: one(users, {
+    fields: [notifications.relatedUserId],
+    references: [users.id],
+    relationName: "relatedUser",
+  }),
+  relatedEvent: one(events, {
+    fields: [notifications.relatedEventId],
+    references: [events.id],
+    relationName: "relatedEvent",
   }),
 }));
 
@@ -219,6 +259,23 @@ export const insertFriendshipSchema = createInsertSchema(friendships).omit({
 export const insertEventRatingSchema = createInsertSchema(eventRatings).omit({
   id: true,
   createdAt: true,
+});
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const notificationConfigSchema = z.object({
+  chave: z.enum([
+    "notificarConviteAmigo",
+    "notificarEventoAmigo", 
+    "notificarAvaliacaoAmigo",
+    "notificarContatoCadastrado",
+    "notificarConfirmacaoPresenca",
+    "notificarAvaliacaoEventoCriado"
+  ]),
+  valor: z.boolean(),
 });
 
 // User schemas for different auth types
@@ -303,6 +360,9 @@ export type Friendship = typeof friendships.$inferSelect;
 export type InsertFriendship = z.infer<typeof insertFriendshipSchema>;
 export type EventRating = typeof eventRatings.$inferSelect;
 export type InsertEventRating = z.infer<typeof insertEventRatingSchema>;
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type NotificationConfig = z.infer<typeof notificationConfigSchema>;
 
 // Sanitized types for API responses (excludes sensitive fields)
 export type OrganizerSanitized = {
@@ -343,4 +403,13 @@ export type UserWithStats = User & {
   eventsAttended: number;
   friendsCount: number;
   averageRating?: number;
+};
+
+export type NotificationWithDetails = Notification & {
+  relatedUser?: UserSanitized;
+  relatedEvent?: {
+    id: string;
+    title: string;
+    imageUrl: string | null;
+  };
 };

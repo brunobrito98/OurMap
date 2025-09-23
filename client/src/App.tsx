@@ -14,6 +14,8 @@ import UserProfile from "@/pages/UserProfile";
 import MyEvents from "@/pages/MyEvents";
 import Friends from "@/pages/Friends";
 import Search from "@/pages/Search";
+import { Notifications } from "@/pages/Notifications";
+import { NotificationSettings } from "@/pages/NotificationSettings";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -59,6 +61,18 @@ function Router() {
       <Route path="/friends">
         <ProtectedRoute>
           <Friends />
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/notifications">
+        <ProtectedRoute>
+          <Notifications />
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/notifications/settings">
+        <ProtectedRoute>
+          <NotificationSettings />
         </ProtectedRoute>
       </Route>
 

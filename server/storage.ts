@@ -5,6 +5,7 @@ import {
   friendships,
   eventRatings,
   categories,
+  notifications,
   type User,
   type UpsertUser,
   type Event,
@@ -21,6 +22,10 @@ import {
   type UserSanitized,
   type Category,
   type InsertCategory,
+  type Notification,
+  type InsertNotification,
+  type NotificationWithDetails,
+  type NotificationConfig,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, desc, asc, count, avg, sql, like } from "drizzle-orm";
@@ -105,6 +110,17 @@ export interface IStorage {
   getCategoryByValue(value: string): Promise<Category | undefined>;
   getSubcategories(parentId: string): Promise<Category[]>;
   getCategoryWithSubcategories(categoryValue: string): Promise<string[]>;
+
+  // Notification operations
+  getNotifications(userId: string, limit?: number): Promise<NotificationWithDetails[]>;
+  getUnreadNotificationsCount(userId: string): Promise<number>;
+  markNotificationAsRead(notificationId: string, userId: string): Promise<boolean>;
+  markAllNotificationsAsRead(userId: string): Promise<boolean>;
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  
+  // Notification preferences operations
+  getNotificationPreferences(userId: string): Promise<Partial<User>>;
+  updateNotificationPreference(userId: string, key: keyof User, value: boolean): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1110,6 +1126,148 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error('Error getting category with subcategories:', error);
       return [categoryValue];
+    }
+  }
+
+  // Notification operations
+  async getNotifications(userId: string, limit: number = 20): Promise<NotificationWithDetails[]> {
+    try {
+      const result = await db
+        .select({
+          notification: notifications,
+          relatedUser: {
+            id: users.id,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            profileImageUrl: users.profileImageUrl,
+            username: users.username,
+            authType: users.authType,
+            role: users.role,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+          },
+          relatedEvent: {
+            id: events.id,
+            title: events.title,
+            imageUrl: events.imageUrl,
+          }
+        })
+        .from(notifications)
+        .leftJoin(users, eq(notifications.relatedUserId, users.id))
+        .leftJoin(events, eq(notifications.relatedEventId, events.id))
+        .where(eq(notifications.userId, userId))
+        .orderBy(desc(notifications.createdAt))
+        .limit(limit);
+
+      return result.map(row => ({
+        ...row.notification,
+        relatedUser: row.relatedUser?.id ? row.relatedUser : undefined,
+        relatedEvent: row.relatedEvent?.id ? row.relatedEvent : undefined,
+      }));
+    } catch (error) {
+      console.error('Error getting notifications:', error);
+      return [];
+    }
+  }
+
+  async getUnreadNotificationsCount(userId: string): Promise<number> {
+    try {
+      const [result] = await db
+        .select({ count: count() })
+        .from(notifications)
+        .where(and(
+          eq(notifications.userId, userId),
+          eq(notifications.isRead, false)
+        ));
+      return result?.count || 0;
+    } catch (error) {
+      console.error('Error getting unread notifications count:', error);
+      return 0;
+    }
+  }
+
+  async markNotificationAsRead(notificationId: string, userId: string): Promise<boolean> {
+    try {
+      const [updated] = await db
+        .update(notifications)
+        .set({ isRead: true })
+        .where(and(
+          eq(notifications.id, notificationId),
+          eq(notifications.userId, userId)
+        ))
+        .returning({ id: notifications.id });
+      return !!updated;
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+      return false;
+    }
+  }
+
+  async markAllNotificationsAsRead(userId: string): Promise<boolean> {
+    try {
+      await db
+        .update(notifications)
+        .set({ isRead: true })
+        .where(and(
+          eq(notifications.userId, userId),
+          eq(notifications.isRead, false)
+        ));
+      return true;
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+      return false;
+    }
+  }
+
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    try {
+      const [created] = await db
+        .insert(notifications)
+        .values(notification)
+        .returning();
+      return created;
+    } catch (error) {
+      console.error('Error creating notification:', error);
+      throw error;
+    }
+  }
+
+  // Notification preferences operations
+  async getNotificationPreferences(userId: string): Promise<Partial<User>> {
+    try {
+      const [user] = await db
+        .select({
+          notificarConviteAmigo: users.notificarConviteAmigo,
+          notificarEventoAmigo: users.notificarEventoAmigo,
+          notificarAvaliacaoAmigo: users.notificarAvaliacaoAmigo,
+          notificarContatoCadastrado: users.notificarContatoCadastrado,
+          notificarConfirmacaoPresenca: users.notificarConfirmacaoPresenca,
+          notificarAvaliacaoEventoCriado: users.notificarAvaliacaoEventoCriado,
+        })
+        .from(users)
+        .where(eq(users.id, userId));
+      return user || {};
+    } catch (error) {
+      console.error('Error getting notification preferences:', error);
+      return {};
+    }
+  }
+
+  async updateNotificationPreference(userId: string, key: keyof User, value: boolean): Promise<boolean> {
+    try {
+      const updateData: any = {};
+      updateData[key] = value;
+      updateData.updatedAt = new Date();
+      
+      const [updated] = await db
+        .update(users)
+        .set(updateData)
+        .where(eq(users.id, userId))
+        .returning({ id: users.id });
+      return !!updated;
+    } catch (error) {
+      console.error('Error updating notification preference:', error);
+      return false;
     }
   }
 }
