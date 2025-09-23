@@ -130,7 +130,7 @@ export default function EventDetails() {
 
   const attendMutation = useMutation({
     mutationFn: async (status: string) => {
-      await apiRequest('POST', `/api/events/${id}/attend`, { status });
+      await apiRequest(`/api/events/${id}/attend`, 'POST', { status });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/events', id] });
@@ -164,7 +164,7 @@ export default function EventDetails() {
   // Mutation para contribuições em vaquinhas
   const contributionMutation = useMutation({
     mutationFn: async (contributionData: { amount: string; isPublic: boolean }) => {
-      await apiRequest('POST', `/api/events/${id}/contribute`, contributionData);
+      await apiRequest(`/api/events/${id}/contribute`, 'POST', contributionData);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/events', id] });

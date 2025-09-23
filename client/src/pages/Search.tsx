@@ -47,7 +47,7 @@ export default function Search() {
   // Send friend request mutation
   const sendFriendRequestMutation = useMutation({
     mutationFn: async (addresseeId: string) => {
-      return await apiRequest('POST', '/api/friend-requests', { addresseeId });
+      return await apiRequest('/api/friend-requests', 'POST', { addresseeId });
     },
     onSuccess: () => {
       toast({

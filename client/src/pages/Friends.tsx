@@ -31,7 +31,7 @@ export default function Friends() {
   // Accept/reject friend request mutation
   const respondToRequestMutation = useMutation({
     mutationFn: async ({ requestId, status }: { requestId: string; status: string }) => {
-      return await apiRequest('PUT', `/api/friend-requests/${requestId}`, { status });
+      return await apiRequest(`/api/friend-requests/${requestId}`, 'PUT', { status });
     },
     onSuccess: (_, variables) => {
       toast({

@@ -35,7 +35,7 @@ export default function UserProfile() {
   // Connection request mutation
   const connectionMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest('POST', '/api/friend-requests', { 
+      await apiRequest('/api/friend-requests', 'POST', { 
         username: actualUsername
       });
     },
