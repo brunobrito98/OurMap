@@ -287,6 +287,65 @@ export const insertEventSchema = createInsertSchema(events).omit({
   path: ["recurrenceEndDate"],
 });
 
+// Update event schema - allows partial updates while maintaining validation
+export const updateEventSchema = createInsertSchema(events).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  creatorId: true,
+  latitude: true,
+  longitude: true,
+}).extend({
+  dateTime: z.string().optional().refine((val) => {
+    if (!val) return true; // dateTime é opcional na atualização
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?([+-]\d{2}:\d{2})?$/.test(val);
+  }, "Formato de data inválido"),
+  endTime: z.string().optional().refine((val) => {
+    if (!val) return true; // endTime é opcional
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?([+-]\d{2}:\d{2})?$/.test(val);
+  }, "Formato de data de fim inválido"),
+  location: z.string().optional().refine((val) => {
+    if (!val) return true; // location é opcional na atualização
+    return val.length > 0; // mas se fornecido, não pode ser vazio
+  }, "Localização não pode ser vazia"),
+  isRecurring: z.boolean().optional(),
+  recurrenceType: z.enum(['daily', 'weekly', 'biweekly', 'monthly']).optional(),
+  recurrenceInterval: z.number().int().min(1).optional(),
+  recurrenceEndDate: z.string().optional().refine((val) => {
+    if (!val) return true; // recurrenceEndDate é opcional
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?([+-]\d{2}:\d{2})?$/.test(val);
+  }, "Formato de data de fim da recorrência inválido"),
+}).refine((data) => {
+  // Validação para garantir que endTime seja posterior a dateTime (quando ambos estão presentes)
+  if (data.endTime && data.dateTime) {
+    const startDate = new Date(data.dateTime);
+    const endDate = new Date(data.endTime);
+    return endDate > startDate;
+  }
+  return true;
+}, {
+  message: "A data de fim deve ser posterior à data de início",
+  path: ["endTime"],
+}).refine((data) => {
+  // Se isRecurring for true, recurrenceType é obrigatório
+  if (data.isRecurring && !data.recurrenceType) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Tipo de recorrência é obrigatório para eventos recorrentes",
+  path: ["recurrenceType"],
+}).refine((data) => {
+  // Se isRecurring for true, recurrenceEndDate é obrigatório
+  if (data.isRecurring && !data.recurrenceEndDate) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Data de fim da recorrência é obrigatória para eventos recorrentes",
+  path: ["recurrenceEndDate"],
+});
+
 export const insertEventAttendanceSchema = createInsertSchema(eventAttendees).omit({
   id: true,
   createdAt: true,
@@ -396,6 +455,7 @@ export type Category = typeof categories.$inferSelect;
 export type InsertCategory = z.infer<typeof insertCategorySchema>;
 export type Event = typeof events.$inferSelect;
 export type InsertEvent = z.infer<typeof insertEventSchema>;
+export type UpdateEvent = z.infer<typeof updateEventSchema>;
 export type EventAttendance = typeof eventAttendees.$inferSelect;
 export type InsertEventAttendance = z.infer<typeof insertEventAttendanceSchema>;
 export type Friendship = typeof friendships.$inferSelect;

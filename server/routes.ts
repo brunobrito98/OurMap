@@ -4,7 +4,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupLocalAuth, isAuthenticatedLocal, isAdmin, isSuperAdmin, hashPassword } from "./auth";
 import session from "express-session";
-import { insertEventSchema, insertEventAttendanceSchema, insertEventRatingSchema, insertAdminUserSchema, insertLocalUserSchema, phoneStartSchema, phoneVerifySchema, phoneLinkSchema, contactsMatchSchema, insertNotificationSchema, notificationConfigSchema, type User } from "@shared/schema";
+import { insertEventSchema, updateEventSchema, insertEventAttendanceSchema, insertEventRatingSchema, insertAdminUserSchema, insertLocalUserSchema, phoneStartSchema, phoneVerifySchema, phoneLinkSchema, contactsMatchSchema, insertNotificationSchema, notificationConfigSchema, type User } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -981,7 +981,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         const createdEvents = [];
         
-        for (const [index, recurrenceDate] of recurrenceDates.entries()) {
+        for (let index = 0; index < recurrenceDates.length; index++) {
+          const recurrenceDate = recurrenceDates[index];
           let eventEndTime: Date | undefined;
           
           // Calculate end time for each occurrence if original event has endTime
@@ -1082,7 +1083,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         formData.price = formData.price.toString();
       }
       
-      const eventData = insertEventSchema.partial().parse(formData);
+      // Use dedicated update schema that supports partial updates with validation
+      const eventData = updateEventSchema.parse(formData);
       
       // Use eventData directly - dates are already strings from form validation
       const processedEventData = { ...eventData };
