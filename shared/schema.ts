@@ -52,11 +52,23 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Categories table for hierarchical categories
+export const categories = pgTable("categories", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  value: text("value").notNull().unique(), // Used for API filtering
+  icon: text("icon"), // Font Awesome icon class
+  parentId: uuid("parent_id").references(() => categories.id, { onDelete: "cascade" }),
+  displayOrder: integer("display_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const events = pgTable("events", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
   description: text("description"),
-  category: text("category").notNull().default("outros"),
+  categoryId: uuid("category_id").notNull().references(() => categories.id),
   dateTime: timestamp("date_time", { withTimezone: true }).notNull(),
   location: text("location").notNull(),
   latitude: numeric("latitude"),
@@ -110,6 +122,16 @@ export const eventRatings = pgTable("event_ratings", {
 }));
 
 // Relations
+export const categoriesRelations = relations(categories, ({ one, many }) => ({
+  parent: one(categories, {
+    fields: [categories.parentId],
+    references: [categories.id],
+    relationName: "parent"
+  }),
+  children: many(categories, { relationName: "parent" }),
+  events: many(events),
+}));
+
 export const usersRelations = relations(users, ({ many }) => ({
   organizedEvents: many(events),
   attendances: many(eventAttendees),
@@ -122,6 +144,10 @@ export const eventsRelations = relations(events, ({ one, many }) => ({
   organizer: one(users, {
     fields: [events.creatorId],
     references: [users.id],
+  }),
+  category: one(categories, {
+    fields: [events.categoryId],
+    references: [categories.id],
   }),
   attendances: many(eventAttendees),
   ratings: many(eventRatings),
@@ -163,6 +189,12 @@ export const eventRatingsRelations = relations(eventRatings, ({ one }) => ({
 }));
 
 // Insert schemas
+export const insertCategorySchema = createInsertSchema(categories).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertEventSchema = createInsertSchema(events).omit({
   id: true,
   createdAt: true,
@@ -176,11 +208,7 @@ export const insertEventSchema = createInsertSchema(events).omit({
     return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?([+-]\d{2}:\d{2})?$/.test(val);
   }, "Formato de data inválido"),
   location: z.string().min(1, "Localização é obrigatória"),
-  price: z.string().regex(/^\d+(\.\d{1,2})?$/, "Preço deve ser um valor numérico válido").optional(),
-  recurrenceEndDate: z.string().refine((val) => {
-    if (val === "") return true;
-    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?([+-]\d{2}:\d{2})?$/.test(val);
-  }, "Formato de data inválido").optional().or(z.literal("")),
+  categoryId: z.string().min(1, "Categoria é obrigatória"),
 });
 
 export const insertEventAttendanceSchema = createInsertSchema(eventAttendees).omit({
@@ -271,6 +299,8 @@ export type PhoneStart = z.infer<typeof phoneStartSchema>;
 export type PhoneVerify = z.infer<typeof phoneVerifySchema>;
 export type PhoneLink = z.infer<typeof phoneLinkSchema>;
 export type ContactsMatch = z.infer<typeof contactsMatchSchema>;
+export type Category = typeof categories.$inferSelect;
+export type InsertCategory = z.infer<typeof insertCategorySchema>;
 export type Event = typeof events.$inferSelect;
 export type InsertEvent = z.infer<typeof insertEventSchema>;
 export type EventAttendance = typeof eventAttendees.$inferSelect;
