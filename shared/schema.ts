@@ -48,6 +48,25 @@ export const users = pgTable("users", {
   phoneVerified: boolean("phone_verified").default(false), // Whether phone is verified
   phoneCountry: varchar("phone_country", { length: 2 }), // ISO2 country code (BR, US, etc.)
   phoneHmac: varchar("phone_hmac").unique(), // HMAC-SHA256 of phone for contact matching
+  // Notification preferences
+  notificarConviteAmigo: boolean("notificar_convite_amigo").default(true),
+  notificarEventoAmigo: boolean("notificar_evento_amigo").default(true), 
+  notificarAvaliacaoAmigo: boolean("notificar_avaliacao_amigo").default(true),
+  notificarContatoCadastrado: boolean("notificar_contato_cadastrado").default(true),
+  notificarConfirmacaoPresenca: boolean("notificar_confirmacao_presenca").default(true),
+  notificarAvaliacaoEventoCriado: boolean("notificar_avaliacao_evento_criado").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Categories table for hierarchical categories
+export const categories = pgTable("categories", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  value: text("value").notNull().unique(), // Used for API filtering
+  icon: text("icon"), // Font Awesome icon class
+  parentId: uuid("parent_id").references(() => categories.id, { onDelete: "cascade" }),
+  displayOrder: integer("display_order").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -63,7 +82,6 @@ export const events = pgTable("events", {
   longitude: numeric("longitude"),
   creatorId: uuid("creator_id").notNull(),
   maxAttendees: integer("max_attendees"),
-  price: numeric("price", { precision: 10, scale: 2 }).default("0"),
   imageUrl: text("image_url"),
   iconEmoji: text("icon_emoji").default("🎉"),
   coverImageUrl: text("cover_image_url"),
@@ -109,13 +127,38 @@ export const eventRatings = pgTable("event_ratings", {
   uniqueUserEventRating: unique().on(table.eventId, table.userId),
 }));
 
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // 'friend_invite', 'event_attendance', 'event_created', 'event_reminder', 'event_rating'
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  relatedUserId: uuid("related_user_id").references(() => users.id, { onDelete: "cascade" }), // User who triggered the notification
+  relatedEventId: uuid("related_event_id").references(() => events.id, { onDelete: "cascade" }), // Related event if applicable  
+  isRead: boolean("is_read").default(false),
+  actionUrl: text("action_url"), // URL to navigate when notification is clicked
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
+export const categoriesRelations = relations(categories, ({ one, many }) => ({
+  parent: one(categories, {
+    fields: [categories.parentId],
+    references: [categories.id],
+    relationName: "parent"
+  }),
+  children: many(categories, { relationName: "parent" }),
+  events: many(events),
+}));
+
 export const usersRelations = relations(users, ({ many }) => ({
   organizedEvents: many(events),
   attendances: many(eventAttendees),
   sentFriendRequests: many(friendships, { relationName: "requester" }),
   receivedFriendRequests: many(friendships, { relationName: "addressee" }),
   ratings: many(eventRatings),
+  notifications: many(notifications),
+  triggeredNotifications: many(notifications, { relationName: "relatedUser" }),
 }));
 
 export const eventsRelations = relations(events, ({ one, many }) => ({
@@ -125,6 +168,7 @@ export const eventsRelations = relations(events, ({ one, many }) => ({
   }),
   attendances: many(eventAttendees),
   ratings: many(eventRatings),
+  notifications: many(notifications, { relationName: "relatedEvent" }),
 }));
 
 export const eventAttendeesRelations = relations(eventAttendees, ({ one }) => ({
@@ -162,7 +206,30 @@ export const eventRatingsRelations = relations(eventRatings, ({ one }) => ({
   }),
 }));
 
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+  relatedUser: one(users, {
+    fields: [notifications.relatedUserId],
+    references: [users.id],
+    relationName: "relatedUser",
+  }),
+  relatedEvent: one(events, {
+    fields: [notifications.relatedEventId],
+    references: [events.id],
+    relationName: "relatedEvent",
+  }),
+}));
+
 // Insert schemas
+export const insertCategorySchema = createInsertSchema(categories).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertEventSchema = createInsertSchema(events).omit({
   id: true,
   createdAt: true,
@@ -176,11 +243,6 @@ export const insertEventSchema = createInsertSchema(events).omit({
     return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?([+-]\d{2}:\d{2})?$/.test(val);
   }, "Formato de data inválido"),
   location: z.string().min(1, "Localização é obrigatória"),
-  price: z.string().regex(/^\d+(\.\d{1,2})?$/, "Preço deve ser um valor numérico válido").optional(),
-  recurrenceEndDate: z.string().refine((val) => {
-    if (val === "") return true;
-    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?([+-]\d{2}:\d{2})?$/.test(val);
-  }, "Formato de data inválido").optional().or(z.literal("")),
 });
 
 export const insertEventAttendanceSchema = createInsertSchema(eventAttendees).omit({
@@ -197,6 +259,23 @@ export const insertFriendshipSchema = createInsertSchema(friendships).omit({
 export const insertEventRatingSchema = createInsertSchema(eventRatings).omit({
   id: true,
   createdAt: true,
+});
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const notificationConfigSchema = z.object({
+  chave: z.enum([
+    "notificarConviteAmigo",
+    "notificarEventoAmigo", 
+    "notificarAvaliacaoAmigo",
+    "notificarContatoCadastrado",
+    "notificarConfirmacaoPresenca",
+    "notificarAvaliacaoEventoCriado"
+  ]),
+  valor: z.boolean(),
 });
 
 // User schemas for different auth types
@@ -271,6 +350,8 @@ export type PhoneStart = z.infer<typeof phoneStartSchema>;
 export type PhoneVerify = z.infer<typeof phoneVerifySchema>;
 export type PhoneLink = z.infer<typeof phoneLinkSchema>;
 export type ContactsMatch = z.infer<typeof contactsMatchSchema>;
+export type Category = typeof categories.$inferSelect;
+export type InsertCategory = z.infer<typeof insertCategorySchema>;
 export type Event = typeof events.$inferSelect;
 export type InsertEvent = z.infer<typeof insertEventSchema>;
 export type EventAttendance = typeof eventAttendees.$inferSelect;
@@ -279,6 +360,9 @@ export type Friendship = typeof friendships.$inferSelect;
 export type InsertFriendship = z.infer<typeof insertFriendshipSchema>;
 export type EventRating = typeof eventRatings.$inferSelect;
 export type InsertEventRating = z.infer<typeof insertEventRatingSchema>;
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type NotificationConfig = z.infer<typeof notificationConfigSchema>;
 
 // Sanitized types for API responses (excludes sensitive fields)
 export type OrganizerSanitized = {
@@ -319,4 +403,13 @@ export type UserWithStats = User & {
   eventsAttended: number;
   friendsCount: number;
   averageRating?: number;
+};
+
+export type NotificationWithDetails = Notification & {
+  relatedUser?: UserSanitized;
+  relatedEvent?: {
+    id: string;
+    title: string;
+    imageUrl: string | null;
+  };
 };

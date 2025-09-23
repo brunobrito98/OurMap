@@ -1,0 +1,45 @@
+## Interface do Usuário (UI/UX)
+A tela deve ser simples e intuitiva. A estrutura seria a seguinte:
+
+Título da Página: "Configurações de Notificação".
+
+Agrupamento: Use subtítulos para organizar as opções, exatamente como você sugeriu.
+
+Componente Principal: Para cada opção, use uma linha contendo:
+
+Um texto descritivo claro (Ex: "Quando um amigo te convidar para um evento").
+
+Um interruptor (toggle switch) que o usuário pode ligar ou desligar.
+
+Fluxo de Funcionamento:
+
+Carregamento: Ao abrir a tela, o aplicativo primeiro solicita ao servidor as configurações atuais do usuário e ajusta cada interruptor para o estado correto (ligado/desligado).
+
+Interação: Quando o usuário toca em um interruptor, o aplicativo:
+
+Muda visualmente o estado do interruptor (de ligado para desligado, ou vice-versa).
+
+Imediatamente envia uma requisição para a API para salvar a nova preferência.
+
+Idealmente, exibe um feedback sutil (como um pequeno ícone de carregamento) para indicar que a alteração está sendo salva.
+
+## Comunicação com a API (Backend)
+Para que as alterações sejam salvas, o aplicativo precisa se comunicar com o seu servidor.
+
+Endpoint da API: Você precisará de um endpoint para atualizar as configurações. Uma abordagem comum é usar um endpoint PATCH ou PUT.
+
+Exemplo: PATCH /api/usuarios/eu/configuracoes-notificacao
+
+Requisição (O que o app envia): Quando o usuário muda uma opção (por exemplo, desliga a notificação de "convite de amigo"), o aplicativo envia uma requisição para a API com a chave da configuração e seu novo valor.
+
+O corpo da requisição seria um JSON simples, como:
+
+JSON
+
+{
+  "chave": "notificar_convite_amigo",
+  "valor": false
+}
+Resposta (O que o servidor responde): O servidor atualiza a preferência do usuário no banco de dados e retorna uma resposta de sucesso (como um código HTTP 200 OK) para confirmar que a alteração foi salva.
+
+Essa combinação garante que a interface seja responsiva e que as preferências do usuário sejam sempre mantidas de forma segura no servidor.

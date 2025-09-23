@@ -4,7 +4,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupLocalAuth, isAuthenticatedLocal, isAdmin, isSuperAdmin, hashPassword } from "./auth";
 import session from "express-session";
-import { insertEventSchema, insertEventAttendanceSchema, insertEventRatingSchema, insertAdminUserSchema, insertLocalUserSchema, phoneStartSchema, phoneVerifySchema, phoneLinkSchema, contactsMatchSchema } from "@shared/schema";
+import { insertEventSchema, insertEventAttendanceSchema, insertEventRatingSchema, insertAdminUserSchema, insertLocalUserSchema, phoneStartSchema, phoneVerifySchema, phoneLinkSchema, contactsMatchSchema, insertNotificationSchema, notificationConfigSchema, type User } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -62,6 +62,61 @@ function normalizePhoneNumber(phone: string, country?: string): string | null {
 
 // Rate limiting store (in production, use Redis)
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
+
+// Notification helper functions
+async function createNotificationIfEnabled(
+  recipientId: string, 
+  preferenceKey: keyof User,
+  notificationData: {
+    type: string;
+    title: string;
+    message: string;
+    relatedUserId?: string;
+    relatedEventId?: string;
+    actionUrl?: string;
+  }
+) {
+  try {
+    // Check if recipient has this notification type enabled
+    const preferences = await storage.getNotificationPreferences(recipientId);
+    const isEnabled = preferences[preferenceKey];
+    
+    if (isEnabled) {
+      await storage.createNotification({
+        userId: recipientId,
+        ...notificationData
+      });
+    }
+  } catch (error) {
+    console.error('Error creating notification:', error);
+  }
+}
+
+async function notifyFriendsAboutEvent(creatorId: string, eventId: string, eventTitle: string) {
+  try {
+    const creator = await storage.getUser(creatorId);
+    const friends = await storage.getFriends(creatorId);
+    
+    if (!creator) return;
+    
+    for (const friend of friends) {
+      await createNotificationIfEnabled(
+        friend.id,
+        'notificarEventoAmigo',
+        {
+          type: 'event_created',
+          title: 'Novo evento de um amigo',
+          message: `${creator.firstName || 'Um amigo'} criou um novo evento: "${eventTitle}"`,
+          relatedUserId: creatorId,
+          relatedEventId: eventId,
+          actionUrl: `/events/${eventId}`
+        }
+      );
+    }
+  } catch (error) {
+    console.error('Error notifying friends about event:', error);
+  }
+}
 
 function isRateLimited(key: string, maxAttempts: number = 5, windowMs: number = 15 * 60 * 1000): boolean {
   const now = Date.now();
@@ -743,6 +798,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Category routes
+  app.get('/api/categories', async (req, res) => {
+    try {
+      const categories = await storage.getCategories();
+      res.json(categories);
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+      res.status(500).json({ message: "Failed to fetch categories" });
+    }
+  });
+
   // Event routes
   app.get('/api/events', async (req, res) => {
     try {
@@ -858,6 +924,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId,
         coordinates
       );
+      
+      // Notify friends about the new event
+      await notifyFriendsAboutEvent(userId, event.id, event.title);
       
       res.status(201).json(event);
     } catch (error) {
@@ -992,6 +1061,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       const attendance = await storage.createAttendance(attendanceData);
+      
+      // Notify event creator about new attendance
+      if (status === 'attending') {
+        const event = await storage.getEvent(eventId);
+        if (event && event.creatorId !== userId) {
+          const user = await storage.getUser(userId);
+          if (user && event) {
+            await createNotificationIfEnabled(
+              event.creatorId,
+              'notificarConfirmacaoPresenca',
+              {
+                type: 'event_attendance',
+                title: 'Nova confirmação de presença',
+                message: `${user.firstName || 'Alguém'} confirmou presença no seu evento "${event.title}"`,
+                relatedUserId: userId,
+                relatedEventId: eventId,
+                actionUrl: `/events/${eventId}`
+              }
+            );
+          }
+        }
+      }
+      
       res.json(attendance);
     } catch (error) {
       console.error("Error updating attendance:", error);
@@ -1102,6 +1194,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const friendship = await storage.sendFriendRequest(requesterId, actualAddresseeId);
+      
+      // Notify user about friend request
+      const requester = await storage.getUser(requesterId);
+      if (requester) {
+        await createNotificationIfEnabled(
+          actualAddresseeId,
+          'notificarConviteAmigo',
+          {
+            type: 'friend_invite',
+            title: 'Nova solicitação de conexão',
+            message: `${requester.firstName || 'Alguém'} quer se conectar com você`,
+            relatedUserId: requesterId,
+            actionUrl: `/friends`
+          }
+        );
+      }
+      
       res.json(friendship);
     } catch (error) {
       console.error("Error sending friend request:", error);
@@ -1196,6 +1305,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       const rating = await storage.createRating(ratingData);
+      
+      // Notify event creator about new rating
+      const event = await storage.getEvent(eventId);
+      if (event && event.creatorId !== userId) {
+        const user = await storage.getUser(userId);
+        if (user && event) {
+          await createNotificationIfEnabled(
+            event.creatorId,
+            'notificarAvaliacaoEventoCriado',
+            {
+              type: 'event_rating',
+              title: 'Nova avaliação do seu evento',
+              message: `${user.firstName || 'Alguém'} avaliou seu evento "${event.title}"`,
+              relatedUserId: userId,
+              relatedEventId: eventId,
+              actionUrl: `/events/${eventId}`
+            }
+          );
+        }
+      }
+      
       res.json(rating);
     } catch (error) {
       console.error("Error creating rating:", error);
@@ -1377,6 +1507,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error searching events:", error);
       res.status(500).json({ message: "Failed to search events" });
+    }
+  });
+
+  // Notification routes
+  app.get('/api/notifications', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const limit = parseInt(req.query.limit as string) || 20;
+      
+      const notifications = await storage.getNotifications(userId, limit);
+      res.json(notifications);
+    } catch (error) {
+      console.error("Error getting notifications:", error);
+      res.status(500).json({ message: "Failed to get notifications" });
+    }
+  });
+
+  app.get('/api/notifications/unread-count', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const count = await storage.getUnreadNotificationsCount(userId);
+      res.json({ count });
+    } catch (error) {
+      console.error("Error getting unread count:", error);
+      res.status(500).json({ message: "Failed to get unread count" });
+    }
+  });
+
+  app.patch('/api/notifications/:id/read', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const notificationId = req.params.id;
+      
+      const success = await storage.markNotificationAsRead(notificationId, userId);
+      if (success) {
+        res.json({ message: "Notification marked as read" });
+      } else {
+        res.status(404).json({ message: "Notification not found" });
+      }
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      res.status(500).json({ message: "Failed to mark notification as read" });
+    }
+  });
+
+  app.patch('/api/notifications/read-all', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      
+      await storage.markAllNotificationsAsRead(userId);
+      res.json({ message: "All notifications marked as read" });
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+      res.status(500).json({ message: "Failed to mark all notifications as read" });
+    }
+  });
+
+  // Notification preferences routes
+  app.get('/api/notifications/preferences', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      
+      const preferences = await storage.getNotificationPreferences(userId);
+      res.json(preferences);
+    } catch (error) {
+      console.error("Error getting notification preferences:", error);
+      res.status(500).json({ message: "Failed to get notification preferences" });
+    }
+  });
+
+  app.patch('/api/notifications/preferences', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const result = notificationConfigSchema.safeParse(req.body);
+      
+      if (!result.success) {
+        return res.status(400).json({ message: "Invalid notification config", errors: result.error.errors });
+      }
+      
+      const { chave, valor } = result.data;
+      const success = await storage.updateNotificationPreference(userId, chave, valor);
+      
+      if (success) {
+        res.json({ message: "Notification preference updated successfully" });
+      } else {
+        res.status(500).json({ message: "Failed to update notification preference" });
+      }
+    } catch (error) {
+      console.error("Error updating notification preference:", error);
+      res.status(500).json({ message: "Failed to update notification preference" });
     }
   });
 
