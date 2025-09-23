@@ -63,6 +63,58 @@ function normalizePhoneNumber(phone: string, country?: string): string | null {
 // Rate limiting store (in production, use Redis)
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
 
+// Date recurrence helper functions
+function generateRecurrenceDates(
+  startDate: Date,
+  endDate: Date,
+  recurrenceType: string,
+  recurrenceInterval: number = 1
+): Date[] {
+  const dates: Date[] = [];
+  let currentDate = new Date(startDate);
+  const maxRecurrenceDate = new Date(endDate);
+  
+  while (currentDate <= maxRecurrenceDate) {
+    dates.push(new Date(currentDate));
+    
+    switch (recurrenceType) {
+      case 'daily':
+        currentDate.setDate(currentDate.getDate() + recurrenceInterval);
+        break;
+      case 'weekly':
+        currentDate.setDate(currentDate.getDate() + (7 * recurrenceInterval));
+        break;
+      case 'biweekly':
+        currentDate.setDate(currentDate.getDate() + (14 * recurrenceInterval));
+        break;
+      case 'monthly':
+        currentDate.setMonth(currentDate.getMonth() + recurrenceInterval);
+        break;
+      default:
+        // If unknown type, break to prevent infinite loop
+        break;
+    }
+    
+    // Safety check to prevent infinite loops
+    if (dates.length > 365) {
+      console.warn('Recurrence limit reached (365 instances), stopping generation');
+      break;
+    }
+  }
+  
+  return dates;
+}
+
+function calculateEventEndTime(startDate: Date, endTime?: Date, duration?: number): Date | undefined {
+  if (endTime) return endTime;
+  if (duration) {
+    const calculatedEndTime = new Date(startDate);
+    calculatedEndTime.setMinutes(calculatedEndTime.getMinutes() + duration);
+    return calculatedEndTime;
+  }
+  return undefined;
+}
+
 // Notification helper functions
 async function createNotificationIfEnabled(
   recipientId: string, 
@@ -916,19 +968,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
         coverImageUrl = `/uploads/${fileName}`;
       }
       
-      const event = await storage.createEvent(
-        {
-          ...processedEventData,
-          coverImageUrl,
-        },
-        userId,
-        coordinates
-      );
-      
-      // Notify friends about the new event
-      await notifyFriendsAboutEvent(userId, event.id, event.title);
-      
-      res.status(201).json(event);
+      // Handle recurring events
+      if (processedEventData.isRecurring && processedEventData.recurrenceType && processedEventData.recurrenceEndDate) {
+        const startDate = new Date(processedEventData.dateTime);
+        const endDate = new Date(processedEventData.recurrenceEndDate);
+        const recurrenceDates = generateRecurrenceDates(
+          startDate,
+          endDate,
+          processedEventData.recurrenceType,
+          processedEventData.recurrenceInterval || 1
+        );
+        
+        const createdEvents = [];
+        
+        for (const [index, recurrenceDate] of recurrenceDates.entries()) {
+          let eventEndTime: Date | undefined;
+          
+          // Calculate end time for each occurrence if original event has endTime
+          if (processedEventData.endTime) {
+            const originalStart = new Date(processedEventData.dateTime);
+            const originalEnd = new Date(processedEventData.endTime);
+            const duration = originalEnd.getTime() - originalStart.getTime();
+            eventEndTime = new Date(recurrenceDate.getTime() + duration);
+          }
+          
+          const eventInstance = await storage.createEvent(
+            {
+              ...processedEventData,
+              dateTime: recurrenceDate.toISOString(),
+              endTime: eventEndTime?.toISOString(),
+              coverImageUrl,
+              // Only the first event should maintain the recurrence settings
+              // The instances are individual events
+              isRecurring: index === 0 ? true : false,
+              recurrenceType: index === 0 ? processedEventData.recurrenceType : undefined,
+              recurrenceInterval: index === 0 ? processedEventData.recurrenceInterval : undefined,
+              recurrenceEndDate: index === 0 ? processedEventData.recurrenceEndDate : undefined,
+            },
+            userId,
+            coordinates
+          );
+          
+          createdEvents.push(eventInstance);
+        }
+        
+        // Notify friends about the new event series (only for the first event)
+        if (createdEvents.length > 0) {
+          await notifyFriendsAboutEvent(userId, createdEvents[0].id, `${createdEvents[0].title} (${createdEvents.length} eventos)`);
+        }
+        
+        res.status(201).json({
+          message: `${createdEvents.length} eventos criados com sucesso`,
+          events: createdEvents,
+          primaryEvent: createdEvents[0]
+        });
+      } else {
+        // Single event creation
+        const event = await storage.createEvent(
+          {
+            ...processedEventData,
+            coverImageUrl,
+          },
+          userId,
+          coordinates
+        );
+        
+        // Notify friends about the new event
+        await notifyFriendsAboutEvent(userId, event.id, event.title);
+        
+        res.status(201).json(event);
+      }
     } catch (error) {
       console.error("Error creating event:", error);
       if (error instanceof Error) {

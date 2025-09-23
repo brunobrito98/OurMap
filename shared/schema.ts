@@ -77,6 +77,7 @@ export const events = pgTable("events", {
   description: text("description"),
   category: text("category").notNull().default("outros"),
   dateTime: timestamp("date_time", { withTimezone: true }).notNull(),
+  endTime: timestamp("end_time", { withTimezone: true }),
   location: text("location").notNull(),
   latitude: numeric("latitude"),
   longitude: numeric("longitude"),
@@ -242,7 +243,48 @@ export const insertEventSchema = createInsertSchema(events).omit({
     // Accept both datetime-local format (YYYY-MM-DDTHH:mm) and ISO with timezone
     return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?([+-]\d{2}:\d{2})?$/.test(val);
   }, "Formato de data inválido"),
+  endTime: z.string().optional().refine((val) => {
+    if (!val) return true; // endTime é opcional
+    // Accept both datetime-local format (YYYY-MM-DDTHH:mm) and ISO with timezone
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?([+-]\d{2}:\d{2})?$/.test(val);
+  }, "Formato de data de fim inválido"),
   location: z.string().min(1, "Localização é obrigatória"),
+  isRecurring: z.boolean().optional(),
+  recurrenceType: z.enum(['daily', 'weekly', 'biweekly', 'monthly']).optional(),
+  recurrenceInterval: z.number().int().min(1).optional(),
+  recurrenceEndDate: z.string().optional().refine((val) => {
+    if (!val) return true; // recurrenceEndDate é opcional
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?([+-]\d{2}:\d{2})?$/.test(val);
+  }, "Formato de data de fim da recorrência inválido"),
+}).refine((data) => {
+  // Validação para garantir que endTime seja posterior a dateTime
+  if (data.endTime && data.dateTime) {
+    const startDate = new Date(data.dateTime);
+    const endDate = new Date(data.endTime);
+    return endDate > startDate;
+  }
+  return true;
+}, {
+  message: "A data de fim deve ser posterior à data de início",
+  path: ["endTime"],
+}).refine((data) => {
+  // Se isRecurring for true, recurrenceType é obrigatório
+  if (data.isRecurring && !data.recurrenceType) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Tipo de recorrência é obrigatório para eventos recorrentes",
+  path: ["recurrenceType"],
+}).refine((data) => {
+  // Se isRecurring for true, recurrenceEndDate é obrigatório
+  if (data.isRecurring && !data.recurrenceEndDate) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Data de fim da recorrência é obrigatória para eventos recorrentes",
+  path: ["recurrenceEndDate"],
 });
 
 export const insertEventAttendanceSchema = createInsertSchema(eventAttendees).omit({
