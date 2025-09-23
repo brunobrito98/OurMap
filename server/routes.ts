@@ -1066,21 +1066,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Convert FormData string values back to their proper types
       const formData = { ...req.body };
       
-      // Convert boolean fields from strings
-      if (formData.isFree !== undefined) {
-        formData.isFree = formData.isFree === 'true';
-      }
-      if (formData.allowRsvp !== undefined) {
-        formData.allowRsvp = formData.allowRsvp === 'true';
-      }
+      // Convert boolean fields from strings (only process fields that exist in events table)
       if (formData.isRecurring !== undefined) {
         formData.isRecurring = formData.isRecurring === 'true';
       }
       
-      // Convert numeric fields from strings - price should remain as string for schema validation
-      if (formData.price !== undefined && formData.price !== '') {
-        // Ensure price is a string (FormData values are strings by default)
-        formData.price = formData.price.toString();
+      // Convert numeric fields from strings
+      if (formData.maxAttendees !== undefined && formData.maxAttendees !== '') {
+        formData.maxAttendees = parseInt(formData.maxAttendees, 10);
+      }
+      if (formData.recurrenceInterval !== undefined && formData.recurrenceInterval !== '') {
+        formData.recurrenceInterval = parseInt(formData.recurrenceInterval, 10);
       }
       
       // Use dedicated update schema that supports partial updates with validation
