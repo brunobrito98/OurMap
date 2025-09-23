@@ -87,6 +87,14 @@ export const events = pgTable("events", {
   iconEmoji: text("icon_emoji").default("🎉"),
   coverImageUrl: text("cover_image_url"),
   popularityScore: integer("popularity_score").default(0),
+  // Pricing fields
+  priceType: text("price_type").notNull().default("free"), // "free", "paid", "crowdfunding"
+  price: text("price").default("0"), // Price for paid events
+  // Crowdfunding fields
+  fundraisingGoal: numeric("fundraising_goal"), // Meta de arrecadação
+  minimumContribution: numeric("minimum_contribution"), // Valor mínimo (opcional)
+  totalRaised: numeric("total_raised").default("0"), // Total arrecadado
+  // Recurring event fields
   isRecurring: boolean("is_recurring").default(false),
   recurrenceType: text("recurrence_type"),
   recurrenceInterval: integer("recurrence_interval").default(1),
@@ -106,6 +114,15 @@ export const eventAttendees = pgTable("event_attendees", {
 }, (table) => ({
   uniqueEventUser: unique().on(table.eventId, table.userId),
 }));
+
+export const eventContributions = pgTable("event_contributions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  amount: numeric("amount").notNull(), // Valor da contribuição
+  isPublic: boolean("is_public").default(true), // Se a contribuição aparece publicamente
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
 
 export const friendships = pgTable("friendships", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -157,6 +174,7 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
 export const usersRelations = relations(users, ({ many }) => ({
   organizedEvents: many(events),
   attendances: many(eventAttendees),
+  contributions: many(eventContributions),
   sentFriendRequests: many(friendships, { relationName: "requester" }),
   receivedFriendRequests: many(friendships, { relationName: "addressee" }),
   ratings: many(eventRatings),
@@ -170,6 +188,7 @@ export const eventsRelations = relations(events, ({ one, many }) => ({
     references: [users.id],
   }),
   attendances: many(eventAttendees),
+  contributions: many(eventContributions),
   ratings: many(eventRatings),
   notifications: many(notifications, { relationName: "relatedEvent" }),
 }));
@@ -181,6 +200,17 @@ export const eventAttendeesRelations = relations(eventAttendees, ({ one }) => ({
   }),
   user: one(users, {
     fields: [eventAttendees.userId],
+    references: [users.id],
+  }),
+}));
+
+export const eventContributionsRelations = relations(eventContributions, ({ one }) => ({
+  event: one(events, {
+    fields: [eventContributions.eventId],
+    references: [events.id],
+  }),
+  user: one(users, {
+    fields: [eventContributions.userId],
     references: [users.id],
   }),
 }));
@@ -240,6 +270,7 @@ export const insertEventSchema = createInsertSchema(events).omit({
   creatorId: true,
   latitude: true,
   longitude: true,
+  totalRaised: true, // Calculado automaticamente
 }).extend({
   dateTime: z.string().min(1, "Data e hora são obrigatórias").refine((val) => {
     // Accept both datetime-local format (YYYY-MM-DDTHH:mm) and ISO with timezone
@@ -251,6 +282,10 @@ export const insertEventSchema = createInsertSchema(events).omit({
     return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?([+-]\d{2}:\d{2})?$/.test(val);
   }, "Formato de data de fim inválido"),
   location: z.string().min(1, "Localização é obrigatória"),
+  priceType: z.enum(['free', 'paid', 'crowdfunding']).default('free'),
+  price: z.string().optional(),
+  fundraisingGoal: z.string().optional(),
+  minimumContribution: z.string().optional(),
   isRecurring: z.boolean().optional(),
   recurrenceType: z.enum(['daily', 'weekly', 'biweekly', 'monthly']).optional(),
   recurrenceInterval: z.number().int().min(1).optional(),
@@ -287,6 +322,24 @@ export const insertEventSchema = createInsertSchema(events).omit({
 }, {
   message: "Data de fim da recorrência é obrigatória para eventos recorrentes",
   path: ["recurrenceEndDate"],
+}).refine((data) => {
+  // Se priceType for 'paid', price é obrigatório
+  if (data.priceType === 'paid' && !data.price) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Preço é obrigatório para eventos pagos",
+  path: ["price"],
+}).refine((data) => {
+  // Se priceType for 'crowdfunding', fundraisingGoal é obrigatório
+  if (data.priceType === 'crowdfunding' && !data.fundraisingGoal) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Meta de arrecadação é obrigatória para vaquinhas",
+  path: ["fundraisingGoal"],
 });
 
 // Update event schema - allows partial updates while maintaining validation
@@ -351,6 +404,16 @@ export const updateEventSchema = createInsertSchema(events).omit({
 export const insertEventAttendanceSchema = createInsertSchema(eventAttendees).omit({
   id: true,
   createdAt: true,
+});
+
+export const insertEventContributionSchema = createInsertSchema(eventContributions).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  amount: z.string().min(1, "Valor da contribuição é obrigatório").refine((val) => {
+    const num = parseFloat(val);
+    return !isNaN(num) && num > 0;
+  }, "Valor deve ser maior que zero"),
 });
 
 export const insertFriendshipSchema = createInsertSchema(friendships).omit({
@@ -460,6 +523,8 @@ export type InsertEvent = z.infer<typeof insertEventSchema>;
 export type UpdateEvent = z.infer<typeof updateEventSchema>;
 export type EventAttendance = typeof eventAttendees.$inferSelect;
 export type InsertEventAttendance = z.infer<typeof insertEventAttendanceSchema>;
+export type EventContribution = typeof eventContributions.$inferSelect;
+export type InsertEventContribution = z.infer<typeof insertEventContributionSchema>;
 export type Friendship = typeof friendships.$inferSelect;
 export type InsertFriendship = z.infer<typeof insertFriendshipSchema>;
 export type EventRating = typeof eventRatings.$inferSelect;

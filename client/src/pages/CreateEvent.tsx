@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { insertEventSchema, type InsertEvent } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { X, Save, Loader2, Gift, Ticket } from "lucide-react";
+import { X, Save, Loader2, Gift, Ticket, Heart } from "lucide-react";
 
 const categories = [
   { value: "festas", label: "Festas", icon: "fas fa-glass-cheers" },
@@ -51,7 +51,7 @@ export default function CreateEvent() {
   const queryClient = useQueryClient();
   const [coverImage, setCoverImage] = useState<File | null>(null);
   const [mapCoordinates, setMapCoordinates] = useState<{ lat: number; lng: number } | null>(null);
-  const [isPaid, setIsPaid] = useState(false);
+  const [priceType, setPriceType] = useState<"free" | "paid" | "crowdfunding">("free");
 
   const isEditing = !!id;
 
@@ -70,7 +70,10 @@ export default function CreateEvent() {
       dateTime: "",
       endTime: "",
       location: "",
+      priceType: "free",
       price: "0",
+      fundraisingGoal: "",
+      minimumContribution: "",
       isRecurring: false,
       recurrenceType: undefined,
       recurrenceEndDate: "",
@@ -95,15 +98,18 @@ export default function CreateEvent() {
         dateTime: formatDateTime(eventData.dateTime),
         endTime: eventData.endTime ? formatDateTime(eventData.endTime) : "",
         location: eventData.location,
+        priceType: eventData.priceType || "free",
         price: eventData.price || "0",
+        fundraisingGoal: eventData.fundraisingGoal || "",
+        minimumContribution: eventData.minimumContribution || "",
         isRecurring: eventData.isRecurring,
         recurrenceType: eventData.recurrenceType || undefined,
         recurrenceEndDate: eventData.recurrenceEndDate ? formatDateTime(eventData.recurrenceEndDate) : "",
         iconEmoji: eventData.iconEmoji || "📅",
       });
       
-      // Set isPaid state based on event price
-      setIsPaid(parseFloat(eventData.price || "0") > 0);
+      // Set priceType state based on event data
+      setPriceType(eventData.priceType || "free");
       
       setMapCoordinates({
         lat: parseFloat(eventData.latitude),
@@ -219,9 +225,25 @@ export default function CreateEvent() {
       formData.append('isRecurring', 'false');
     }
     
-    // Add price - if not paid, set to 0
-    const price = isPaid ? (data.price || "0") : "0";
-    formData.append('price', price);
+    // Add price type and related fields
+    formData.append('priceType', data.priceType || 'free');
+    
+    // Add price for paid events
+    if (data.priceType === 'paid') {
+      formData.append('price', data.price || "0");
+    } else {
+      formData.append('price', "0");
+    }
+    
+    // Add crowdfunding fields
+    if (data.priceType === 'crowdfunding') {
+      if (data.fundraisingGoal) {
+        formData.append('fundraisingGoal', data.fundraisingGoal);
+      }
+      if (data.minimumContribution) {
+        formData.append('minimumContribution', data.minimumContribution);
+      }
+    }
     
     // Add coordinates if available
     if (mapCoordinates) {
@@ -572,10 +594,18 @@ export default function CreateEvent() {
               <div className="bg-secondary rounded-xl p-4">
                 <div className="space-y-4">
                   <RadioGroup
-                    value={isPaid ? "paid" : "free"}
-                    onValueChange={(value) => {
-                      setIsPaid(value === "paid");
+                    value={priceType}
+                    onValueChange={(value: "free" | "paid" | "crowdfunding") => {
+                      setPriceType(value);
+                      form.setValue("priceType", value);
                       if (value === "free") {
+                        form.setValue("price", "0");
+                        form.setValue("fundraisingGoal", "");
+                        form.setValue("minimumContribution", "");
+                      } else if (value === "paid") {
+                        form.setValue("fundraisingGoal", "");
+                        form.setValue("minimumContribution", "");
+                      } else if (value === "crowdfunding") {
                         form.setValue("price", "0");
                       }
                     }}
@@ -595,10 +625,17 @@ export default function CreateEvent() {
                         <span>Evento Pago</span>
                       </Label>
                     </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="crowdfunding" id="crowdfunding" data-testid="radio-crowdfunding" />
+                      <Label htmlFor="crowdfunding" className="flex items-center space-x-2 cursor-pointer">
+                        <Heart className="w-5 h-5 text-pink-600" />
+                        <span>Vaquinha</span>
+                      </Label>
+                    </div>
                   </RadioGroup>
                   
                   {/* Price field - only show when paid is selected */}
-                  {isPaid && (
+                  {priceType === "paid" && (
                     <div className="mt-4">
                       <FormField
                         control={form.control}
@@ -619,6 +656,61 @@ export default function CreateEvent() {
                             </FormControl>
                             <p className="text-xs text-muted-foreground">
                               Digite o valor do ingresso em reais
+                            </p>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
+
+                  {/* Crowdfunding fields - only show when crowdfunding is selected */}
+                  {priceType === "crowdfunding" && (
+                    <div className="mt-4 space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="fundraisingGoal"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Meta de Arrecadação (R$) *</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="1"
+                                placeholder="Ex: 2000.00"
+                                {...field}
+                                value={field.value || ""}
+                                data-testid="input-fundraising-goal"
+                              />
+                            </FormControl>
+                            <p className="text-xs text-muted-foreground">
+                              Valor total estimado para que o evento aconteça
+                            </p>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="minimumContribution"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Valor Mínimo por Contribuição (R$)</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0.01"
+                                placeholder="Ex: 10.00 (opcional)"
+                                {...field}
+                                value={field.value || ""}
+                                data-testid="input-minimum-contribution"
+                              />
+                            </FormControl>
+                            <p className="text-xs text-muted-foreground">
+                              Valor mínimo para garantir a seriedade dos apoios (opcional)
                             </p>
                             <FormMessage />
                           </FormItem>

@@ -31,9 +31,16 @@ import {
   Zap,
   Palette,
   Laptop,
-  X
+  X,
+  Heart,
+  Target
 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useState } from "react";
 
 export default function EventDetails() {
   const { id } = useParams();
@@ -41,6 +48,11 @@ export default function EventDetails() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  // Estados para modal de contribuição
+  const [isContributionModalOpen, setIsContributionModalOpen] = useState(false);
+  const [contributionAmount, setContributionAmount] = useState("");
+  const [isPublicContribution, setIsPublicContribution] = useState(true);
 
   const { data: event, isLoading } = useQuery<EventWithDetails>({
     queryKey: ['/api/events', id],
@@ -53,11 +65,17 @@ export default function EventDetails() {
     enabled: !!id,
   });
 
+  // Query para dados de vaquinha
+  const { data: fundraisingData } = useQuery<{ totalRaised: number; contributionCount: number }>({
+    queryKey: ['/api/events', id, 'total-raised'],
+    enabled: !!id && event?.priceType === 'crowdfunding',
+  });
+
   const handleAttendanceAction = () => {
     if (!isAuthenticated) {
       toast({
         title: "Login necessário",
-        description: "Faça login para confirmar sua presença no evento!",
+        description: "Faça login para apoiar este evento!",
         variant: "destructive",
       });
         setTimeout(() => {
@@ -67,11 +85,43 @@ export default function EventDetails() {
       return;
     }
     
-    // Se não confirmado, confirma diretamente
+    // Para vaquinhas, abrir modal de contribuição
+    if (event?.priceType === 'crowdfunding') {
+      setIsContributionModalOpen(true);
+      return;
+    }
+    
+    // Para eventos normais, confirma diretamente
     if (!isConfirmed) {
       attendMutation.mutate('attending');
     }
     // Se já confirmado, o dialog será aberto pelo AlertDialog
+  };
+
+  const handleContribution = () => {
+    if (!contributionAmount || parseFloat(contributionAmount) <= 0) {
+      toast({
+        title: "Valor inválido",
+        description: "Por favor, insira um valor válido para sua contribuição.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Verificar valor mínimo se definido
+    if (event?.minimumContribution && parseFloat(contributionAmount) < parseFloat(event.minimumContribution)) {
+      toast({
+        title: "Valor abaixo do mínimo",
+        description: `O valor mínimo para contribuição é R$ ${event.minimumContribution}.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    contributionMutation.mutate({
+      amount: contributionAmount,
+      isPublic: isPublicContribution,
+    });
   };
 
   const handleCancelAttendance = () => {
@@ -106,6 +156,43 @@ export default function EventDetails() {
       toast({
         title: "Erro",
         description: "Falha ao atualizar confirmação",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mutation para contribuições em vaquinhas
+  const contributionMutation = useMutation({
+    mutationFn: async (contributionData: { amount: string; isPublic: boolean }) => {
+      await apiRequest('POST', `/api/events/${id}/contribute`, contributionData);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/events', id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/events', id, 'attendees'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/events', id, 'contributions'] });
+      setIsContributionModalOpen(false);
+      setContributionAmount("");
+      toast({
+        title: "Contribuição realizada!",
+        description: "Obrigado por apoiar este evento!",
+      });
+    },
+    onError: (error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          const fullPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+          window.location.href = `/login?redirect=${encodeURIComponent(fullPath)}`;
+        }, 500);
+        return;
+      }
+      toast({
+        title: "Erro",
+        description: "Falha ao realizar contribuição",
         variant: "destructive",
       });
     },
@@ -315,6 +402,65 @@ export default function EventDetails() {
             </div>
           )}
 
+          {/* Progresso da Vaquinha */}
+          {event?.priceType === 'crowdfunding' && (
+            <div className="bg-gradient-to-r from-pink-50 to-purple-50 dark:from-pink-950/20 dark:to-purple-950/20 border border-pink-200 dark:border-pink-800 rounded-2xl p-4 mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <Heart className="w-5 h-5 text-pink-600" />
+                  Progresso da Vaquinha
+                </h3>
+                {fundraisingData && (
+                  <span className="text-sm text-muted-foreground">
+                    {fundraisingData.contributionCount} apoiador{fundraisingData.contributionCount !== 1 ? 'es' : ''}
+                  </span>
+                )}
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-2xl font-bold text-pink-600">
+                    R$ {fundraisingData?.totalRaised?.toFixed(2) || '0,00'}
+                  </span>
+                  {event.fundraisingGoal && (
+                    <span className="text-sm text-muted-foreground">
+                      de R$ {parseFloat(event.fundraisingGoal).toFixed(2)}
+                    </span>
+                  )}
+                </div>
+                
+                {event.fundraisingGoal && (
+                  <div className="space-y-2">
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
+                      <div 
+                        className="bg-gradient-to-r from-pink-500 to-purple-600 h-full transition-all duration-300 ease-out"
+                        style={{
+                          width: `${Math.min(
+                            ((fundraisingData?.totalRaised || 0) / parseFloat(event.fundraisingGoal)) * 100,
+                            100
+                          )}%`
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>
+                        {fundraisingData && event.fundraisingGoal 
+                          ? Math.round(((fundraisingData.totalRaised || 0) / parseFloat(event.fundraisingGoal)) * 100)
+                          : 0
+                        }% da meta
+                      </span>
+                      {event.minimumContribution && (
+                        <span>
+                          Mín: R$ {parseFloat(event.minimumContribution).toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Location Card */}
           <div className="bg-card border border-border rounded-2xl p-4 mb-6">
             <div className="flex items-center justify-between mb-3">
@@ -499,6 +645,10 @@ export default function EventDetails() {
             >
               {attendMutation.isPending ? (
                 "Atualizando..."
+              ) : event?.priceType === 'crowdfunding' ? (
+                <>
+                  <Heart className="w-4 h-4 mr-2" />Apoiar Vaquinha
+                </>
               ) : (
                 <>
                   <Check className="w-4 h-4 mr-2" />Confirmar Presença
@@ -508,6 +658,85 @@ export default function EventDetails() {
           )}
         </div>
       </div>
+
+      {/* Modal de Contribuição para Vaquinhas */}
+      <Dialog open={isContributionModalOpen} onOpenChange={setIsContributionModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Heart className="w-5 h-5 text-pink-600" />
+              Apoiar Vaquinha
+            </DialogTitle>
+            <DialogDescription>
+              Contribua para que este evento aconteça! 
+              {event?.fundraisingGoal && (
+                <span className="block mt-1">
+                  Meta: R$ {parseFloat(event.fundraisingGoal).toFixed(2)}
+                </span>
+              )}
+              {event?.minimumContribution && (
+                <span className="block text-sm text-muted-foreground">
+                  Valor mínimo: R$ {parseFloat(event.minimumContribution).toFixed(2)}
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="contribution-amount">Valor da Contribuição (R$)</Label>
+              <Input
+                id="contribution-amount"
+                type="number"
+                step="0.01"
+                min={event?.minimumContribution || "0.01"}
+                placeholder="Ex: 50.00"
+                value={contributionAmount}
+                onChange={(e) => setContributionAmount(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="public-contribution"
+                checked={isPublicContribution}
+                onCheckedChange={(checked) => setIsPublicContribution(checked as boolean)}
+              />
+              <Label htmlFor="public-contribution" className="text-sm">
+                Mostrar minha contribuição publicamente
+              </Label>
+            </div>
+          </div>
+
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsContributionModalOpen(false)}
+              disabled={contributionMutation.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleContribution}
+              disabled={contributionMutation.isPending || !contributionAmount}
+              className="bg-pink-600 hover:bg-pink-700"
+            >
+              {contributionMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                <>
+                  <Heart className="w-4 h-4 mr-2" />
+                  Contribuir
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
