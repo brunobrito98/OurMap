@@ -4,6 +4,7 @@ import {
   eventAttendees,
   friendships,
   eventRatings,
+  categories,
   type User,
   type UpsertUser,
   type Event,
@@ -18,6 +19,8 @@ import {
   type UserWithStats,
   type OrganizerSanitized,
   type UserSanitized,
+  type Category,
+  type InsertCategory,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, desc, asc, count, avg, sql, like } from "drizzle-orm";
@@ -96,6 +99,12 @@ export interface IStorage {
     phoneNumber?: string | null;
     confirmedEvents?: EventWithDetails[];
   } | undefined>;
+
+  // Category operations
+  getCategories(): Promise<Category[]>;
+  getCategoryByValue(value: string): Promise<Category | undefined>;
+  getSubcategories(parentId: string): Promise<Category[]>;
+  getCategoryWithSubcategories(categoryValue: string): Promise<string[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -292,7 +301,13 @@ export class DatabaseStorage implements IStorage {
       const conditions = [sql`DATE(${events.dateTime}) >= DATE(NOW())`];
       
       if (filters?.category) {
-        conditions.push(eq(events.category, filters.category));
+        // Get category and all its subcategories for hierarchical filtering
+        const categoryValues = await this.getCategoryWithSubcategories(filters.category);
+        if (categoryValues.length > 0) {
+          // Filter by any of the category values (main category + subcategories)
+          const categoryConditions = categoryValues.map(value => eq(events.category, value));
+          conditions.push(or(...categoryConditions));
+        }
       }
 
       const query = db
@@ -1035,6 +1050,67 @@ export class DatabaseStorage implements IStorage {
       isConnected: false,
       canViewFullProfile: false,
     };
+  }
+
+  // Category operations
+  async getCategories(): Promise<Category[]> {
+    try {
+      const result = await db.select().from(categories).orderBy(asc(categories.displayOrder));
+      return result;
+    } catch (error) {
+      console.error('Error getting categories:', error);
+      return [];
+    }
+  }
+
+  async getCategoryByValue(value: string): Promise<Category | undefined> {
+    try {
+      const [category] = await db.select().from(categories).where(eq(categories.value, value));
+      return category;
+    } catch (error) {
+      console.error('Error getting category by value:', error);
+      return undefined;
+    }
+  }
+
+  async getSubcategories(parentId: string): Promise<Category[]> {
+    try {
+      const result = await db.select().from(categories)
+        .where(eq(categories.parentId, parentId))
+        .orderBy(asc(categories.displayOrder));
+      return result;
+    } catch (error) {
+      console.error('Error getting subcategories:', error);
+      return [];
+    }
+  }
+
+  async getCategoryWithSubcategories(categoryValue: string): Promise<string[]> {
+    try {
+      // Se categoryValue estiver vazio, retorna todos
+      if (!categoryValue || categoryValue === '') {
+        return [];
+      }
+
+      // Busca a categoria principal
+      const category = await this.getCategoryByValue(categoryValue);
+      if (!category) {
+        return [categoryValue]; // Retorna o valor original se não encontrar
+      }
+
+      // Se é uma categoria principal (sem parent), busca todas as subcategorias
+      if (!category.parentId) {
+        const subcategories = await this.getSubcategories(category.id);
+        const subcategoryValues = subcategories.map(sub => sub.value);
+        return [categoryValue, ...subcategoryValues];
+      }
+
+      // Se é uma subcategoria, retorna apenas ela
+      return [categoryValue];
+    } catch (error) {
+      console.error('Error getting category with subcategories:', error);
+      return [categoryValue];
+    }
   }
 }
 

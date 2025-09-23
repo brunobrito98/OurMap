@@ -68,14 +68,13 @@ export const events = pgTable("events", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
   description: text("description"),
-  categoryId: uuid("category_id").notNull().references(() => categories.id),
+  category: text("category").notNull().default("outros"),
   dateTime: timestamp("date_time", { withTimezone: true }).notNull(),
   location: text("location").notNull(),
   latitude: numeric("latitude"),
   longitude: numeric("longitude"),
   creatorId: uuid("creator_id").notNull(),
   maxAttendees: integer("max_attendees"),
-  price: numeric("price", { precision: 10, scale: 2 }).default("0"),
   imageUrl: text("image_url"),
   iconEmoji: text("icon_emoji").default("🎉"),
   coverImageUrl: text("cover_image_url"),
@@ -145,10 +144,6 @@ export const eventsRelations = relations(events, ({ one, many }) => ({
     fields: [events.creatorId],
     references: [users.id],
   }),
-  category: one(categories, {
-    fields: [events.categoryId],
-    references: [categories.id],
-  }),
   attendances: many(eventAttendees),
   ratings: many(eventRatings),
 }));
@@ -208,7 +203,6 @@ export const insertEventSchema = createInsertSchema(events).omit({
     return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?([+-]\d{2}:\d{2})?$/.test(val);
   }, "Formato de data inválido"),
   location: z.string().min(1, "Localização é obrigatória"),
-  categoryId: z.string().min(1, "Categoria é obrigatória"),
 });
 
 export const insertEventAttendanceSchema = createInsertSchema(eventAttendees).omit({
