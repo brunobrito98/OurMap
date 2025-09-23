@@ -1241,6 +1241,121 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Contribution routes for crowdfunding events
+  app.post('/api/events/:id/contribute', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const eventId = req.params.id;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
+
+      // Validate contribution data
+      const contributionData = {
+        amount: req.body.amount,
+        isPublic: req.body.isPublic || false,
+      };
+
+      // Basic validation
+      const amount = parseFloat(contributionData.amount);
+      if (isNaN(amount) || amount <= 0) {
+        return res.status(400).json({ message: "Valor de contribuição inválido" });
+      }
+
+      // Check if event exists and is crowdfunding type
+      const event = await storage.getEvent(eventId);
+      if (!event) {
+        return res.status(404).json({ message: "Evento não encontrado" });
+      }
+
+      if (event.priceType !== 'crowdfunding') {
+        return res.status(400).json({ message: "Este evento não aceita contribuições" });
+      }
+
+      // Check minimum contribution if set
+      if (event.minimumContribution && amount < parseFloat(event.minimumContribution)) {
+        return res.status(400).json({ 
+          message: `Valor mínimo para contribuição é R$ ${event.minimumContribution}` 
+        });
+      }
+
+      // Create contribution
+      const contribution = await storage.createContribution({
+        eventId,
+        userId,
+        amount: contributionData.amount,
+        isPublic: contributionData.isPublic,
+      });
+
+      // Auto-confirm attendance when contributing
+      await storage.createAttendance({
+        eventId,
+        userId,
+        status: 'attending',
+      });
+
+      // Create notification for event organizer
+      if (event.creatorId !== userId) {
+        const user = await storage.getUser(userId);
+        if (user) {
+          await createNotificationIfEnabled(
+            event.creatorId,
+            'notificarConfirmacaoPresenca',
+            {
+              type: 'event_contribution',
+              title: 'Nova contribuição recebida!',
+              message: `${user.firstName || 'Alguém'} contribuiu R$ ${amount.toFixed(2)} para "${event.title}"`,
+              relatedUserId: userId,
+              relatedEventId: eventId,
+              actionUrl: `/events/${eventId}`
+            }
+          );
+        }
+      }
+
+      res.json({ 
+        message: "Contribuição realizada com sucesso!",
+        contribution 
+      });
+    } catch (error) {
+      console.error("Error creating contribution:", error);
+      res.status(500).json({ message: "Falha ao processar contribuição" });
+    }
+  });
+
+  app.get('/api/events/:id/contributions', async (req, res) => {
+    try {
+      const eventId = req.params.id;
+      const contributions = await storage.getEventContributions(eventId);
+      
+      // Only return public contributions and sanitize data
+      const publicContributions = contributions
+        .filter(contrib => contrib.isPublic)
+        .map(contrib => ({
+          id: contrib.id,
+          amount: contrib.amount,
+          createdAt: contrib.createdAt,
+          userId: contrib.userId,
+        }));
+
+      res.json(publicContributions);
+    } catch (error) {
+      console.error("Error fetching contributions:", error);
+      res.status(500).json({ message: "Falha ao buscar contribuições" });
+    }
+  });
+
+  app.get('/api/events/:id/total-raised', async (req, res) => {
+    try {
+      const eventId = req.params.id;
+      const totals = await storage.getEventTotalRaised(eventId);
+      res.json(totals);
+    } catch (error) {
+      console.error("Error fetching total raised:", error);
+      res.status(500).json({ message: "Falha ao buscar total arrecadado" });
+    }
+  });
+
   // Friend routes
   app.get('/api/friends', isAuthenticatedAny, async (req: any, res) => {
     try {

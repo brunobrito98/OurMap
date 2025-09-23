@@ -65,6 +65,12 @@ export default function EventDetails() {
     enabled: !!id,
   });
 
+  // Query para dados de vaquinha
+  const { data: fundraisingData } = useQuery<{ totalRaised: number; contributionCount: number }>({
+    queryKey: ['/api/events', id, 'total-raised'],
+    enabled: !!id && event?.priceType === 'crowdfunding',
+  });
+
   const handleAttendanceAction = () => {
     if (!isAuthenticated) {
       toast({
@@ -396,6 +402,65 @@ export default function EventDetails() {
             </div>
           )}
 
+          {/* Progresso da Vaquinha */}
+          {event?.priceType === 'crowdfunding' && (
+            <div className="bg-gradient-to-r from-pink-50 to-purple-50 dark:from-pink-950/20 dark:to-purple-950/20 border border-pink-200 dark:border-pink-800 rounded-2xl p-4 mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <Heart className="w-5 h-5 text-pink-600" />
+                  Progresso da Vaquinha
+                </h3>
+                {fundraisingData && (
+                  <span className="text-sm text-muted-foreground">
+                    {fundraisingData.contributionCount} apoiador{fundraisingData.contributionCount !== 1 ? 'es' : ''}
+                  </span>
+                )}
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-2xl font-bold text-pink-600">
+                    R$ {fundraisingData?.totalRaised?.toFixed(2) || '0,00'}
+                  </span>
+                  {event.fundraisingGoal && (
+                    <span className="text-sm text-muted-foreground">
+                      de R$ {parseFloat(event.fundraisingGoal).toFixed(2)}
+                    </span>
+                  )}
+                </div>
+                
+                {event.fundraisingGoal && (
+                  <div className="space-y-2">
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
+                      <div 
+                        className="bg-gradient-to-r from-pink-500 to-purple-600 h-full transition-all duration-300 ease-out"
+                        style={{
+                          width: `${Math.min(
+                            ((fundraisingData?.totalRaised || 0) / parseFloat(event.fundraisingGoal)) * 100,
+                            100
+                          )}%`
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>
+                        {fundraisingData && event.fundraisingGoal 
+                          ? Math.round(((fundraisingData.totalRaised || 0) / parseFloat(event.fundraisingGoal)) * 100)
+                          : 0
+                        }% da meta
+                      </span>
+                      {event.minimumContribution && (
+                        <span>
+                          Mín: R$ {parseFloat(event.minimumContribution).toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Location Card */}
           <div className="bg-card border border-border rounded-2xl p-4 mb-6">
             <div className="flex items-center justify-between mb-3">
@@ -580,6 +645,10 @@ export default function EventDetails() {
             >
               {attendMutation.isPending ? (
                 "Atualizando..."
+              ) : event?.priceType === 'crowdfunding' ? (
+                <>
+                  <Heart className="w-4 h-4 mr-2" />Apoiar Vaquinha
+                </>
               ) : (
                 <>
                   <Check className="w-4 h-4 mr-2" />Confirmar Presença

@@ -4,6 +4,7 @@ import {
   eventAttendees,
   friendships,
   eventRatings,
+  eventContributions,
   categories,
   notifications,
   type User,
@@ -16,6 +17,8 @@ import {
   type InsertFriendship,
   type EventRating,
   type InsertEventRating,
+  type EventContribution,
+  type InsertEventContribution,
   type EventWithDetails,
   type UserWithStats,
   type OrganizerSanitized,
@@ -123,6 +126,13 @@ export interface IStorage {
   // Notification preferences operations
   getNotificationPreferences(userId: string): Promise<Partial<User>>;
   updateNotificationPreference(userId: string, key: keyof User, value: boolean): Promise<boolean>;
+
+  // Contribution operations
+  createContribution(contribution: InsertEventContribution): Promise<EventContribution>;
+  getEventContributions(eventId: string): Promise<EventContribution[]>;
+  getUserContributions(userId: string): Promise<EventContribution[]>;
+  getUserEventContribution(eventId: string, userId: string): Promise<EventContribution | undefined>;
+  getEventTotalRaised(eventId: string): Promise<{ totalRaised: number; contributionCount: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1297,6 +1307,54 @@ export class DatabaseStorage implements IStorage {
       console.error('Error updating notification preference:', error);
       return false;
     }
+  }
+  // Contribution operations
+  async createContribution(contribution: InsertEventContribution): Promise<EventContribution> {
+    const [newContribution] = await db
+      .insert(eventContributions)
+      .values(contribution)
+      .returning();
+    return newContribution;
+  }
+
+  async getEventContributions(eventId: string): Promise<EventContribution[]> {
+    return await db
+      .select()
+      .from(eventContributions)
+      .where(eq(eventContributions.eventId, eventId));
+  }
+
+  async getUserContributions(userId: string): Promise<EventContribution[]> {
+    return await db
+      .select()
+      .from(eventContributions)
+      .where(eq(eventContributions.userId, userId));
+  }
+
+  async getUserEventContribution(eventId: string, userId: string): Promise<EventContribution | undefined> {
+    const [contribution] = await db
+      .select()
+      .from(eventContributions)
+      .where(and(
+        eq(eventContributions.eventId, eventId),
+        eq(eventContributions.userId, userId)
+      ));
+    return contribution;
+  }
+
+  async getEventTotalRaised(eventId: string): Promise<{ totalRaised: number; contributionCount: number }> {
+    const [result] = await db
+      .select({
+        totalRaised: sql<number>`COALESCE(SUM(CAST(${eventContributions.amount} AS numeric)), 0)`,
+        contributionCount: count(),
+      })
+      .from(eventContributions)
+      .where(eq(eventContributions.eventId, eventId));
+
+    return {
+      totalRaised: Number(result.totalRaised) || 0,
+      contributionCount: result.contributionCount || 0,
+    };
   }
 }
 
