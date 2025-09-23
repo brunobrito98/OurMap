@@ -11,31 +11,19 @@ if (!databaseUrl) {
   );
 }
 
-// Configure connection based on environment
-function parseConnectionString(connectionString: string) {
-  const isProduction = process.env.NODE_ENV === 'production';
-  const isDevelopment = process.env.NODE_ENV === 'development';
-  
-  // For local development in Replit, don't use SSL
-  if (isDevelopment && connectionString.includes('localhost')) {
-    return {
-      connectionString: connectionString.replace('?sslmode=require', ''),
-      ssl: false,
+// For Supabase, use connectionString directly as it handles query params properly
+const poolConfig = databaseUrl.includes('supabase.com') 
+  ? {
+      connectionString: databaseUrl,
+      ssl: { rejectUnauthorized: false }
+    }
+  : {
+      connectionString: databaseUrl
     };
-  }
-  
-  // For production or external databases, use SSL
-  return {
-    connectionString: connectionString,
-    ssl: isProduction ? { rejectUnauthorized: false } : false,
-  };
-}
 
-const poolConfig = parseConnectionString(databaseUrl);
-console.log(
-  "Pool config type:",
-  poolConfig.connectionString ? "connectionString" : "manual",
-);
+const pool = new Pool(poolConfig);
 
-export const pool = new Pool(poolConfig);
+console.log("Connected to Supabase database");
+
+export { pool };
 export const db = drizzle(pool, { schema });

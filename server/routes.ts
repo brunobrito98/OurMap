@@ -118,7 +118,7 @@ function calculateEventEndTime(startDate: Date, endTime?: Date, duration?: numbe
 // Notification helper functions
 async function createNotificationIfEnabled(
   recipientId: string, 
-  preferenceKey: keyof User,
+  preferenceKey: string, // Changed type since notification fields don't exist in current DB
   notificationData: {
     type: string;
     title: string;
@@ -129,6 +129,10 @@ async function createNotificationIfEnabled(
   }
 ) {
   try {
+    // Notifications system disabled as notification preference columns don't exist in current DB
+    console.log(`Notification disabled for ${preferenceKey}: ${notificationData.title}`);
+    return;
+    /*
     // Check if recipient has this notification type enabled
     const preferences = await storage.getNotificationPreferences(recipientId);
     const isEnabled = preferences[preferenceKey];
@@ -139,6 +143,7 @@ async function createNotificationIfEnabled(
         ...notificationData
       });
     }
+    */
   } catch (error) {
     console.error('Error creating notification:', error);
   }
@@ -752,10 +757,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const newUser = await storage.createUser({
             firstName: "Usuário",
             lastName: "Telefone",
-            phoneE164,
-            phoneVerified: true,
-            phoneCountry: phoneNumber?.country || undefined,
-            phoneHmac,
+            // phoneE164, // Field disabled as column doesn't exist in current DB
+            // phoneVerified: true, // Field disabled as column doesn't exist in current DB
+            // phoneCountry: phoneNumber?.country || undefined, // Field disabled as column doesn't exist in current DB
+            // phoneHmac, // Field disabled as column doesn't exist in current DB
             authType: "phone",
           });
           
@@ -836,12 +841,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const phoneHmac = generatePhoneHmac(phoneE164);
       const phoneNumber = parsePhoneNumber(phoneE164);
       
-      await storage.updateUserPhone(userId, {
-        phoneE164,
-        phoneVerified: true,
-        phoneCountry: phoneNumber?.country || undefined,
-        phoneHmac,
-      });
+      // Phone linking disabled as required columns don't exist in current DB
+      // await storage.updateUserPhone(userId, {
+      //   phoneE164,
+      //   phoneVerified: true,
+      //   phoneCountry: phoneNumber?.country || undefined,
+      //   phoneHmac,
+      // });
       
       res.json({ message: "Telefone vinculado com sucesso" });
     } catch (error) {
@@ -1260,8 +1266,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Contribution routes for crowdfunding events
+  // Contribution routes for crowdfunding events - DISABLED (database columns missing)
   app.post('/api/events/:id/contribute', isAuthenticatedAny, async (req: any, res) => {
+    res.status(400).json({ message: "Funcionalidade de crowdfunding não disponível" });
+    return;
+    /*
     try {
       const eventId = req.params.id;
       const userId = getUserId(req);
@@ -1287,6 +1296,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Evento não encontrado" });
       }
 
+      // Crowdfunding features disabled as database columns don't exist
+      return res.status(400).json({ message: "Funcionalidade de crowdfunding não disponível" });
+      /*
       if (event.priceType !== 'crowdfunding') {
         return res.status(400).json({ message: "Este evento não aceita contribuições" });
       }
@@ -1297,7 +1309,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: `Valor mínimo para contribuição é R$ ${event.minimumContribution}` 
         });
       }
+      */
 
+      /* 
       // Create contribution
       const contribution = await storage.createContribution({
         eventId,
@@ -1317,6 +1331,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (event.creatorId !== userId) {
         const user = await storage.getUser(userId);
         if (user) {
+      */
+      /*
           await createNotificationIfEnabled(
             event.creatorId,
             'notificarConfirmacaoPresenca',
@@ -1336,13 +1352,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Contribuição realizada com sucesso!",
         contribution 
       });
-    } catch (error) {
+      */
+    /*} catch (error) {
       console.error("Error creating contribution:", error);
       res.status(500).json({ message: "Falha ao processar contribuição" });
-    }
+    }*/
   });
 
   app.get('/api/events/:id/contributions', async (req, res) => {
+    res.status(400).json({ message: "Funcionalidade de crowdfunding não disponível" });
+    return;
+    /*
     try {
       const eventId = req.params.id;
       const contributions = await storage.getEventContributions(eventId);
@@ -1362,9 +1382,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error fetching contributions:", error);
       res.status(500).json({ message: "Falha ao buscar contribuições" });
     }
+    */
   });
 
   app.get('/api/events/:id/total-raised', async (req, res) => {
+    res.status(400).json({ message: "Funcionalidade de crowdfunding não disponível" });
+    return;
+    /*
     try {
       const eventId = req.params.id;
       const totals = await storage.getEventTotalRaised(eventId);
@@ -1373,6 +1397,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error fetching total raised:", error);
       res.status(500).json({ message: "Falha ao buscar total arrecadado" });
     }
+    */
   });
 
   // Friend routes

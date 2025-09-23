@@ -33,7 +33,7 @@ export const sessions = pgTable(
 // User storage table.
 // (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
 export const users = pgTable("users", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: varchar("email").unique(),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
@@ -43,18 +43,18 @@ export const users = pgTable("users", {
   password: varchar("password"),
   authType: varchar("auth_type").default("replit"), // 'replit', 'local', or 'phone'
   role: varchar("role").default("user"), // 'user', 'admin', 'super_admin'
-  // Phone authentication fields
-  phoneE164: varchar("phone_e164").unique(), // Phone number in E.164 format (+5511999999999)
-  phoneVerified: boolean("phone_verified").default(false), // Whether phone is verified
-  phoneCountry: varchar("phone_country", { length: 2 }), // ISO2 country code (BR, US, etc.)
-  phoneHmac: varchar("phone_hmac").unique(), // HMAC-SHA256 of phone for contact matching
-  // Notification preferences
-  notificarConviteAmigo: boolean("notificar_convite_amigo").default(true),
-  notificarEventoAmigo: boolean("notificar_evento_amigo").default(true), 
-  notificarAvaliacaoAmigo: boolean("notificar_avaliacao_amigo").default(true),
-  notificarContatoCadastrado: boolean("notificar_contato_cadastrado").default(true),
-  notificarConfirmacaoPresenca: boolean("notificar_confirmacao_presenca").default(true),
-  notificarAvaliacaoEventoCriado: boolean("notificar_avaliacao_evento_criado").default(true),
+  // Phone authentication fields (disabled as columns don't exist in current DB)
+  // phoneE164: varchar("phone_e164").unique(), // Phone number in E.164 format (+5511999999999)
+  // phoneVerified: boolean("phone_verified").default(false), // Whether phone is verified
+  // phoneCountry: varchar("phone_country", { length: 2 }), // ISO2 country code (BR, US, etc.)
+  // phoneHmac: varchar("phone_hmac").unique(), // HMAC-SHA256 of phone for contact matching
+  // Notification preferences (disabled as columns don't exist in current DB)
+  // notificarConviteAmigo: boolean("notificar_convite_amigo").default(true),
+  // notificarEventoAmigo: boolean("notificar_evento_amigo").default(true), 
+  // notificarAvaliacaoAmigo: boolean("notificar_avaliacao_amigo").default(true),
+  // notificarContatoCadastrado: boolean("notificar_contato_cadastrado").default(true),
+  // notificarConfirmacaoPresenca: boolean("notificar_confirmacao_presenca").default(true),
+  // notificarAvaliacaoEventoCriado: boolean("notificar_avaliacao_evento_criado").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -77,23 +77,22 @@ export const events = pgTable("events", {
   description: text("description"),
   category: text("category").notNull().default("outros"),
   dateTime: timestamp("date_time", { withTimezone: true }).notNull(),
-  endTime: timestamp("end_time", { withTimezone: true }),
   location: text("location").notNull(),
   latitude: numeric("latitude"),
   longitude: numeric("longitude"),
-  creatorId: uuid("creator_id").notNull(),
+  creatorId: varchar("creator_id").notNull(),
   maxAttendees: integer("max_attendees"),
   imageUrl: text("image_url"),
   iconEmoji: text("icon_emoji").default("🎉"),
   coverImageUrl: text("cover_image_url"),
   popularityScore: integer("popularity_score").default(0),
-  // Pricing fields
-  priceType: text("price_type").notNull().default("free"), // "free", "paid", "crowdfunding"
-  price: text("price").default("0"), // Price for paid events
+  // Pricing fields (disabled as columns don't exist in current DB)
+  // priceType: text("price_type").notNull().default("free"), // "free", "paid", "crowdfunding"
+  // price: text("price").default("0"), // Price for paid events
   // Crowdfunding fields
-  fundraisingGoal: numeric("fundraising_goal"), // Meta de arrecadação
-  minimumContribution: numeric("minimum_contribution"), // Valor mínimo (opcional)
-  totalRaised: numeric("total_raised").default("0"), // Total arrecadado
+  // fundraisingGoal: numeric("fundraising_goal"), // Meta de arrecadação
+  // minimumContribution: numeric("minimum_contribution"), // Valor mínimo (opcional)
+  // totalRaised: numeric("total_raised").default("0"), // Total arrecadado
   // Recurring event fields
   isRecurring: boolean("is_recurring").default(false),
   recurrenceType: text("recurrence_type"),
@@ -108,7 +107,7 @@ export const events = pgTable("events", {
 export const eventAttendees = pgTable("event_attendees", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   status: text("status").notNull().default("attending"), // attending, interested, not_going
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
@@ -118,7 +117,7 @@ export const eventAttendees = pgTable("event_attendees", {
 export const eventContributions = pgTable("event_contributions", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   amount: numeric("amount").notNull(), // Valor da contribuição
   isPublic: boolean("is_public").default(true), // Se a contribuição aparece publicamente
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
@@ -126,8 +125,8 @@ export const eventContributions = pgTable("event_contributions", {
 
 export const friendships = pgTable("friendships", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  requesterId: uuid("requester_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  addresseeId: uuid("addressee_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  requesterId: varchar("requester_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  addresseeId: varchar("addressee_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   status: text("status").notNull().default("pending"), // pending, accepted, declined
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
@@ -138,7 +137,7 @@ export const friendships = pgTable("friendships", {
 export const eventRatings = pgTable("event_ratings", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   organizerRating: integer("organizer_rating"), // 1-5 stars for organizer
   eventRating: integer("event_rating"), // 1-5 stars for event
   comment: text("comment"),
@@ -149,11 +148,11 @@ export const eventRatings = pgTable("event_ratings", {
 
 export const notifications = pgTable("notifications", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   type: text("type").notNull(), // 'friend_invite', 'event_attendance', 'event_created', 'event_reminder', 'event_rating'
   title: text("title").notNull(),
   message: text("message").notNull(),
-  relatedUserId: uuid("related_user_id").references(() => users.id, { onDelete: "cascade" }), // User who triggered the notification
+  relatedUserId: varchar("related_user_id").references(() => users.id, { onDelete: "cascade" }), // User who triggered the notification
   relatedEventId: uuid("related_event_id").references(() => events.id, { onDelete: "cascade" }), // Related event if applicable  
   isRead: boolean("is_read").default(false),
   actionUrl: text("action_url"), // URL to navigate when notification is clicked

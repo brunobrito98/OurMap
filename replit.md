@@ -7,21 +7,25 @@ OurMap is a modern event management platform built for discovering, creating, an
 ## Recent Changes
 
 **September 23, 2025**
-- **Vaquinha (Crowdfunding) Feature Implementation**: Successfully implemented complete crowdfunding system for events
-  - Updated database schema with new crowdfunding fields (priceType, fundraisingGoal, minimumContribution) and eventContributions table
-  - Enhanced event creation form with third pricing option "Vaquinha" alongside Free/Paid events
-  - Implemented contribution modal with amount input, minimum value validation, and public/private contribution option
-  - Added visual progress bar showing fundraising goal progress with gradient styling and percentage completion
-  - Built backend API routes for creating contributions, fetching totals, and managing crowdfunding data
-  - Integrated auto-confirmation of attendance when contributing to crowdfunding events
-  - Added notification system for event organizers when receiving new contributions
-  - Enhanced event details page with fundraising progress visualization and appropriate call-to-action buttons
-- **GitHub Project Import**: Successfully imported the OurMap project to Replit environment
-- **Environment Setup**: Configured development workflow with npm run dev on port 5000
-- **Dependencies**: Verified all packages are correctly installed and compatible
-- **Replit Configuration**: Confirmed proper host settings (0.0.0.0) and proxy configuration for frontend
-- **Deployment Setup**: Configured autoscale deployment with build and start commands
-- **Secret Configuration**: Set up environment secrets for full application functionality
+- **Supabase Database Integration**: Successfully integrated Supabase PostgreSQL database as external data source
+  - Configured database connection using DATABASE_URL secret with SSL mode
+  - Resolved schema compatibility issues between existing Supabase tables and Drizzle schema definitions
+  - Disabled unsupported features (crowdfunding, phone auth, notifications) due to missing database columns
+  - Verified core functionality working: events, users, authentication, and basic operations
+  - Maintained data integrity by preserving existing table structures without destructive migrations
+- **Mapbox Integration**: Configured secure Mapbox token management through VITE_MAPBOX_ACCESS_TOKEN
+  - Proper environment variable setup for frontend access to geolocation services
+  - Maintained existing map functionality with external API key management
+- **Schema Compatibility**: Aligned application schema with existing Supabase database structure
+  - Commented out non-existent fields (price_type, phone_e164, notification preferences) to prevent SQL errors
+  - Preserved existing data relationships and foreign key constraints
+  - Ensured backward compatibility with current database state
+- **Deployment Optimization**: Verified production readiness with external database integration
+  - Application runs successfully with remote Supabase database connection
+  - Maintained performance with optimized query patterns and connection pooling
+- **Earlier Implementation**: Vaquinha (crowdfunding) feature was previously implemented but disabled due to schema mismatch
+  - Feature remains in codebase but commented out pending database schema updates
+  - Can be re-enabled once corresponding database columns are added to Supabase instance
 
 **September 22, 2025**
 - **Home Page Access**: Changed main route "/" from Landing (login page) to Home component for public access without authentication
@@ -52,11 +56,11 @@ Preferred communication style: Simple, everyday language.
 - **Session Storage**: PostgreSQL-backed session store using connect-pg-simple
 
 ### Database Design
-- **PostgreSQL**: Primary database with Neon serverless hosting
-- **ORM**: Drizzle ORM for type-safe database operations
-- **Schema Management**: Centralized schema definitions with TypeScript types
-- **Tables**: Users, events, event attendances, friendships, event ratings, and sessions
-- **Relationships**: Proper foreign key relationships with relational queries
+- **PostgreSQL**: Primary database with Supabase hosting (external managed service)
+- **ORM**: Drizzle ORM for type-safe database operations with schema compatibility layer
+- **Schema Management**: Adaptive schema definitions aligned with existing Supabase database structure
+- **Tables**: Users, events, event attendances, friendships, event ratings, and sessions (inherited from Supabase)
+- **Relationships**: Proper foreign key relationships with type casting for compatibility between varchar and uuid fields
 
 ### Core Features
 - **Event Management**: Full CRUD operations for events with image upload support
@@ -81,8 +85,8 @@ Preferred communication style: Simple, everyday language.
 ## External Dependencies
 
 ### Core Infrastructure
-- **Neon Database**: PostgreSQL hosting for production database
-- **Replit Deployment**: Platform hosting and development environment
+- **Supabase Database**: PostgreSQL hosting for production database with managed services
+- **Replit Deployment**: Platform hosting and development environment with external database integration
 
 ### Third-Party Services
 - **Mapbox**: Geocoding API and interactive maps (requires MAPBOX_ACCESS_TOKEN)

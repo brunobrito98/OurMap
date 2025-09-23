@@ -210,7 +210,6 @@ export class DatabaseStorage implements IStorage {
         description: event.description,
         category: event.category,
         dateTime: new Date(event.dateTime),
-        endTime: event.endTime ? new Date(event.endTime) : undefined,
         location: event.location,
         creatorId: organizerId,
         latitude: coordinates.lat.toString(),
@@ -358,7 +357,7 @@ export class DatabaseStorage implements IStorage {
           },
         })
         .from(events)
-        .innerJoin(users, eq(events.creatorId, users.id))
+        .innerJoin(users, sql`${events.creatorId}::varchar = ${users.id}`)
         .where(and(...conditions));
 
       const results = await query.orderBy(desc(events.createdAt));
@@ -454,7 +453,7 @@ export class DatabaseStorage implements IStorage {
           },
         })
         .from(events)
-        .innerJoin(users, eq(events.creatorId, users.id))
+        .innerJoin(users, sql`${events.creatorId}::varchar = ${users.id}`)
         .where(eq(events.creatorId, userId));
 
       const results = await query.orderBy(desc(events.createdAt));
@@ -496,7 +495,6 @@ export class DatabaseStorage implements IStorage {
       ...event, 
       updatedAt: new Date(),
       ...(event.dateTime && { dateTime: new Date(event.dateTime) }),
-      ...(event.endTime && { endTime: new Date(event.endTime) }),
       ...(event.recurrenceEndDate && { recurrenceEndDate: new Date(event.recurrenceEndDate) }),
     };
     if (coordinates) {
@@ -1021,7 +1019,7 @@ export class DatabaseStorage implements IStorage {
         })
         .from(eventAttendees)
         .innerJoin(events, eq(eventAttendees.eventId, events.id))
-        .innerJoin(users, eq(events.creatorId, users.id))
+        .innerJoin(users, sql`${events.creatorId}::varchar = ${users.id}`)
         .where(and(
           eq(eventAttendees.userId, user.id),
           eq(eventAttendees.status, 'attending')
@@ -1078,7 +1076,7 @@ export class DatabaseStorage implements IStorage {
         })
         .from(eventAttendees)
         .innerJoin(events, eq(eventAttendees.eventId, events.id))
-        .innerJoin(users, eq(events.creatorId, users.id))
+        .innerJoin(users, sql`${events.creatorId}::varchar = ${users.id}`)
         .where(and(
           eq(eventAttendees.userId, user.id),
           eq(eventAttendees.status, 'attending')
