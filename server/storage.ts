@@ -46,6 +46,8 @@ export interface IStorage {
   
   // Profile management
   updateUserProfileImage(userId: string, profileImageUrl: string | null): Promise<User | undefined>;
+  updateUserProfile(userId: string, profileData: { firstName?: string; lastName?: string }): Promise<User | undefined>;
+  changeUserPassword(userId: string, newPassword: string): Promise<User | undefined>;
 
   // Event operations
   createEvent(event: InsertEvent, organizerId: string, coordinates: { lat: number; lng: number }): Promise<Event>;
@@ -801,6 +803,30 @@ export class DatabaseStorage implements IStorage {
       .update(users)
       .set({
         profileImageUrl,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
+  }
+
+  async updateUserProfile(userId: string, profileData: { firstName?: string; lastName?: string }): Promise<User | undefined> {
+    const [user] = await db
+      .update(users)
+      .set({
+        ...profileData,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
+  }
+
+  async changeUserPassword(userId: string, newPassword: string): Promise<User | undefined> {
+    const [user] = await db
+      .update(users)
+      .set({
+        password: newPassword,
         updatedAt: new Date(),
       })
       .where(eq(users.id, userId))
