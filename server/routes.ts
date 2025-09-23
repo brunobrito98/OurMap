@@ -1062,7 +1062,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const attendance = await storage.createAttendance(attendanceData);
       
-      // Notify event creator about new attendance
+      // Notify event creator about attendance changes
       if (status === 'attending') {
         const event = await storage.getEvent(eventId);
         if (event && event.creatorId !== userId) {
@@ -1075,6 +1075,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 type: 'event_attendance',
                 title: 'Nova confirmação de presença',
                 message: `${user.firstName || 'Alguém'} confirmou presença no seu evento "${event.title}"`,
+                relatedUserId: userId,
+                relatedEventId: eventId,
+                actionUrl: `/events/${eventId}`
+              }
+            );
+          }
+        }
+      } else if (status === 'not_going') {
+        const event = await storage.getEvent(eventId);
+        if (event && event.creatorId !== userId) {
+          const user = await storage.getUser(userId);
+          if (user && event) {
+            await createNotificationIfEnabled(
+              event.creatorId,
+              'notificarConfirmacaoPresenca',
+              {
+                type: 'event_attendance',
+                title: 'Cancelamento de presença',
+                message: `${user.firstName || 'Alguém'} cancelou a presença no seu evento "${event.title}"`,
                 relatedUserId: userId,
                 relatedEventId: eventId,
                 actionUrl: `/events/${eventId}`

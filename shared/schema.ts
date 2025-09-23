@@ -65,7 +65,7 @@ export const categories = pgTable("categories", {
   name: text("name").notNull(),
   value: text("value").notNull().unique(), // Used for API filtering
   icon: text("icon"), // Font Awesome icon class
-  parentId: uuid("parent_id").references(() => categories.id, { onDelete: "cascade" }),
+  parentId: uuid("parent_id").references((): any => categories.id, { onDelete: "cascade" }),
   displayOrder: integer("display_order").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

@@ -30,8 +30,10 @@ import {
   Utensils,
   Zap,
   Palette,
-  Laptop
+  Laptop,
+  X
 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 export default function EventDetails() {
   const { id } = useParams();
@@ -65,8 +67,15 @@ export default function EventDetails() {
       return;
     }
     
-    // Se autenticado, procede com a mutation
-    attendMutation.mutate(isConfirmed ? 'not_going' : 'attending');
+    // Se não confirmado, confirma diretamente
+    if (!isConfirmed) {
+      attendMutation.mutate('attending');
+    }
+    // Se já confirmado, o dialog será aberto pelo AlertDialog
+  };
+
+  const handleCancelAttendance = () => {
+    attendMutation.mutate('not_going');
   };
 
   const attendMutation = useMutation({
@@ -442,26 +451,61 @@ export default function EventDetails() {
               Entrada livre
             </p>
           </div>
-          <Button
-            onClick={handleAttendanceAction}
-            disabled={attendMutation.isPending}
-            className={`flex-1 py-4 text-lg ${isConfirmed ? 'bg-green-600 hover:bg-green-700' : ''} ${
-              !isAuthenticated ? 'opacity-90' : ''
-            }`}
-            data-testid="button-confirm-attendance"
-          >
-            {attendMutation.isPending ? (
-              "Atualizando..."
-            ) : isConfirmed ? (
-              <>
-                <Check className="w-4 h-4 mr-2" />Confirmado
-              </>
-            ) : (
-              <>
-                <Check className="w-4 h-4 mr-2" />Confirmar Presença
-              </>
-            )}
-          </Button>
+          {isConfirmed ? (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  disabled={attendMutation.isPending}
+                  className="flex-1 py-4 text-lg bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300"
+                  variant="outline"
+                  data-testid="button-cancel-attendance"
+                >
+                  {attendMutation.isPending ? (
+                    "Atualizando..."
+                  ) : (
+                    <>
+                      <X className="w-4 h-4 mr-2" />Cancelar Presença
+                    </>
+                  )}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Cancelar presença</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Tem certeza de que deseja cancelar sua presença neste evento? 
+                    Esta ação removerá você da lista de confirmados.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel data-testid="button-cancel-dialog">Não</AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={handleCancelAttendance}
+                    disabled={attendMutation.isPending}
+                    data-testid="button-confirm-cancel"
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    Sim, cancelar
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : (
+            <Button
+              onClick={handleAttendanceAction}
+              disabled={attendMutation.isPending}
+              className={`flex-1 py-4 text-lg ${!isAuthenticated ? 'opacity-90' : ''}`}
+              data-testid="button-confirm-attendance"
+            >
+              {attendMutation.isPending ? (
+                "Atualizando..."
+              ) : (
+                <>
+                  <Check className="w-4 h-4 mr-2" />Confirmar Presença
+                </>
+              )}
+            </Button>
+          )}
         </div>
       </div>
     </div>
