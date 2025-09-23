@@ -171,10 +171,10 @@ export const insertEventSchema = createInsertSchema(events).omit({
   latitude: true,
   longitude: true,
 }).extend({
-  dateTime: z.string().min(1, "Data e hora são obrigatórias").regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, "Formato de data inválido"),
+  dateTime: z.string().min(1, "Data e hora são obrigatórias").datetime({ offset: true }),
   location: z.string().min(1, "Localização é obrigatória"),
   price: z.string().regex(/^\d+(\.\d{1,2})?$/, "Preço deve ser um valor numérico válido").optional(),
-  recurrenceEndDate: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, "Formato de data inválido").optional().or(z.literal("")),
+  recurrenceEndDate: z.string().datetime({ offset: true }).optional().or(z.literal("")),
 });
 
 export const insertEventAttendanceSchema = createInsertSchema(eventAttendees).omit({

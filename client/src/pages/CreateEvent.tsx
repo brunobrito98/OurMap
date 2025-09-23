@@ -81,7 +81,12 @@ export default function CreateEvent() {
         title: eventData.title,
         description: eventData.description || "",
         category: eventData.category,
-        dateTime: new Date(eventData.dateTime).toISOString().slice(0, 16),
+        dateTime: (() => {
+          const date = new Date(eventData.dateTime);
+          const offset = date.getTimezoneOffset() * 60000;
+          const localDate = new Date(date.getTime() - offset);
+          return localDate.toISOString().slice(0, 16);
+        })(),
         location: eventData.location,
         price: eventData.price || "0",
         isRecurring: eventData.isRecurring,
@@ -150,7 +155,9 @@ export default function CreateEvent() {
     
     // Append form fields
     formData.append('title', data.title || '');
-    formData.append('dateTime', data.dateTime || '');
+    // Convert datetime-local string to ISO string with timezone
+    const dateTimeWithTimezone = data.dateTime ? new Date(data.dateTime).toISOString() : '';
+    formData.append('dateTime', dateTimeWithTimezone);
     formData.append('location', data.location || '');
     formData.append('category', data.category || '');
     
