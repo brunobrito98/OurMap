@@ -199,6 +199,7 @@ export default function Profile() {
           </Button>
           <h2 className="font-semibold text-foreground flex-1">Perfil</h2>
           <Button
+            onClick={() => navigate("/settings/profile")}
             variant="ghost"
             size="sm"
             data-testid="button-settings"

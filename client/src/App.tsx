@@ -14,6 +14,9 @@ import UserProfile from "@/pages/UserProfile";
 import MyEvents from "@/pages/MyEvents";
 import Friends from "@/pages/Friends";
 import Search from "@/pages/Search";
+import EditProfile from "@/pages/EditProfile";
+import ChangePassword from "@/pages/ChangePassword";
+import ChangePhone from "@/pages/ChangePhone";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -59,6 +62,24 @@ function Router() {
       <Route path="/friends">
         <ProtectedRoute>
           <Friends />
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/settings/profile">
+        <ProtectedRoute>
+          <EditProfile />
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/settings/change-password">
+        <ProtectedRoute>
+          <ChangePassword />
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/settings/change-phone">
+        <ProtectedRoute>
+          <ChangePhone />
         </ProtectedRoute>
       </Route>
 
