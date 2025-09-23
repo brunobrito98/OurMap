@@ -1,10 +1,15 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import logoImage from "@assets/image_1758571356074.png";
 
 export default function Landing() {
+  const [, navigate] = useLocation();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [isRegistering, setIsRegistering] = useState(false);
   const [formData, setFormData] = useState({
     username: "",
@@ -15,6 +20,13 @@ export default function Landing() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+
+  // Redireciona usuários já autenticados para a página inicial
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      navigate("/");
+    }
+  }, [isAuthenticated, authLoading, navigate]);
 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -51,7 +63,13 @@ export default function Landing() {
           title: isRegistering ? "Cadastro realizado!" : "Login realizado!",
           description: `Bem-vindo, ${data.firstName || data.username}!`,
         });
-        window.location.href = "/";
+        
+        // Get redirect parameter from URL and validate it for security
+        const urlParams = new URLSearchParams(window.location.search);
+        const redirect = urlParams.get('redirect') || '/';
+        // Only allow same-origin relative paths to prevent open-redirect attacks
+        const safeRedirect = redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/';
+        window.location.href = safeRedirect;
       } else {
         toast({
           title: "Erro",
@@ -82,11 +100,14 @@ export default function Landing() {
       <div className="relative z-10 w-full max-w-sm">
         {/* Logo and Title */}
         <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-            <i className="fas fa-calendar-alt text-3xl text-primary"></i>
+          <div className="w-32 h-32 mx-auto mb-4">
+            <img 
+              src={logoImage} 
+              alt="OurMap Logo" 
+              className="w-full h-full object-contain rounded-2xl shadow-lg"
+              data-testid="img-logo"
+            />
           </div>
-          <h1 className="text-4xl font-bold text-white mb-2">OurMap</h1>
-          <p className="text-white/80 text-lg">Descubra e organize eventos incríveis</p>
         </div>
 
         {/* Login Form */}

@@ -1,0 +1,279 @@
+Prompt para Lógica de Acesso (Frontend - JavaScript)
+
+Objetivo: Permitir visualização geral, mas exigir login para interações.
+
+Conceitos:
+
+
+
+Estado de Login: Uma variável que indica se o usuário está logado ou não.
+
+Renderização Condicional: Mostrar/esconder elementos ou habilitar/desabilitar botões com base no estado de login.
+
+Redirecionamento: Levar o usuário para a página de login/cadastro se tentar interagir sem estar autenticado.
+
+Exemplo de Código (JavaScript / HTML)
+
+Assumindo que você tem elementos HTML como botões para "Adicionar Evento", "Participar de Evento", etc.
+
+1. Verificando o Estado de Login:
+
+Você precisa de uma forma de saber se o usuário está logado. Isso geralmente vem de:
+
+* Um token guardado no localStorage ou sessionStorage.
+
+* Um cookie de sessão.
+
+* Uma variável global definida pelo backend se estiver usando um template engine.
+
+
+
+JavaScript
+
+
+
+// Exemplo básico de como verificar o estado de login// Adapte isso para como seu app realmente gerencia a autenticaçãofunction isUserLoggedIn() {
+
+    // Verifique se existe um token de autenticação
+
+    const authToken = localStorage.getItem('authToken');
+
+    return !!authToken; // Retorna true se o token existe, false caso contrário
+
+}// Ou, se você tem uma variável no seu HTML vinda do backend:// var userIsAuthenticated = <%= currentUser ? 'true' : 'false' %>; // Exemplo para EJS/Express// function isUserLoggedIn() { return userIsAuthenticated; }
+
+2. Ocultando/Desabilitando Elementos de Interação:
+
+Use essa função para controlar a visibilidade ou a funcionalidade.
+
+Opção A: Esconder/Mostrar Elementos (melhor para links ou blocos inteiros)
+
+
+
+HTML
+
+
+
+<div id="create-event-section">
+
+    <a href="/novo-evento" class="btn btn-primary">Adicionar Evento</a></div><button id="join-event-button">Participar deste Evento</button><script>
+
+    document.addEventListener('DOMContentLoaded', () => {
+
+        const createEventSection = document.getElementById('create-event-section');
+
+        const joinEventButton = document.getElementById('join-event-button');
+
+
+
+        if (!isUserLoggedIn()) {
+
+            // Esconde a seção de criação de eventos
+
+            if (createEventSection) {
+
+                createEventSection.style.display = 'none';
+
+            }
+
+            // Adiciona um listener para o botão de participar que redireciona
+
+            if (joinEventButton) {
+
+                joinEventButton.addEventListener('click', () => {
+
+                    alert('Você precisa fazer login para participar de um evento!');
+
+                    window.location.href = '/login'; // Redireciona para a página de login
+
+                });
+
+            }
+
+            // Você pode adicionar mais lógica para outros elementos aqui
+
+        } else {
+
+            // Se o usuário está logado, garante que a seção esteja visível
+
+            if (createEventSection) {
+
+                createEventSection.style.display = 'block'; // ou 'flex', 'grid' dependendo do layout
+
+            }
+
+            // O botão de participar já funcionará normalmente se logado
+
+        }
+
+    });</script>
+
+Opção B: Desabilitar Botões e Redirecionar ao Clicar (bom para ações específicas)
+
+
+
+HTML
+
+
+
+<button id="favorite-event-button">Favoritar Evento</button><script>
+
+    document.addEventListener('DOMContentLoaded', () => {
+
+        const favoriteEventButton = document.getElementById('favorite-event-button');
+
+
+
+        if (!isUserLoggedIn()) {
+
+            if (favoriteEventButton) {
+
+                favoriteEventButton.disabled = true; // Desabilita o botão
+
+                favoriteEventButton.textContent = 'Login para Favoritar'; // Muda o texto
+
+                favoriteEventButton.style.opacity = '0.6'; // Dá um visual de desabilitado
+
+
+
+                // Adiciona um listener para redirecionar ao clicar, mesmo desabilitado
+
+                favoriteEventButton.addEventListener('click', (e) => {
+
+                    e.preventDefault(); // Impede qualquer ação padrão do botão
+
+                    alert('Faça login para favoritar este evento!');
+
+                    window.location.href = '/login';
+
+                });
+
+            }
+
+        }
+
+    });</script>
+
+3. Tratando Formulários de Interação:
+
+Para formulários (como "Adicionar Evento", "Comentar", "RSVP"), você deve:
+
+* Redirecionar o usuário para a página de login se ele tentar acessar a URL do formulário diretamente.
+
+* Ou, se o formulário for visível, desabilitar todos os campos e o botão de submit, e adicionar um aviso e um link para login.
+
+Prompt para Lógica de Acesso (Backend)
+
+Objetivo: A segurança real reside no backend. Mesmo que você esconda botões no frontend, um usuário experiente pode tentar enviar requisições diretamente. Seu backend DEVE validar cada requisição interativa.
+
+Conceitos:
+
+
+
+Middleware de Autenticação: Uma função que verifica se o usuário está logado antes de permitir o acesso a uma rota.
+
+Rotas Protegidas: Rotas que exigem um token de autenticação (JWT, sessão, etc.).
+
+Exemplo de Lógica (Express.js - Node.js)
+
+JavaScript
+
+
+
+// app.js (ou routes/auth.js)const express = require('express');const router = express.Router();const jwt = require('jsonwebtoken'); // Se você usa JWT// Middleware para verificar autenticaçãofunction requireAuth(req, res, next) {
+
+    // 1. Obter o token do cabeçalho da requisição (Bearer Token)
+
+    const authHeader = req.headers['authorization'];
+
+    const token = authHeader && authHeader.split(' ')[1]; // Formato: Bearer SEU_TOKEN
+
+
+
+    if (token == null) {
+
+        // Se não há token, não autorizado
+
+        return res.status(401).json({ message: 'Acesso negado. Token não fornecido.' });
+
+    }
+
+
+
+    // 2. Verificar o token
+
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+
+        if (err) {
+
+            // Se o token é inválido ou expirou
+
+            return res.status(403).json({ message: 'Token inválido ou expirado.' });
+
+        }
+
+        // Se o token é válido, armazena as informações do usuário na requisição
+
+        req.user = user; // Agora você pode acessar req.user em rotas protegidas
+
+        next(); // Permite que a requisição continue para a próxima função/rota
+
+    });
+
+}// ----------------------------------------------------// Rotas Protegidas (exigem login)// ----------------------------------------------------// Rota para criar um evento
+
+router.post('/events', requireAuth, (req, res) => {
+
+    // Somente usuários autenticados podem chegar aqui
+
+    // Lógica para criar o evento
+
+    console.log(`Usuário ${req.user.id} está criando um evento.`);
+
+    res.status(201).json({ message: 'Evento criado com sucesso!' });
+
+});// Rota para participar de um evento
+
+router.post('/events/:id/join', requireAuth, (req, res) => {
+
+    // Somente usuários autenticados podem participar
+
+    // Lógica para adicionar o usuário ao evento
+
+    console.log(`Usuário ${req.user.id} está participando do evento ${req.params.id}.`);
+
+    res.json({ message: 'Participação confirmada!' });
+
+});// Rota para comentar
+
+router.post('/events/:id/comments', requireAuth, (req, res) => {
+
+    // Somente usuários autenticados podem comentar
+
+    res.json({ message: 'Comentário adicionado!' });
+
+});// ----------------------------------------------------// Rotas Públicas (não exigem login - apenas visualização)// ----------------------------------------------------// Rota para listar eventos (todos podem ver)
+
+router.get('/events', (req, res) => {
+
+    // Lógica para buscar e retornar eventos
+
+    res.json([{ id: 1, name: 'Festa de Aniversário' }]);
+
+});// Rota para ver detalhes de um evento específico (todos podem ver)
+
+router.get('/events/:id', (req, res) => {
+
+    // Lógica para buscar e retornar detalhes do evento
+
+    res.json({ id: req.params.id, name: 'Detalhes do Evento X' });
+
+});module.exports = router;
+
+Resumo da Estratégia:
+
+
+
+Frontend (JS): Guia visualmente o usuário. Esconde ou desabilita interações se não logado, e redireciona para login/cadastro.
+
+Backend (Sua Linguagem): É a barreira de segurança. Todas as APIs que envolvem POST, PUT, DELETE ou qualquer GET que modifique dados devem ter um middleware de autenticação.

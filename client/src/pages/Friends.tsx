@@ -9,6 +9,7 @@ import BottomNavigation from "@/components/BottomNavigation";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { User, Friendship } from "@shared/schema";
+import { ArrowLeft, UserPlus, Users, Eye, Check, X, Search, Clock } from "lucide-react";
 
 export default function Friends() {
   const [, navigate] = useLocation();
@@ -87,7 +88,7 @@ export default function Friends() {
             size="sm"
             data-testid="button-back"
           >
-            <i className="fas fa-arrow-left text-xl"></i>
+            <ArrowLeft className="w-5 h-5" />
           </Button>
           <h2 className="font-semibold text-foreground flex-1">Amigos</h2>
           <Button
@@ -96,7 +97,7 @@ export default function Friends() {
             size="sm"
             data-testid="button-search-friends"
           >
-            <i className="fas fa-user-plus text-xl"></i>
+            <UserPlus className="w-5 h-5" />
           </Button>
         </div>
       </div>
@@ -116,7 +117,7 @@ export default function Friends() {
             {friends.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-muted-foreground mb-4">
-                  <i className="fas fa-users text-4xl"></i>
+                  <Users className="w-16 h-16" />
                 </div>
                 <h3 className="text-lg font-medium text-foreground mb-2">
                   Nenhum amigo ainda
@@ -128,7 +129,7 @@ export default function Friends() {
                   onClick={() => navigate("/search")}
                   data-testid="button-find-friends"
                 >
-                  <i className="fas fa-search mr-2"></i>
+                  <Search className="w-4 h-4 mr-2" />
                   Buscar Amigos
                 </Button>
               </div>
@@ -156,7 +157,7 @@ export default function Friends() {
                         </p>
                       </div>
                       <Button variant="outline" size="sm" data-testid={`button-view-profile-${friend.id}`}>
-                        <i className="fas fa-eye mr-2"></i>
+                        <Eye className="w-4 h-4 mr-2" />
                         Ver Perfil
                       </Button>
                     </div>
@@ -170,7 +171,7 @@ export default function Friends() {
             {pendingRequests.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-muted-foreground mb-4">
-                  <i className="fas fa-clock text-4xl"></i>
+                  <Clock className="w-16 h-16" />
                 </div>
                 <h3 className="text-lg font-medium text-foreground mb-2">
                   Nenhuma solicitação pendente
@@ -212,7 +213,7 @@ export default function Friends() {
                           size="sm"
                           data-testid={`button-accept-${request.id}`}
                         >
-                          <i className="fas fa-check mr-1"></i>
+                          <Check className="w-4 h-4 mr-1" />
                           Aceitar
                         </Button>
                         <Button
@@ -222,7 +223,7 @@ export default function Friends() {
                           size="sm"
                           data-testid={`button-reject-${request.id}`}
                         >
-                          <i className="fas fa-times mr-1"></i>
+                          <X className="w-4 h-4 mr-1" />
                           Recusar
                         </Button>
                       </div>

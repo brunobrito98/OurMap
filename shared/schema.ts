@@ -41,8 +41,32 @@ export const users = pgTable("users", {
   // Additional fields for username/password authentication
   username: varchar("username").unique(),
   password: varchar("password"),
-  authType: varchar("auth_type").default("replit"), // 'replit' or 'local'
+  authType: varchar("auth_type").default("replit"), // 'replit', 'local', or 'phone'
   role: varchar("role").default("user"), // 'user', 'admin', 'super_admin'
+  // Phone authentication fields
+  phoneE164: varchar("phone_e164").unique(), // Phone number in E.164 format (+5511999999999)
+  phoneVerified: boolean("phone_verified").default(false), // Whether phone is verified
+  phoneCountry: varchar("phone_country", { length: 2 }), // ISO2 country code (BR, US, etc.)
+  phoneHmac: varchar("phone_hmac").unique(), // HMAC-SHA256 of phone for contact matching
+  // Notification preferences
+  notificarConviteAmigo: boolean("notificar_convite_amigo").default(true),
+  notificarEventoAmigo: boolean("notificar_evento_amigo").default(true), 
+  notificarAvaliacaoAmigo: boolean("notificar_avaliacao_amigo").default(true),
+  notificarContatoCadastrado: boolean("notificar_contato_cadastrado").default(true),
+  notificarConfirmacaoPresenca: boolean("notificar_confirmacao_presenca").default(true),
+  notificarAvaliacaoEventoCriado: boolean("notificar_avaliacao_evento_criado").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Categories table for hierarchical categories
+export const categories = pgTable("categories", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  value: text("value").notNull().unique(), // Used for API filtering
+  icon: text("icon"), // Font Awesome icon class
+  parentId: uuid("parent_id").references((): any => categories.id, { onDelete: "cascade" }),
+  displayOrder: integer("display_order").default(0),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -53,6 +77,7 @@ export const events = pgTable("events", {
   description: text("description"),
   category: text("category").notNull().default("outros"),
   dateTime: timestamp("date_time", { withTimezone: true }).notNull(),
+  endTime: timestamp("end_time", { withTimezone: true }),
   location: text("location").notNull(),
   latitude: numeric("latitude"),
   longitude: numeric("longitude"),
@@ -62,6 +87,14 @@ export const events = pgTable("events", {
   iconEmoji: text("icon_emoji").default("🎉"),
   coverImageUrl: text("cover_image_url"),
   popularityScore: integer("popularity_score").default(0),
+  // Pricing fields
+  priceType: text("price_type").notNull().default("free"), // "free", "paid", "crowdfunding"
+  price: text("price").default("0"), // Price for paid events
+  // Crowdfunding fields
+  fundraisingGoal: numeric("fundraising_goal"), // Meta de arrecadação
+  minimumContribution: numeric("minimum_contribution"), // Valor mínimo (opcional)
+  totalRaised: numeric("total_raised").default("0"), // Total arrecadado
+  // Recurring event fields
   isRecurring: boolean("is_recurring").default(false),
   recurrenceType: text("recurrence_type"),
   recurrenceInterval: integer("recurrence_interval").default(1),
@@ -79,6 +112,15 @@ export const eventAttendees = pgTable("event_attendees", {
 }, (table) => ({
   uniqueEventUser: unique().on(table.eventId, table.userId),
 }));
+
+export const eventContributions = pgTable("event_contributions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  amount: numeric("amount").notNull(), // Valor da contribuição
+  isPublic: boolean("is_public").default(true), // Se a contribuição aparece publicamente
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
 
 export const friendships = pgTable("friendships", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -103,13 +145,39 @@ export const eventRatings = pgTable("event_ratings", {
   uniqueUserEventRating: unique().on(table.eventId, table.userId),
 }));
 
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // 'friend_invite', 'event_attendance', 'event_created', 'event_reminder', 'event_rating'
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  relatedUserId: uuid("related_user_id").references(() => users.id, { onDelete: "cascade" }), // User who triggered the notification
+  relatedEventId: uuid("related_event_id").references(() => events.id, { onDelete: "cascade" }), // Related event if applicable  
+  isRead: boolean("is_read").default(false),
+  actionUrl: text("action_url"), // URL to navigate when notification is clicked
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
+export const categoriesRelations = relations(categories, ({ one, many }) => ({
+  parent: one(categories, {
+    fields: [categories.parentId],
+    references: [categories.id],
+    relationName: "parent"
+  }),
+  children: many(categories, { relationName: "parent" }),
+  events: many(events),
+}));
+
 export const usersRelations = relations(users, ({ many }) => ({
   organizedEvents: many(events),
   attendances: many(eventAttendees),
+  contributions: many(eventContributions),
   sentFriendRequests: many(friendships, { relationName: "requester" }),
   receivedFriendRequests: many(friendships, { relationName: "addressee" }),
   ratings: many(eventRatings),
+  notifications: many(notifications),
+  triggeredNotifications: many(notifications, { relationName: "relatedUser" }),
 }));
 
 export const eventsRelations = relations(events, ({ one, many }) => ({
@@ -118,7 +186,9 @@ export const eventsRelations = relations(events, ({ one, many }) => ({
     references: [users.id],
   }),
   attendances: many(eventAttendees),
+  contributions: many(eventContributions),
   ratings: many(eventRatings),
+  notifications: many(notifications, { relationName: "relatedEvent" }),
 }));
 
 export const eventAttendeesRelations = relations(eventAttendees, ({ one }) => ({
@@ -128,6 +198,17 @@ export const eventAttendeesRelations = relations(eventAttendees, ({ one }) => ({
   }),
   user: one(users, {
     fields: [eventAttendees.userId],
+    references: [users.id],
+  }),
+}));
+
+export const eventContributionsRelations = relations(eventContributions, ({ one }) => ({
+  event: one(events, {
+    fields: [eventContributions.eventId],
+    references: [events.id],
+  }),
+  user: one(users, {
+    fields: [eventContributions.userId],
     references: [users.id],
   }),
 }));
@@ -156,7 +237,30 @@ export const eventRatingsRelations = relations(eventRatings, ({ one }) => ({
   }),
 }));
 
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
+  relatedUser: one(users, {
+    fields: [notifications.relatedUserId],
+    references: [users.id],
+    relationName: "relatedUser",
+  }),
+  relatedEvent: one(events, {
+    fields: [notifications.relatedEventId],
+    references: [events.id],
+    relationName: "relatedEvent",
+  }),
+}));
+
 // Insert schemas
+export const insertCategorySchema = createInsertSchema(categories).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertEventSchema = createInsertSchema(events).omit({
   id: true,
   createdAt: true,
@@ -164,15 +268,150 @@ export const insertEventSchema = createInsertSchema(events).omit({
   creatorId: true,
   latitude: true,
   longitude: true,
+  totalRaised: true, // Calculado automaticamente
 }).extend({
-  dateTime: z.string().min(1, "Data e hora são obrigatórias").regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, "Formato de data inválido"),
+  dateTime: z.string().min(1, "Data e hora são obrigatórias").refine((val) => {
+    // Accept both datetime-local format (YYYY-MM-DDTHH:mm) and ISO with timezone
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?([+-]\d{2}:\d{2})?$/.test(val);
+  }, "Formato de data inválido"),
+  endTime: z.string().optional().refine((val) => {
+    if (!val) return true; // endTime é opcional
+    // Accept both datetime-local format (YYYY-MM-DDTHH:mm) and ISO with timezone
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?([+-]\d{2}:\d{2})?$/.test(val);
+  }, "Formato de data de fim inválido"),
   location: z.string().min(1, "Localização é obrigatória"),
-  recurrenceEndDate: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, "Formato de data inválido").optional().or(z.literal("")),
+  priceType: z.enum(['free', 'paid', 'crowdfunding']).default('free'),
+  price: z.string().optional(),
+  fundraisingGoal: z.string().optional(),
+  minimumContribution: z.string().optional(),
+  isRecurring: z.boolean().optional(),
+  recurrenceType: z.enum(['daily', 'weekly', 'biweekly', 'monthly']).optional(),
+  recurrenceInterval: z.number().int().min(1).optional(),
+  recurrenceEndDate: z.string().optional().refine((val) => {
+    if (!val) return true; // recurrenceEndDate é opcional
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?([+-]\d{2}:\d{2})?$/.test(val);
+  }, "Formato de data de fim da recorrência inválido"),
+}).refine((data) => {
+  // Validação para garantir que endTime seja posterior a dateTime
+  if (data.endTime && data.dateTime) {
+    const startDate = new Date(data.dateTime);
+    const endDate = new Date(data.endTime);
+    return endDate > startDate;
+  }
+  return true;
+}, {
+  message: "A data de fim deve ser posterior à data de início",
+  path: ["endTime"],
+}).refine((data) => {
+  // Se isRecurring for true, recurrenceType é obrigatório
+  if (data.isRecurring && !data.recurrenceType) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Tipo de recorrência é obrigatório para eventos recorrentes",
+  path: ["recurrenceType"],
+}).refine((data) => {
+  // Se isRecurring for true, recurrenceEndDate é obrigatório
+  if (data.isRecurring && !data.recurrenceEndDate) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Data de fim da recorrência é obrigatória para eventos recorrentes",
+  path: ["recurrenceEndDate"],
+}).refine((data) => {
+  // Se priceType for 'paid', price é obrigatório
+  if (data.priceType === 'paid' && !data.price) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Preço é obrigatório para eventos pagos",
+  path: ["price"],
+}).refine((data) => {
+  // Se priceType for 'crowdfunding', fundraisingGoal é obrigatório
+  if (data.priceType === 'crowdfunding' && !data.fundraisingGoal) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Meta de arrecadação é obrigatória para vaquinhas",
+  path: ["fundraisingGoal"],
+});
+
+// Update event schema - allows partial updates while maintaining validation
+export const updateEventSchema = createInsertSchema(events).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  creatorId: true,
+  latitude: true,
+  longitude: true,
+}).extend({
+  dateTime: z.string().optional().refine((val) => {
+    if (!val) return true; // dateTime é opcional na atualização
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?([+-]\d{2}:\d{2})?$/.test(val);
+  }, "Formato de data inválido"),
+  endTime: z.string().optional().refine((val) => {
+    if (!val) return true; // endTime é opcional
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?([+-]\d{2}:\d{2})?$/.test(val);
+  }, "Formato de data de fim inválido"),
+  location: z.string().optional().refine((val) => {
+    if (!val) return true; // location é opcional na atualização
+    return val.length > 0; // mas se fornecido, não pode ser vazio
+  }, "Localização não pode ser vazia"),
+  isRecurring: z.boolean().optional(),
+  recurrenceType: z.enum(['daily', 'weekly', 'biweekly', 'monthly']).optional(),
+  recurrenceInterval: z.number().int().min(1).optional(),
+  recurrenceEndDate: z.string().optional().refine((val) => {
+    if (!val) return true; // recurrenceEndDate é opcional
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?([+-]\d{2}:\d{2})?$/.test(val);
+  }, "Formato de data de fim da recorrência inválido"),
+}).refine((data) => {
+  // Validação para garantir que endTime seja posterior a dateTime (quando ambos estão presentes)
+  if (data.endTime && data.dateTime) {
+    const startDate = new Date(data.dateTime);
+    const endDate = new Date(data.endTime);
+    return endDate > startDate;
+  }
+  return true;
+}, {
+  message: "A data de fim deve ser posterior à data de início",
+  path: ["endTime"],
+}).refine((data) => {
+  // Se isRecurring for true, recurrenceType é obrigatório
+  if (data.isRecurring && !data.recurrenceType) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Tipo de recorrência é obrigatório para eventos recorrentes",
+  path: ["recurrenceType"],
+}).refine((data) => {
+  // Se isRecurring for true, recurrenceEndDate é obrigatório
+  if (data.isRecurring && !data.recurrenceEndDate) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Data de fim da recorrência é obrigatória para eventos recorrentes",
+  path: ["recurrenceEndDate"],
 });
 
 export const insertEventAttendanceSchema = createInsertSchema(eventAttendees).omit({
   id: true,
   createdAt: true,
+});
+
+export const insertEventContributionSchema = createInsertSchema(eventContributions).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  amount: z.string().min(1, "Valor da contribuição é obrigatório").refine((val) => {
+    const num = parseFloat(val);
+    return !isNaN(num) && num > 0;
+  }, "Valor deve ser maior que zero"),
 });
 
 export const insertFriendshipSchema = createInsertSchema(friendships).omit({
@@ -184,6 +423,23 @@ export const insertFriendshipSchema = createInsertSchema(friendships).omit({
 export const insertEventRatingSchema = createInsertSchema(eventRatings).omit({
   id: true,
   createdAt: true,
+});
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const notificationConfigSchema = z.object({
+  chave: z.enum([
+    "notificarConviteAmigo",
+    "notificarEventoAmigo", 
+    "notificarAvaliacaoAmigo",
+    "notificarContatoCadastrado",
+    "notificarConfirmacaoPresenca",
+    "notificarAvaliacaoEventoCriado"
+  ]),
+  valor: z.boolean(),
 });
 
 // User schemas for different auth types
@@ -200,12 +456,36 @@ export const insertLocalUserSchema = createInsertSchema(users).omit({
   profileImageUrl: true,
   authType: true,
   role: true,
+  phoneE164: true,
+  phoneVerified: true,
+  phoneCountry: true,
+  phoneHmac: true,
 }).extend({
   username: z.string().min(3, "Username deve ter pelo menos 3 caracteres"),
   password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
   email: z.string().email("Email deve ser válido"),
   firstName: z.string().min(1, "Nome é obrigatório"),
   lastName: z.string().min(1, "Sobrenome é obrigatório"),
+});
+
+// Phone authentication schemas
+export const phoneStartSchema = z.object({
+  phone: z.string().min(1, "Número de telefone é obrigatório"),
+  country: z.string().length(2, "Código do país deve ter 2 caracteres").optional(),
+});
+
+export const phoneVerifySchema = z.object({
+  phone: z.string().min(1, "Número de telefone é obrigatório"),
+  code: z.string().length(6, "Código deve ter 6 dígitos").regex(/^\d{6}$/, "Código deve conter apenas números"),
+});
+
+export const phoneLinkSchema = z.object({
+  phone: z.string().min(1, "Número de telefone é obrigatório"),
+  code: z.string().length(6, "Código deve ter 6 dígitos").regex(/^\d{6}$/, "Código deve conter apenas números"),
+});
+
+export const contactsMatchSchema = z.object({
+  contacts: z.array(z.string()).max(1000, "Máximo de 1000 contatos por vez"),
 });
 
 // Admin user creation schema
@@ -230,22 +510,59 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertLocalUser = z.infer<typeof insertLocalUserSchema>;
 export type InsertAdminUser = z.infer<typeof insertAdminUserSchema>;
+export type PhoneStart = z.infer<typeof phoneStartSchema>;
+export type PhoneVerify = z.infer<typeof phoneVerifySchema>;
+export type PhoneLink = z.infer<typeof phoneLinkSchema>;
+export type ContactsMatch = z.infer<typeof contactsMatchSchema>;
+export type Category = typeof categories.$inferSelect;
+export type InsertCategory = z.infer<typeof insertCategorySchema>;
 export type Event = typeof events.$inferSelect;
 export type InsertEvent = z.infer<typeof insertEventSchema>;
+export type UpdateEvent = z.infer<typeof updateEventSchema>;
 export type EventAttendance = typeof eventAttendees.$inferSelect;
 export type InsertEventAttendance = z.infer<typeof insertEventAttendanceSchema>;
+export type EventContribution = typeof eventContributions.$inferSelect;
+export type InsertEventContribution = z.infer<typeof insertEventContributionSchema>;
 export type Friendship = typeof friendships.$inferSelect;
 export type InsertFriendship = z.infer<typeof insertFriendshipSchema>;
 export type EventRating = typeof eventRatings.$inferSelect;
 export type InsertEventRating = z.infer<typeof insertEventRatingSchema>;
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type NotificationConfig = z.infer<typeof notificationConfigSchema>;
+
+// Sanitized types for API responses (excludes sensitive fields)
+export type OrganizerSanitized = {
+  id: string;
+  username: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  profileImageUrl: string | null;
+  role: string | null;
+  authType: string | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+};
+
+export type UserSanitized = {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  profileImageUrl: string | null;
+  username: string | null;
+  authType: string | null;
+  role: string | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+};
 
 // Extended types for API responses
 export type EventWithDetails = Event & {
-  organizer: User;
+  organizer: OrganizerSanitized;
   attendanceCount: number;
   userAttendance?: EventAttendance;
   distance?: number;
-  friendsGoing?: User[];
+  friendsGoing?: UserSanitized[];
 };
 
 export type UserWithStats = User & {
@@ -253,4 +570,13 @@ export type UserWithStats = User & {
   eventsAttended: number;
   friendsCount: number;
   averageRating?: number;
+};
+
+export type NotificationWithDetails = Notification & {
+  relatedUser?: UserSanitized;
+  relatedEvent?: {
+    id: string;
+    title: string;
+    imageUrl: string | null;
+  };
 };

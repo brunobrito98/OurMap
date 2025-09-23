@@ -4,6 +4,9 @@ import {
   eventAttendees,
   friendships,
   eventRatings,
+  eventContributions,
+  categories,
+  notifications,
   type User,
   type UpsertUser,
   type Event,
@@ -14,8 +17,18 @@ import {
   type InsertFriendship,
   type EventRating,
   type InsertEventRating,
+  type EventContribution,
+  type InsertEventContribution,
   type EventWithDetails,
   type UserWithStats,
+  type OrganizerSanitized,
+  type UserSanitized,
+  type Category,
+  type InsertCategory,
+  type Notification,
+  type InsertNotification,
+  type NotificationWithDetails,
+  type NotificationConfig,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, desc, asc, count, avg, sql, like } from "drizzle-orm";
@@ -31,10 +44,21 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   createLocalUser(user: { username: string; password: string; email: string; firstName: string; lastName: string }): Promise<User>;
   
+  // Phone authentication operations
+  getUserByPhone(phoneE164: string): Promise<User | undefined>;
+  createUser(userData: Partial<UpsertUser>): Promise<User>;
+  updateUserPhone(userId: string, phoneData: { phoneE164: string; phoneVerified: boolean; phoneCountry?: string; phoneHmac: string }): Promise<void>;
+  getUsersByPhoneHmacs(phoneHmacs: string[], excludeUserId?: string): Promise<User[]>;
+  
   // Admin functions
   getAdminUsers(): Promise<User[]>;
   createAdminUser(userData: { username: string; password: string; email: string; firstName: string; lastName: string; role: string; authType: string }): Promise<User>;
   getAllUsers(): Promise<User[]>;
+  
+  // Profile management
+  updateUserProfileImage(userId: string, profileImageUrl: string | null): Promise<User | undefined>;
+  updateUserProfile(userId: string, profileData: { firstName?: string; lastName?: string }): Promise<User | undefined>;
+  changeUserPassword(userId: string, newPassword: string): Promise<User | undefined>;
 
   // Event operations
   createEvent(event: InsertEvent, organizerId: string, coordinates: { lat: number; lng: number }): Promise<Event>;
@@ -62,6 +86,7 @@ export interface IStorage {
   getFriends(userId: string): Promise<User[]>;
   getFriendRequests(userId: string): Promise<(Friendship & { requester: User })[]>;
   areFriends(userId1: string, userId2: string): Promise<boolean>;
+  hasPendingFriendRequest(userId1: string, userId2: string): Promise<boolean>;
 
   // Rating operations
   createRating(rating: InsertEventRating): Promise<EventRating>;
@@ -73,8 +98,41 @@ export interface IStorage {
   getOrganizerRatingsAverage(organizerId: string): Promise<{ average: number; totalRatings: number }>;
 
   // Search operations
-  searchUsers(query: string): Promise<User[]>;
+  searchUsers(query: string): Promise<UserSanitized[]>;
   searchEvents(query: string): Promise<EventWithDetails[]>;
+
+  // Profile operations
+  getUserProfileByUsername(username: string, viewerId?: string): Promise<{
+    profile: UserSanitized;
+    isConnected: boolean;
+    canViewFullProfile: boolean;
+    phoneNumber?: string | null;
+    confirmedEvents?: EventWithDetails[];
+  } | undefined>;
+
+  // Category operations
+  getCategories(): Promise<Category[]>;
+  getCategoryByValue(value: string): Promise<Category | undefined>;
+  getSubcategories(parentId: string): Promise<Category[]>;
+  getCategoryWithSubcategories(categoryValue: string): Promise<string[]>;
+
+  // Notification operations
+  getNotifications(userId: string, limit?: number): Promise<NotificationWithDetails[]>;
+  getUnreadNotificationsCount(userId: string): Promise<number>;
+  markNotificationAsRead(notificationId: string, userId: string): Promise<boolean>;
+  markAllNotificationsAsRead(userId: string): Promise<boolean>;
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  
+  // Notification preferences operations
+  getNotificationPreferences(userId: string): Promise<Partial<User>>;
+  updateNotificationPreference(userId: string, key: keyof User, value: boolean): Promise<boolean>;
+
+  // Contribution operations
+  createContribution(contribution: InsertEventContribution): Promise<EventContribution>;
+  getEventContributions(eventId: string): Promise<EventContribution[]>;
+  getUserContributions(userId: string): Promise<EventContribution[]>;
+  getUserEventContribution(eventId: string, userId: string): Promise<EventContribution | undefined>;
+  getEventTotalRaised(eventId: string): Promise<{ totalRaised: number; contributionCount: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -151,6 +209,7 @@ export class DatabaseStorage implements IStorage {
         description: event.description,
         category: event.category,
         dateTime: new Date(event.dateTime),
+        endTime: event.endTime ? new Date(event.endTime) : undefined,
         location: event.location,
         creatorId: organizerId,
         latitude: coordinates.lat.toString(),
@@ -179,12 +238,10 @@ export class DatabaseStorage implements IStorage {
         event: events,
         organizer: {
           id: users.id,
-          email: users.email,
           username: users.username,
           firstName: users.firstName,
           lastName: users.lastName,
           profileImageUrl: users.profileImageUrl,
-          password: users.password,
           role: users.role,
           authType: users.authType,
           createdAt: users.createdAt,
@@ -217,10 +274,22 @@ export class DatabaseStorage implements IStorage {
     }
 
     // Get friends going to this event
-    let friendsGoing: User[] = [];
+    let friendsGoing: UserSanitized[] = [];
     if (userId) {
       const friendsGoingResult = await db
-        .select({ user: users })
+        .select({
+          user: {
+            id: users.id,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            profileImageUrl: users.profileImageUrl,
+            username: users.username,
+            authType: users.authType,
+            role: users.role,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+          }
+        })
         .from(eventAttendees)
         .innerJoin(users, eq(eventAttendees.userId, users.id))
         .innerJoin(friendships, or(
@@ -261,7 +330,15 @@ export class DatabaseStorage implements IStorage {
       const conditions = [sql`DATE(${events.dateTime}) >= DATE(NOW())`];
       
       if (filters?.category) {
-        conditions.push(eq(events.category, filters.category));
+        // Get category and all its subcategories for hierarchical filtering
+        const categoryValues = await this.getCategoryWithSubcategories(filters.category);
+        if (categoryValues.length > 0) {
+          // Filter by any of the category values (main category + subcategories)
+          const categoryConditions = categoryValues.map(value => eq(events.category, value));
+          if (categoryConditions.length > 0) {
+            conditions.push(or(...categoryConditions));
+          }
+        }
       }
 
       const query = db
@@ -418,6 +495,7 @@ export class DatabaseStorage implements IStorage {
       ...event, 
       updatedAt: new Date(),
       ...(event.dateTime && { dateTime: new Date(event.dateTime) }),
+      ...(event.endTime && { endTime: new Date(event.endTime) }),
       ...(event.recurrenceEndDate && { recurrenceEndDate: new Date(event.recurrenceEndDate) }),
     };
     if (coordinates) {
@@ -679,6 +757,72 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  // Phone authentication operations
+  async getUserByPhone(phoneE164: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.phoneE164, phoneE164));
+    return user;
+  }
+
+  async createUser(userData: Partial<UpsertUser>): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(userData)
+      .returning();
+    return user;
+  }
+
+  async updateUserPhone(userId: string, phoneData: { phoneE164: string; phoneVerified: boolean; phoneCountry?: string; phoneHmac: string }): Promise<void> {
+    await db
+      .update(users)
+      .set({
+        phoneE164: phoneData.phoneE164,
+        phoneVerified: phoneData.phoneVerified,
+        phoneCountry: phoneData.phoneCountry,
+        phoneHmac: phoneData.phoneHmac,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+  }
+
+  async getUsersByPhoneHmacs(phoneHmacs: string[], excludeUserId?: string): Promise<User[]> {
+    let whereConditions = sql`${users.phoneHmac} = ANY(${phoneHmacs})`;
+    
+    if (excludeUserId) {
+      whereConditions = sql`${whereConditions} AND ${users.id} != ${excludeUserId}`;
+    }
+
+    return await db
+      .select({
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        profileImageUrl: users.profileImageUrl,
+        username: users.username,
+        authType: users.authType,
+        role: users.role,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      })
+      .from(users)
+      .where(whereConditions);
+  }
+
+  async hasPendingFriendRequest(userId1: string, userId2: string): Promise<boolean> {
+    const [friendship] = await db
+      .select()
+      .from(friendships)
+      .where(
+        and(
+          or(
+            and(eq(friendships.requesterId, userId1), eq(friendships.addresseeId, userId2)),
+            and(eq(friendships.requesterId, userId2), eq(friendships.addresseeId, userId1))
+          ),
+          eq(friendships.status, 'pending')
+        )
+      );
+    return !!friendship;
+  }
+
   async getAdminUsers(): Promise<User[]> {
     const adminUsers = await db
       .select()
@@ -699,18 +843,52 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(users);
   }
 
+  async updateUserProfileImage(userId: string, profileImageUrl: string | null): Promise<User | undefined> {
+    const [user] = await db
+      .update(users)
+      .set({
+        profileImageUrl,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
+  }
+
+  async updateUserProfile(userId: string, profileData: { firstName?: string; lastName?: string }): Promise<User | undefined> {
+    const [user] = await db
+      .update(users)
+      .set({
+        ...profileData,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
+  }
+
+  async changeUserPassword(userId: string, newPassword: string): Promise<User | undefined> {
+    const [user] = await db
+      .update(users)
+      .set({
+        password: newPassword,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
+  }
+
   // Search operations
-  async searchUsers(query: string): Promise<User[]> {
+  async searchUsers(query: string): Promise<UserSanitized[]> {
     const searchTerm = `%${query}%`;
     const results = await db
       .select({
         id: users.id,
-        email: users.email,
         firstName: users.firstName,
         lastName: users.lastName,
         profileImageUrl: users.profileImageUrl,
         username: users.username,
-        password: users.password,
         authType: users.authType,
         role: users.role,
         createdAt: users.createdAt,
@@ -720,8 +898,7 @@ export class DatabaseStorage implements IStorage {
       .where(or(
         like(users.firstName, searchTerm),
         like(users.lastName, searchTerm),
-        like(users.username, searchTerm),
-        like(users.email, searchTerm)
+        like(users.username, searchTerm)
       ));
     
     return results;
@@ -734,12 +911,10 @@ export class DatabaseStorage implements IStorage {
         event: events,
         organizer: {
           id: users.id,
-          email: users.email,
           username: users.username,
           firstName: users.firstName,
           lastName: users.lastName,
           profileImageUrl: users.profileImageUrl,
-          password: users.password,
           role: users.role,
           authType: users.authType,
           createdAt: users.createdAt,
@@ -779,6 +954,409 @@ export class DatabaseStorage implements IStorage {
     );
 
     return enhancedEvents;
+  }
+
+  async getUserProfileByUsername(username: string, viewerId?: string): Promise<{
+    profile: UserSanitized;
+    isConnected: boolean;
+    canViewFullProfile: boolean;
+    phoneNumber?: string | null;
+    confirmedEvents?: EventWithDetails[];
+  } | undefined> {
+    // Get user by username
+    const user = await this.getUserByUsername(username);
+    if (!user) return undefined;
+
+    // Create sanitized profile
+    const profile: UserSanitized = {
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      profileImageUrl: user.profileImageUrl,
+      username: user.username,
+      authType: user.authType,
+      role: user.role,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+    };
+
+    // If no viewer, return public profile only
+    if (!viewerId) {
+      return {
+        profile,
+        isConnected: false,
+        canViewFullProfile: false,
+      };
+    }
+
+    // If viewing own profile, show full profile
+    if (viewerId === user.id) {
+      const confirmedEvents = await db
+        .select({
+          event: events,
+          organizer: {
+            id: users.id,
+            username: users.username,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            profileImageUrl: users.profileImageUrl,
+            role: users.role,
+            authType: users.authType,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+          },
+        })
+        .from(eventAttendees)
+        .innerJoin(events, eq(eventAttendees.eventId, events.id))
+        .innerJoin(users, eq(events.creatorId, users.id))
+        .where(and(
+          eq(eventAttendees.userId, user.id),
+          eq(eventAttendees.status, 'attending')
+        ));
+
+      const enhancedEvents = await Promise.all(
+        confirmedEvents.map(async (result) => {
+          const [attendanceCountResult] = await db
+            .select({ count: count() })
+            .from(eventAttendees)
+            .where(and(
+              eq(eventAttendees.eventId, result.event.id),
+              eq(eventAttendees.status, 'attending')
+            ));
+
+          return {
+            ...result.event,
+            organizer: result.organizer,
+            attendanceCount: attendanceCountResult.count,
+            userAttendance: undefined,
+            friendsGoing: [],
+          };
+        })
+      );
+
+      return {
+        profile,
+        isConnected: true,
+        canViewFullProfile: true,
+        phoneNumber: user.phoneE164,
+        confirmedEvents: enhancedEvents,
+      };
+    }
+
+    // Check friendship status
+    const areConnected = await this.areFriends(viewerId, user.id);
+
+    if (areConnected) {
+      // Return full profile for connected friends
+      const confirmedEvents = await db
+        .select({
+          event: events,
+          organizer: {
+            id: users.id,
+            username: users.username,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            profileImageUrl: users.profileImageUrl,
+            role: users.role,
+            authType: users.authType,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+          },
+        })
+        .from(eventAttendees)
+        .innerJoin(events, eq(eventAttendees.eventId, events.id))
+        .innerJoin(users, eq(events.creatorId, users.id))
+        .where(and(
+          eq(eventAttendees.userId, user.id),
+          eq(eventAttendees.status, 'attending')
+        ));
+
+      const enhancedEvents = await Promise.all(
+        confirmedEvents.map(async (result) => {
+          const [attendanceCountResult] = await db
+            .select({ count: count() })
+            .from(eventAttendees)
+            .where(and(
+              eq(eventAttendees.eventId, result.event.id),
+              eq(eventAttendees.status, 'attending')
+            ));
+
+          return {
+            ...result.event,
+            organizer: result.organizer,
+            attendanceCount: attendanceCountResult.count,
+            userAttendance: undefined,
+            friendsGoing: [],
+          };
+        })
+      );
+
+      return {
+        profile,
+        isConnected: true,
+        canViewFullProfile: true,
+        phoneNumber: user.phoneE164,
+        confirmedEvents: enhancedEvents,
+      };
+    }
+
+    // Return public profile only for non-connected users
+    return {
+      profile,
+      isConnected: false,
+      canViewFullProfile: false,
+    };
+  }
+
+  // Category operations
+  async getCategories(): Promise<Category[]> {
+    try {
+      const result = await db.select().from(categories).orderBy(asc(categories.displayOrder));
+      return result;
+    } catch (error) {
+      console.error('Error getting categories:', error);
+      return [];
+    }
+  }
+
+  async getCategoryByValue(value: string): Promise<Category | undefined> {
+    try {
+      const [category] = await db.select().from(categories).where(eq(categories.value, value));
+      return category;
+    } catch (error) {
+      console.error('Error getting category by value:', error);
+      return undefined;
+    }
+  }
+
+  async getSubcategories(parentId: string): Promise<Category[]> {
+    try {
+      const result = await db.select().from(categories)
+        .where(eq(categories.parentId, parentId))
+        .orderBy(asc(categories.displayOrder));
+      return result;
+    } catch (error) {
+      console.error('Error getting subcategories:', error);
+      return [];
+    }
+  }
+
+  async getCategoryWithSubcategories(categoryValue: string): Promise<string[]> {
+    try {
+      // Se categoryValue estiver vazio, retorna todos
+      if (!categoryValue || categoryValue === '') {
+        return [];
+      }
+
+      // Busca a categoria principal
+      const category = await this.getCategoryByValue(categoryValue);
+      if (!category) {
+        return [categoryValue]; // Retorna o valor original se não encontrar
+      }
+
+      // Se é uma categoria principal (sem parent), busca todas as subcategorias
+      if (!category.parentId) {
+        const subcategories = await this.getSubcategories(category.id);
+        const subcategoryValues = subcategories.map(sub => sub.value);
+        return [categoryValue, ...subcategoryValues];
+      }
+
+      // Se é uma subcategoria, retorna apenas ela
+      return [categoryValue];
+    } catch (error) {
+      console.error('Error getting category with subcategories:', error);
+      return [categoryValue];
+    }
+  }
+
+  // Notification operations
+  async getNotifications(userId: string, limit: number = 20): Promise<NotificationWithDetails[]> {
+    try {
+      const result = await db
+        .select({
+          notification: notifications,
+          relatedUser: {
+            id: users.id,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            profileImageUrl: users.profileImageUrl,
+            username: users.username,
+            authType: users.authType,
+            role: users.role,
+            createdAt: users.createdAt,
+            updatedAt: users.updatedAt,
+          },
+          relatedEvent: {
+            id: events.id,
+            title: events.title,
+            imageUrl: events.imageUrl,
+          }
+        })
+        .from(notifications)
+        .leftJoin(users, eq(notifications.relatedUserId, users.id))
+        .leftJoin(events, eq(notifications.relatedEventId, events.id))
+        .where(eq(notifications.userId, userId))
+        .orderBy(desc(notifications.createdAt))
+        .limit(limit);
+
+      return result.map(row => ({
+        ...row.notification,
+        relatedUser: row.relatedUser?.id ? row.relatedUser : undefined,
+        relatedEvent: row.relatedEvent?.id ? row.relatedEvent : undefined,
+      }));
+    } catch (error) {
+      console.error('Error getting notifications:', error);
+      return [];
+    }
+  }
+
+  async getUnreadNotificationsCount(userId: string): Promise<number> {
+    try {
+      const [result] = await db
+        .select({ count: count() })
+        .from(notifications)
+        .where(and(
+          eq(notifications.userId, userId),
+          eq(notifications.isRead, false)
+        ));
+      return result?.count || 0;
+    } catch (error) {
+      console.error('Error getting unread notifications count:', error);
+      return 0;
+    }
+  }
+
+  async markNotificationAsRead(notificationId: string, userId: string): Promise<boolean> {
+    try {
+      const [updated] = await db
+        .update(notifications)
+        .set({ isRead: true })
+        .where(and(
+          eq(notifications.id, notificationId),
+          eq(notifications.userId, userId)
+        ))
+        .returning({ id: notifications.id });
+      return !!updated;
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+      return false;
+    }
+  }
+
+  async markAllNotificationsAsRead(userId: string): Promise<boolean> {
+    try {
+      await db
+        .update(notifications)
+        .set({ isRead: true })
+        .where(and(
+          eq(notifications.userId, userId),
+          eq(notifications.isRead, false)
+        ));
+      return true;
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+      return false;
+    }
+  }
+
+  async createNotification(notification: InsertNotification): Promise<Notification> {
+    try {
+      const [created] = await db
+        .insert(notifications)
+        .values(notification)
+        .returning();
+      return created;
+    } catch (error) {
+      console.error('Error creating notification:', error);
+      throw error;
+    }
+  }
+
+  // Notification preferences operations
+  async getNotificationPreferences(userId: string): Promise<Partial<User>> {
+    try {
+      const [user] = await db
+        .select({
+          notificarConviteAmigo: users.notificarConviteAmigo,
+          notificarEventoAmigo: users.notificarEventoAmigo,
+          notificarAvaliacaoAmigo: users.notificarAvaliacaoAmigo,
+          notificarContatoCadastrado: users.notificarContatoCadastrado,
+          notificarConfirmacaoPresenca: users.notificarConfirmacaoPresenca,
+          notificarAvaliacaoEventoCriado: users.notificarAvaliacaoEventoCriado,
+        })
+        .from(users)
+        .where(eq(users.id, userId));
+      return user || {};
+    } catch (error) {
+      console.error('Error getting notification preferences:', error);
+      return {};
+    }
+  }
+
+  async updateNotificationPreference(userId: string, key: keyof User, value: boolean): Promise<boolean> {
+    try {
+      const updateData: any = {};
+      updateData[key] = value;
+      updateData.updatedAt = new Date();
+      
+      const [updated] = await db
+        .update(users)
+        .set(updateData)
+        .where(eq(users.id, userId))
+        .returning({ id: users.id });
+      return !!updated;
+    } catch (error) {
+      console.error('Error updating notification preference:', error);
+      return false;
+    }
+  }
+  // Contribution operations
+  async createContribution(contribution: InsertEventContribution): Promise<EventContribution> {
+    const [newContribution] = await db
+      .insert(eventContributions)
+      .values(contribution)
+      .returning();
+    return newContribution;
+  }
+
+  async getEventContributions(eventId: string): Promise<EventContribution[]> {
+    return await db
+      .select()
+      .from(eventContributions)
+      .where(eq(eventContributions.eventId, eventId));
+  }
+
+  async getUserContributions(userId: string): Promise<EventContribution[]> {
+    return await db
+      .select()
+      .from(eventContributions)
+      .where(eq(eventContributions.userId, userId));
+  }
+
+  async getUserEventContribution(eventId: string, userId: string): Promise<EventContribution | undefined> {
+    const [contribution] = await db
+      .select()
+      .from(eventContributions)
+      .where(and(
+        eq(eventContributions.eventId, eventId),
+        eq(eventContributions.userId, userId)
+      ));
+    return contribution;
+  }
+
+  async getEventTotalRaised(eventId: string): Promise<{ totalRaised: number; contributionCount: number }> {
+    const [result] = await db
+      .select({
+        totalRaised: sql<number>`COALESCE(SUM(CAST(${eventContributions.amount} AS numeric)), 0)`,
+        contributionCount: count(),
+      })
+      .from(eventContributions)
+      .where(eq(eventContributions.eventId, eventId));
+
+    return {
+      totalRaised: Number(result.totalRaised) || 0,
+      contributionCount: result.contributionCount || 0,
+    };
   }
 }
 

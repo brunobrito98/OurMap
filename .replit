@@ -15,24 +15,8 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 33409
-externalPort = 3003
-
-[[ports]]
-localPort = 33503
-externalPort = 6000
-
-[[ports]]
-localPort = 39373
+localPort = 38321
 externalPort = 3000
-
-[[ports]]
-localPort = 40215
-externalPort = 6800
-
-[[ports]]
-localPort = 43117
-externalPort = 3002
 
 [[ports]]
 localPort = 43671
@@ -76,6 +60,9 @@ args = "Start application"
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"

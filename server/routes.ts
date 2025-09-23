@@ -4,16 +4,187 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupLocalAuth, isAuthenticatedLocal, isAdmin, isSuperAdmin, hashPassword } from "./auth";
 import session from "express-session";
-import { insertEventSchema, insertEventAttendanceSchema, insertEventRatingSchema, insertAdminUserSchema, insertLocalUserSchema } from "@shared/schema";
+import { insertEventSchema, updateEventSchema, insertEventAttendanceSchema, insertEventRatingSchema, insertAdminUserSchema, insertLocalUserSchema, phoneStartSchema, phoneVerifySchema, phoneLinkSchema, contactsMatchSchema, insertNotificationSchema, notificationConfigSchema, type User } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import twilio from "twilio";
+import { parsePhoneNumber, isValidPhoneNumber } from "libphonenumber-js";
+import { createHmac, randomBytes } from "crypto";
 
 // Configure multer for file uploads
 const uploadsDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Phone authentication utilities
+const HMAC_SECRET = process.env.SESSION_SECRET || 'default-secret';
+
+// Initialize Twilio client (only if credentials are available)
+let twilioClient: twilio.Twilio | null = null;
+const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
+const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
+const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER;
+
+if (twilioAccountSid && twilioAuthToken) {
+  twilioClient = twilio(twilioAccountSid, twilioAuthToken);
+}
+
+// In-memory store for OTP codes (in production, use Redis or similar)
+const otpStore = new Map<string, { codeHash: string; expiresAt: number; attempts: number }>();
+
+function generateOTP(): string {
+  const otp = randomBytes(3).readUIntBE(0, 3) % 1000000;
+  return otp.toString().padStart(6, '0');
+}
+
+function hashOTP(code: string, phoneE164: string): string {
+  return createHmac('sha256', HMAC_SECRET).update(code + phoneE164).digest('hex');
+}
+
+function generatePhoneHmac(phoneE164: string): string {
+  return createHmac('sha256', HMAC_SECRET).update(phoneE164).digest('hex');
+}
+
+function normalizePhoneNumber(phone: string, country?: string): string | null {
+  try {
+    const phoneNumber = parsePhoneNumber(phone, country as any);
+    if (phoneNumber && phoneNumber.isValid()) {
+      return phoneNumber.format('E.164');
+    }
+    return null;
+  } catch (error) {
+    return null;
+  }
+}
+
+// Rate limiting store (in production, use Redis)
+const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
+
+// Date recurrence helper functions
+function generateRecurrenceDates(
+  startDate: Date,
+  endDate: Date,
+  recurrenceType: string,
+  recurrenceInterval: number = 1
+): Date[] {
+  const dates: Date[] = [];
+  let currentDate = new Date(startDate);
+  const maxRecurrenceDate = new Date(endDate);
+  
+  while (currentDate <= maxRecurrenceDate) {
+    dates.push(new Date(currentDate));
+    
+    switch (recurrenceType) {
+      case 'daily':
+        currentDate.setDate(currentDate.getDate() + recurrenceInterval);
+        break;
+      case 'weekly':
+        currentDate.setDate(currentDate.getDate() + (7 * recurrenceInterval));
+        break;
+      case 'biweekly':
+        currentDate.setDate(currentDate.getDate() + (14 * recurrenceInterval));
+        break;
+      case 'monthly':
+        currentDate.setMonth(currentDate.getMonth() + recurrenceInterval);
+        break;
+      default:
+        // If unknown type, break to prevent infinite loop
+        break;
+    }
+    
+    // Safety check to prevent infinite loops
+    if (dates.length > 365) {
+      console.warn('Recurrence limit reached (365 instances), stopping generation');
+      break;
+    }
+  }
+  
+  return dates;
+}
+
+function calculateEventEndTime(startDate: Date, endTime?: Date, duration?: number): Date | undefined {
+  if (endTime) return endTime;
+  if (duration) {
+    const calculatedEndTime = new Date(startDate);
+    calculatedEndTime.setMinutes(calculatedEndTime.getMinutes() + duration);
+    return calculatedEndTime;
+  }
+  return undefined;
+}
+
+// Notification helper functions
+async function createNotificationIfEnabled(
+  recipientId: string, 
+  preferenceKey: keyof User,
+  notificationData: {
+    type: string;
+    title: string;
+    message: string;
+    relatedUserId?: string;
+    relatedEventId?: string;
+    actionUrl?: string;
+  }
+) {
+  try {
+    // Check if recipient has this notification type enabled
+    const preferences = await storage.getNotificationPreferences(recipientId);
+    const isEnabled = preferences[preferenceKey];
+    
+    if (isEnabled) {
+      await storage.createNotification({
+        userId: recipientId,
+        ...notificationData
+      });
+    }
+  } catch (error) {
+    console.error('Error creating notification:', error);
+  }
+}
+
+async function notifyFriendsAboutEvent(creatorId: string, eventId: string, eventTitle: string) {
+  try {
+    const creator = await storage.getUser(creatorId);
+    const friends = await storage.getFriends(creatorId);
+    
+    if (!creator) return;
+    
+    for (const friend of friends) {
+      await createNotificationIfEnabled(
+        friend.id,
+        'notificarEventoAmigo',
+        {
+          type: 'event_created',
+          title: 'Novo evento de um amigo',
+          message: `${creator.firstName || 'Um amigo'} criou um novo evento: "${eventTitle}"`,
+          relatedUserId: creatorId,
+          relatedEventId: eventId,
+          actionUrl: `/events/${eventId}`
+        }
+      );
+    }
+  } catch (error) {
+    console.error('Error notifying friends about event:', error);
+  }
+}
+
+function isRateLimited(key: string, maxAttempts: number = 5, windowMs: number = 15 * 60 * 1000): boolean {
+  const now = Date.now();
+  const record = rateLimitStore.get(key);
+  
+  if (!record || now > record.resetTime) {
+    rateLimitStore.set(key, { count: 1, resetTime: now + windowMs });
+    return false;
+  }
+  
+  if (record.count >= maxAttempts) {
+    return true;
+  }
+  
+  record.count++;
+  return false;
 }
 
 const upload = multer({
@@ -150,6 +321,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         firstName: user.firstName,
         lastName: user.lastName,
         username: user.username,
+        profileImageUrl: user.profileImageUrl,
         role: user.role,
         authType: user.authType,
         createdAt: user.createdAt,
@@ -208,6 +380,484 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // Profile image upload endpoint
+  app.post('/api/user/profile-image', isAuthenticatedAny, upload.single('profileImage'), async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ message: "Nenhuma imagem foi enviada" });
+      }
+
+      // Process uploaded file - use safe extension based on mimetype
+      const mimeToExtension: Record<string, string> = {
+        'image/jpeg': '.jpg',
+        'image/png': '.png', 
+        'image/webp': '.webp'
+      };
+      
+      const safeExtension = mimeToExtension[req.file.mimetype];
+      if (!safeExtension) {
+        return res.status(400).json({ message: "Tipo de arquivo não suportado" });
+      }
+      
+      const fileName = `profile_${userId}_${Date.now()}${safeExtension}`;
+      const filePath = path.join(uploadsDir, fileName);
+      
+      // Rename file to include extension and user info
+      fs.renameSync(req.file.path, filePath);
+      const profileImageUrl = `/uploads/${fileName}`;
+
+      // Get current user to check for existing profile image
+      const currentUser = await storage.getUser(userId);
+      
+      // Update user profile image URL in database
+      const updatedUser = await storage.updateUserProfileImage(userId, profileImageUrl);
+      
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Clean up old profile image if it exists
+      if (currentUser?.profileImageUrl && currentUser.profileImageUrl.startsWith('/uploads/')) {
+        const oldImagePath = path.join(process.cwd(), currentUser.profileImageUrl.replace(/^\//, ''));
+        if (fs.existsSync(oldImagePath)) {
+          try {
+            fs.unlinkSync(oldImagePath);
+          } catch (error) {
+            console.warn("Failed to delete old profile image:", error);
+          }
+        }
+      }
+
+      // Return sanitized user data
+      const { password, ...sanitizedUser } = updatedUser;
+      res.json({ 
+        message: "Foto de perfil atualizada com sucesso",
+        user: sanitizedUser 
+      });
+    } catch (error) {
+      console.error("Error uploading profile image:", error);
+      if (error instanceof Error) {
+        res.status(400).json({ message: error.message });
+      } else {
+        res.status(500).json({ message: "Failed to upload profile image" });
+      }
+    }
+  });
+
+  // Profile image delete endpoint
+  app.delete('/api/user/profile-image', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
+
+      // Update user profile image URL to null in database
+      const updatedUser = await storage.updateUserProfileImage(userId, null);
+      
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Return sanitized user data
+      const { password, ...sanitizedUser } = updatedUser;
+      res.json({ 
+        message: "Foto de perfil removida com sucesso",
+        user: sanitizedUser 
+      });
+    } catch (error) {
+      console.error("Error removing profile image:", error);
+      res.status(500).json({ message: "Failed to remove profile image" });
+    }
+  });
+
+  // Update user profile endpoint
+  app.patch('/api/user/profile', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
+
+      const { firstName, lastName } = req.body;
+
+      // Validate input
+      if (!firstName && !lastName) {
+        return res.status(400).json({ message: "Pelo menos um campo deve ser fornecido" });
+      }
+
+      const profileData: { firstName?: string; lastName?: string } = {};
+      if (firstName !== undefined) profileData.firstName = firstName;
+      if (lastName !== undefined) profileData.lastName = lastName;
+
+      // Update user profile in database
+      const updatedUser = await storage.updateUserProfile(userId, profileData);
+      
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Return sanitized user data
+      const { password, ...sanitizedUser } = updatedUser;
+      res.json({ 
+        message: "Perfil atualizado com sucesso",
+        user: sanitizedUser 
+      });
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
+
+  // Change password endpoint
+  app.post('/api/user/change-password', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
+
+      const { currentPassword, newPassword } = req.body;
+
+      // Validate input
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({ message: "Senha atual e nova senha são obrigatórias" });
+      }
+
+      // Get current user to verify password
+      const currentUser = await storage.getUser(userId);
+      if (!currentUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Verify current password (using bcrypt)
+      const bcrypt = require('bcrypt');
+      const isValidPassword = await bcrypt.compare(currentPassword, currentUser.password);
+      if (!isValidPassword) {
+        return res.status(400).json({ message: "Senha atual incorreta" });
+      }
+
+      // Hash new password
+      const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+
+      // Update password in database
+      const updatedUser = await storage.changeUserPassword(userId, hashedNewPassword);
+      
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      res.json({ 
+        message: "Senha alterada com sucesso"
+      });
+    } catch (error) {
+      console.error("Error changing password:", error);
+      res.status(500).json({ message: "Failed to change password" });
+    }
+  });
+
+  // User profile route with conditional visibility
+  app.get('/api/users/:username', async (req: any, res) => {
+    try {
+      const { username } = req.params;
+      const viewerId = getUserId(req); // May be undefined if not authenticated
+      
+      const profileData = await storage.getUserProfileByUsername(username, viewerId);
+      
+      if (!profileData) {
+        return res.status(404).json({ message: "Usuário não encontrado" });
+      }
+      
+      const response: any = {
+        name: profileData.profile.firstName && profileData.profile.lastName 
+          ? `${profileData.profile.firstName} ${profileData.profile.lastName}` 
+          : profileData.profile.firstName || profileData.profile.lastName || 'Usuário',
+        username: profileData.profile.username,
+        profile_picture_url: profileData.profile.profileImageUrl,
+      };
+      
+      // Add full profile data if connected/can view
+      if (profileData.canViewFullProfile) {
+        response.phone_number = profileData.phoneNumber;
+        response.events = profileData.confirmedEvents || [];
+      }
+      
+      res.json(response);
+    } catch (error) {
+      console.error("Error fetching user profile:", error);
+      res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  // Logout route - clears server session
+  app.post('/api/auth/logout', async (req, res) => {
+    try {
+      req.logout((err) => {
+        if (err) {
+          console.error("Logout error:", err);
+          return res.status(500).json({ message: "Erro ao fazer logout" });
+        }
+        
+        req.session.destroy((err) => {
+          if (err) {
+            console.error("Session destroy error:", err);
+            return res.status(500).json({ message: "Erro ao encerrar sessão" });
+          }
+          
+          res.clearCookie('connect.sid');
+          res.json({ message: "Logout realizado com sucesso" });
+        });
+      });
+    } catch (error) {
+      console.error("Logout error:", error);
+      res.status(500).json({ message: "Erro ao fazer logout" });
+    }
+  });
+
+  // Phone authentication routes
+  app.post('/api/auth/phone/start', async (req, res) => {
+    try {
+      const { phone, country } = phoneStartSchema.parse(req.body);
+      
+      // Normalize phone number
+      const phoneE164 = normalizePhoneNumber(phone, country);
+      if (!phoneE164) {
+        return res.status(400).json({ message: "Número de telefone inválido" });
+      }
+      
+      // Rate limiting
+      const clientIP = req.ip || req.connection.remoteAddress;
+      if (isRateLimited(`phone_start_${clientIP}`, 5, 15 * 60 * 1000) || 
+          isRateLimited(`phone_start_${phoneE164}`, 5, 15 * 60 * 1000)) {
+        return res.status(429).json({ message: "Muitas tentativas. Tente novamente em 15 minutos." });
+      }
+      
+      // Generate OTP
+      const otp = generateOTP();
+      const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+      
+      // Store OTP hash (never store plaintext)
+      const codeHash = hashOTP(otp, phoneE164);
+      otpStore.set(phoneE164, { codeHash, expiresAt, attempts: 0 });
+      
+      // Send SMS (only if Twilio is configured)
+      if (twilioClient && twilioPhoneNumber) {
+        try {
+          await twilioClient.messages.create({
+            body: `Seu código de verificação OurMap é: ${otp}`,
+            from: twilioPhoneNumber,
+            to: phoneE164,
+          });
+        } catch (twilioError) {
+          console.error("Twilio error:", twilioError);
+          return res.status(500).json({ message: "Falha ao enviar SMS" });
+        }
+      } else {
+        // For development only - log the OTP (disabled in production)
+        if (process.env.NODE_ENV !== 'production') {
+          console.log(`[DEV] OTP for ${phoneE164}: ${otp}`);
+        }
+      }
+      
+      res.json({ 
+        message: "Código enviado com sucesso",
+        phoneE164: phoneE164.replace(/(\+\d{2})(\d{2})(\d{5})(\d{4})/, '$1 ($2) $3-$4') // Format for display
+      });
+    } catch (error) {
+      console.error("Phone start error:", error);
+      res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  app.post('/api/auth/phone/verify', async (req, res) => {
+    try {
+      const { phone, code } = phoneVerifySchema.parse(req.body);
+      
+      // Rate limiting
+      const clientIP = req.ip || req.connection.remoteAddress;
+      if (isRateLimited(`phone_verify_${clientIP}`, 10, 15 * 60 * 1000)) {
+        return res.status(429).json({ message: "Muitas tentativas. Tente novamente em 15 minutos." });
+      }
+      
+      // Normalize phone number
+      const phoneE164 = normalizePhoneNumber(phone);
+      if (!phoneE164) {
+        return res.status(400).json({ message: "Número de telefone inválido" });
+      }
+      
+      // Additional rate limiting by phone
+      if (isRateLimited(`phone_verify_${phoneE164}`, 10, 15 * 60 * 1000)) {
+        return res.status(429).json({ message: "Muitas tentativas para este número. Tente novamente em 15 minutos." });
+      }
+      
+      // Get stored OTP
+      const storedOTP = otpStore.get(phoneE164);
+      if (!storedOTP) {
+        return res.status(400).json({ message: "Código não encontrado ou expirado" });
+      }
+      
+      // Check expiration
+      if (Date.now() > storedOTP.expiresAt) {
+        otpStore.delete(phoneE164);
+        return res.status(400).json({ message: "Código expirado" });
+      }
+      
+      // Check attempts
+      if (storedOTP.attempts >= 3) {
+        otpStore.delete(phoneE164);
+        return res.status(400).json({ message: "Muitas tentativas incorretas" });
+      }
+      
+      // Verify code using hash comparison
+      const providedCodeHash = hashOTP(code, phoneE164);
+      if (storedOTP.codeHash !== providedCodeHash) {
+        storedOTP.attempts++;
+        return res.status(400).json({ message: "Código incorreto" });
+      }
+      
+      // Clear OTP
+      otpStore.delete(phoneE164);
+      
+      // Check if user already exists with this phone
+      const existingUser = await storage.getUserByPhone(phoneE164);
+      
+      if (existingUser) {
+        // Login existing user
+        req.login(existingUser, (err) => {
+          if (err) {
+            console.error("Login error:", err);
+            return res.status(500).json({ message: "Erro no login" });
+          }
+          
+          const { password, ...sanitizedUser } = existingUser;
+          res.json({
+            message: "Login realizado com sucesso",
+            user: sanitizedUser
+          });
+        });
+      } else {
+        // Create new user
+        try {
+          const phoneHmac = generatePhoneHmac(phoneE164);
+          const phoneNumber = parsePhoneNumber(phoneE164);
+          
+          const newUser = await storage.createUser({
+            firstName: "Usuário",
+            lastName: "Telefone",
+            phoneE164,
+            phoneVerified: true,
+            phoneCountry: phoneNumber?.country || undefined,
+            phoneHmac,
+            authType: "phone",
+          });
+          
+          req.login(newUser, (err) => {
+            if (err) {
+              console.error("Login error:", err);
+              return res.status(500).json({ message: "Erro no login" });
+            }
+            
+            const { password, ...sanitizedUser } = newUser;
+            res.json({
+              message: "Conta criada e login realizado com sucesso",
+              user: sanitizedUser
+            });
+          });
+        } catch (createError) {
+          console.error("User creation error:", createError);
+          res.status(500).json({ message: "Erro ao criar usuário" });
+        }
+      }
+    } catch (error) {
+      console.error("Phone verify error:", error);
+      res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  app.post('/api/auth/phone/link', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
+      
+      // Rate limiting
+      const clientIP = req.ip || req.connection.remoteAddress;
+      if (isRateLimited(`phone_link_${clientIP}`, 5, 15 * 60 * 1000) || 
+          isRateLimited(`phone_link_${userId}`, 5, 15 * 60 * 1000)) {
+        return res.status(429).json({ message: "Muitas tentativas. Tente novamente em 15 minutos." });
+      }
+      
+      const { phone, code } = phoneLinkSchema.parse(req.body);
+      
+      // Normalize phone number
+      const phoneE164 = normalizePhoneNumber(phone);
+      if (!phoneE164) {
+        return res.status(400).json({ message: "Número de telefone inválido" });
+      }
+      
+      // Get stored OTP
+      const storedOTP = otpStore.get(phoneE164);
+      if (!storedOTP) {
+        return res.status(400).json({ message: "Código não encontrado ou expirado" });
+      }
+      
+      // Check expiration
+      if (Date.now() > storedOTP.expiresAt) {
+        otpStore.delete(phoneE164);
+        return res.status(400).json({ message: "Código expirado" });
+      }
+      
+      // Verify code using hash comparison
+      const providedCodeHashForLink = hashOTP(code, phoneE164);
+      if (storedOTP.codeHash !== providedCodeHashForLink) {
+        storedOTP.attempts++;
+        return res.status(400).json({ message: "Código incorreto" });
+      }
+      
+      // Clear OTP
+      otpStore.delete(phoneE164);
+      
+      // Check if phone is already used by another user
+      const existingUser = await storage.getUserByPhone(phoneE164);
+      if (existingUser && existingUser.id !== userId) {
+        return res.status(400).json({ message: "Este telefone já está vinculado a outra conta" });
+      }
+      
+      // Link phone to current user
+      const phoneHmac = generatePhoneHmac(phoneE164);
+      const phoneNumber = parsePhoneNumber(phoneE164);
+      
+      await storage.updateUserPhone(userId, {
+        phoneE164,
+        phoneVerified: true,
+        phoneCountry: phoneNumber?.country || undefined,
+        phoneHmac,
+      });
+      
+      res.json({ message: "Telefone vinculado com sucesso" });
+    } catch (error) {
+      console.error("Phone link error:", error);
+      res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  // Category routes
+  app.get('/api/categories', async (req, res) => {
+    try {
+      const categories = await storage.getCategories();
+      res.json(categories);
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+      res.status(500).json({ message: "Failed to fetch categories" });
     }
   });
 
@@ -282,6 +932,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         formData.isRecurring = formData.isRecurring === 'true';
       }
       
+      // Convert numeric fields from strings - price should remain as string for schema validation
+      if (formData.price !== undefined && formData.price !== '') {
+        // Ensure price is a string (FormData values are strings by default)
+        formData.price = formData.price.toString();
+      }
+      
       const eventData = insertEventSchema.parse(formData);
       
       // Use eventData directly - dates are already strings from form validation
@@ -293,8 +949,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Handle cover image if uploaded
       let coverImageUrl = null;
       if (req.file) {
-        const fileExtension = path.extname(req.file.originalname);
-        const fileName = `${req.file.filename}${fileExtension}`;
+        const mimeToExtension: Record<string, string> = {
+          'image/jpeg': '.jpg',
+          'image/png': '.png', 
+          'image/webp': '.webp'
+        };
+        
+        const safeExtension = mimeToExtension[req.file.mimetype];
+        if (!safeExtension) {
+          return res.status(400).json({ message: "Tipo de arquivo não suportado para capa do evento" });
+        }
+        
+        const fileName = `${req.file.filename}${safeExtension}`;
         const filePath = path.join(uploadsDir, fileName);
         
         // Rename file to include extension
@@ -302,16 +968,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
         coverImageUrl = `/uploads/${fileName}`;
       }
       
-      const event = await storage.createEvent(
-        {
-          ...processedEventData,
-          coverImageUrl,
-        },
-        userId,
-        coordinates
-      );
-      
-      res.status(201).json(event);
+      // Handle recurring events
+      if (processedEventData.isRecurring && processedEventData.recurrenceType && processedEventData.recurrenceEndDate) {
+        const startDate = new Date(processedEventData.dateTime);
+        const endDate = new Date(processedEventData.recurrenceEndDate);
+        const recurrenceDates = generateRecurrenceDates(
+          startDate,
+          endDate,
+          processedEventData.recurrenceType,
+          processedEventData.recurrenceInterval || 1
+        );
+        
+        const createdEvents = [];
+        
+        for (let index = 0; index < recurrenceDates.length; index++) {
+          const recurrenceDate = recurrenceDates[index];
+          let eventEndTime: Date | undefined;
+          
+          // Calculate end time for each occurrence if original event has endTime
+          if (processedEventData.endTime) {
+            const originalStart = new Date(processedEventData.dateTime);
+            const originalEnd = new Date(processedEventData.endTime);
+            const duration = originalEnd.getTime() - originalStart.getTime();
+            eventEndTime = new Date(recurrenceDate.getTime() + duration);
+          }
+          
+          const eventInstance = await storage.createEvent(
+            {
+              ...processedEventData,
+              dateTime: recurrenceDate.toISOString(),
+              endTime: eventEndTime?.toISOString(),
+              coverImageUrl,
+              // Only the first event should maintain the recurrence settings
+              // The instances are individual events
+              isRecurring: index === 0 ? true : false,
+              recurrenceType: index === 0 ? processedEventData.recurrenceType : undefined,
+              recurrenceInterval: index === 0 ? processedEventData.recurrenceInterval : undefined,
+              recurrenceEndDate: index === 0 ? processedEventData.recurrenceEndDate : undefined,
+            },
+            userId,
+            coordinates
+          );
+          
+          createdEvents.push(eventInstance);
+        }
+        
+        // Notify friends about the new event series (only for the first event)
+        if (createdEvents.length > 0) {
+          await notifyFriendsAboutEvent(userId, createdEvents[0].id, `${createdEvents[0].title} (${createdEvents.length} eventos)`);
+        }
+        
+        res.status(201).json({
+          message: `${createdEvents.length} eventos criados com sucesso`,
+          events: createdEvents,
+          primaryEvent: createdEvents[0]
+        });
+      } else {
+        // Single event creation
+        const event = await storage.createEvent(
+          {
+            ...processedEventData,
+            coverImageUrl,
+          },
+          userId,
+          coordinates
+        );
+        
+        // Notify friends about the new event
+        await notifyFriendsAboutEvent(userId, event.id, event.title);
+        
+        res.status(201).json(event);
+      }
     } catch (error) {
       console.error("Error creating event:", error);
       if (error instanceof Error) {
@@ -339,18 +1066,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Convert FormData string values back to their proper types
       const formData = { ...req.body };
       
-      // Convert boolean fields from strings
-      if (formData.isFree !== undefined) {
-        formData.isFree = formData.isFree === 'true';
-      }
-      if (formData.allowRsvp !== undefined) {
-        formData.allowRsvp = formData.allowRsvp === 'true';
-      }
+      // Convert boolean fields from strings (only process fields that exist in events table)
       if (formData.isRecurring !== undefined) {
         formData.isRecurring = formData.isRecurring === 'true';
       }
       
-      const eventData = insertEventSchema.partial().parse(formData);
+      // Convert numeric fields from strings
+      if (formData.maxAttendees !== undefined && formData.maxAttendees !== '') {
+        formData.maxAttendees = parseInt(formData.maxAttendees, 10);
+      }
+      if (formData.recurrenceInterval !== undefined && formData.recurrenceInterval !== '') {
+        formData.recurrenceInterval = parseInt(formData.recurrenceInterval, 10);
+      }
+      
+      // Use dedicated update schema that supports partial updates with validation
+      const eventData = updateEventSchema.parse(formData);
       
       // Use eventData directly - dates are already strings from form validation
       const processedEventData = { ...eventData };
@@ -363,8 +1093,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Handle cover image if uploaded
       if (req.file) {
-        const fileExtension = path.extname(req.file.originalname);
-        const fileName = `${req.file.filename}${fileExtension}`;
+        const mimeToExtension: Record<string, string> = {
+          'image/jpeg': '.jpg',
+          'image/png': '.png', 
+          'image/webp': '.webp'
+        };
+        
+        const safeExtension = mimeToExtension[req.file.mimetype];
+        if (!safeExtension) {
+          return res.status(400).json({ message: "Tipo de arquivo não suportado para capa do evento" });
+        }
+        
+        const fileName = `${req.file.filename}${safeExtension}`;
         const filePath = path.join(uploadsDir, fileName);
         
         // Rename file to include extension
@@ -428,6 +1168,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       const attendance = await storage.createAttendance(attendanceData);
+      
+      // Notify event creator about attendance changes
+      if (status === 'attending') {
+        const event = await storage.getEvent(eventId);
+        if (event && event.creatorId !== userId) {
+          const user = await storage.getUser(userId);
+          if (user && event) {
+            await createNotificationIfEnabled(
+              event.creatorId,
+              'notificarConfirmacaoPresenca',
+              {
+                type: 'event_attendance',
+                title: 'Nova confirmação de presença',
+                message: `${user.firstName || 'Alguém'} confirmou presença no seu evento "${event.title}"`,
+                relatedUserId: userId,
+                relatedEventId: eventId,
+                actionUrl: `/events/${eventId}`
+              }
+            );
+          }
+        }
+      } else if (status === 'not_going') {
+        const event = await storage.getEvent(eventId);
+        if (event && event.creatorId !== userId) {
+          const user = await storage.getUser(userId);
+          if (user && event) {
+            await createNotificationIfEnabled(
+              event.creatorId,
+              'notificarConfirmacaoPresenca',
+              {
+                type: 'event_attendance',
+                title: 'Cancelamento de presença',
+                message: `${user.firstName || 'Alguém'} cancelou a presença no seu evento "${event.title}"`,
+                relatedUserId: userId,
+                relatedEventId: eventId,
+                actionUrl: `/events/${eventId}`
+              }
+            );
+          }
+        }
+      }
+      
       res.json(attendance);
     } catch (error) {
       console.error("Error updating attendance:", error);
@@ -438,10 +1220,137 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/events/:id/attendees', async (req, res) => {
     try {
       const attendees = await storage.getEventAttendees(req.params.id);
-      res.json(attendees);
+      // Sanitize attendee data - remove sensitive fields
+      const sanitizedAttendees = attendees.map(user => ({
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        username: user.username,
+        profileImageUrl: user.profileImageUrl,
+        role: user.role,
+        authType: user.authType,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      }));
+      res.json(sanitizedAttendees);
     } catch (error) {
       console.error("Error fetching attendees:", error);
       res.status(500).json({ message: "Failed to fetch attendees" });
+    }
+  });
+
+  // Contribution routes for crowdfunding events
+  app.post('/api/events/:id/contribute', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const eventId = req.params.id;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
+
+      // Validate contribution data
+      const contributionData = {
+        amount: req.body.amount,
+        isPublic: req.body.isPublic || false,
+      };
+
+      // Basic validation
+      const amount = parseFloat(contributionData.amount);
+      if (isNaN(amount) || amount <= 0) {
+        return res.status(400).json({ message: "Valor de contribuição inválido" });
+      }
+
+      // Check if event exists and is crowdfunding type
+      const event = await storage.getEvent(eventId);
+      if (!event) {
+        return res.status(404).json({ message: "Evento não encontrado" });
+      }
+
+      if (event.priceType !== 'crowdfunding') {
+        return res.status(400).json({ message: "Este evento não aceita contribuições" });
+      }
+
+      // Check minimum contribution if set
+      if (event.minimumContribution && amount < parseFloat(event.minimumContribution)) {
+        return res.status(400).json({ 
+          message: `Valor mínimo para contribuição é R$ ${event.minimumContribution}` 
+        });
+      }
+
+      // Create contribution
+      const contribution = await storage.createContribution({
+        eventId,
+        userId,
+        amount: contributionData.amount,
+        isPublic: contributionData.isPublic,
+      });
+
+      // Auto-confirm attendance when contributing
+      await storage.createAttendance({
+        eventId,
+        userId,
+        status: 'attending',
+      });
+
+      // Create notification for event organizer
+      if (event.creatorId !== userId) {
+        const user = await storage.getUser(userId);
+        if (user) {
+          await createNotificationIfEnabled(
+            event.creatorId,
+            'notificarConfirmacaoPresenca',
+            {
+              type: 'event_contribution',
+              title: 'Nova contribuição recebida!',
+              message: `${user.firstName || 'Alguém'} contribuiu R$ ${amount.toFixed(2)} para "${event.title}"`,
+              relatedUserId: userId,
+              relatedEventId: eventId,
+              actionUrl: `/events/${eventId}`
+            }
+          );
+        }
+      }
+
+      res.json({ 
+        message: "Contribuição realizada com sucesso!",
+        contribution 
+      });
+    } catch (error) {
+      console.error("Error creating contribution:", error);
+      res.status(500).json({ message: "Falha ao processar contribuição" });
+    }
+  });
+
+  app.get('/api/events/:id/contributions', async (req, res) => {
+    try {
+      const eventId = req.params.id;
+      const contributions = await storage.getEventContributions(eventId);
+      
+      // Only return public contributions and sanitize data
+      const publicContributions = contributions
+        .filter(contrib => contrib.isPublic)
+        .map(contrib => ({
+          id: contrib.id,
+          amount: contrib.amount,
+          createdAt: contrib.createdAt,
+          userId: contrib.userId,
+        }));
+
+      res.json(publicContributions);
+    } catch (error) {
+      console.error("Error fetching contributions:", error);
+      res.status(500).json({ message: "Falha ao buscar contribuições" });
+    }
+  });
+
+  app.get('/api/events/:id/total-raised', async (req, res) => {
+    try {
+      const eventId = req.params.id;
+      const totals = await storage.getEventTotalRaised(eventId);
+      res.json(totals);
+    } catch (error) {
+      console.error("Error fetching total raised:", error);
+      res.status(500).json({ message: "Falha ao buscar total arrecadado" });
     }
   });
 
@@ -453,7 +1362,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "User ID not found" });
       }
       const friends = await storage.getFriends(userId);
-      res.json(friends);
+      // Sanitize friend data - remove sensitive fields
+      const sanitizedFriends = friends.map(user => ({
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        username: user.username,
+        profileImageUrl: user.profileImageUrl,
+        role: user.role,
+        authType: user.authType,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      }));
+      res.json(sanitizedFriends);
     } catch (error) {
       console.error("Error fetching friends:", error);
       res.status(500).json({ message: "Failed to fetch friends" });
@@ -480,19 +1401,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!requesterId) {
         return res.status(401).json({ message: "User ID not found" });
       }
-      const { addresseeId } = req.body;
+      const { addresseeId, username } = req.body;
       
-      if (requesterId === addresseeId) {
+      let actualAddresseeId = addresseeId;
+      
+      // If username is provided instead of addresseeId, look up the user ID
+      if (!actualAddresseeId && username) {
+        const addresseeUser = await storage.getUserByUsername(username);
+        if (!addresseeUser) {
+          return res.status(404).json({ message: "Usuário não encontrado" });
+        }
+        actualAddresseeId = addresseeUser.id;
+      }
+      
+      if (!actualAddresseeId) {
+        return res.status(400).json({ message: "addresseeId ou username deve ser fornecido" });
+      }
+      
+      if (requesterId === actualAddresseeId) {
         return res.status(400).json({ message: "Cannot send friend request to yourself" });
       }
       
       // Check if already friends or request exists
-      const areFriends = await storage.areFriends(requesterId, addresseeId);
+      const areFriends = await storage.areFriends(requesterId, actualAddresseeId);
       if (areFriends) {
         return res.status(400).json({ message: "Already friends" });
       }
       
-      const friendship = await storage.sendFriendRequest(requesterId, addresseeId);
+      // Check if a pending request already exists
+      const hasPendingRequest = await storage.hasPendingFriendRequest(requesterId, actualAddresseeId);
+      if (hasPendingRequest) {
+        return res.status(400).json({ message: "Solicitação de conexão já enviada" });
+      }
+      
+      const friendship = await storage.sendFriendRequest(requesterId, actualAddresseeId);
+      
+      // Notify user about friend request
+      const requester = await storage.getUser(requesterId);
+      if (requester) {
+        await createNotificationIfEnabled(
+          actualAddresseeId,
+          'notificarConviteAmigo',
+          {
+            type: 'friend_invite',
+            title: 'Nova solicitação de conexão',
+            message: `${requester.firstName || 'Alguém'} quer se conectar com você`,
+            relatedUserId: requesterId,
+            actionUrl: `/friends`
+          }
+        );
+      }
+      
       res.json(friendship);
     } catch (error) {
       console.error("Error sending friend request:", error);
@@ -513,6 +1472,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error responding to friend request:", error);
       res.status(500).json({ message: "Failed to respond to friend request" });
+    }
+  });
+
+  // Contacts matching endpoint
+  app.post('/api/friends/contacts', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
+      
+      const { contacts } = contactsMatchSchema.parse(req.body);
+      
+      // Normalize all phone numbers
+      const normalizedContacts: string[] = [];
+      for (const contact of contacts) {
+        const normalized = normalizePhoneNumber(contact);
+        if (normalized) {
+          normalizedContacts.push(normalized);
+        }
+      }
+      
+      // Generate HMACs for matching
+      const contactHmacs = normalizedContacts.map(phone => generatePhoneHmac(phone));
+      
+      // Find matching users (excluding the current user)
+      const matchingUsers = await storage.getUsersByPhoneHmacs(contactHmacs, userId);
+      
+      // Get existing friendships status
+      const usersWithFriendshipStatus = await Promise.all(
+        matchingUsers.map(async (user) => {
+          const areFriends = await storage.areFriends(userId, user.id);
+          const hasPendingRequest = await storage.hasPendingFriendRequest(userId, user.id);
+          
+          return {
+            id: user.id,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            username: user.username,
+            profileImageUrl: user.profileImageUrl,
+            friendshipStatus: areFriends ? 'friends' : hasPendingRequest ? 'pending' : 'none'
+          };
+        })
+      );
+      
+      res.json(usersWithFriendshipStatus);
+    } catch (error) {
+      console.error("Error matching contacts:", error);
+      res.status(500).json({ message: "Failed to match contacts" });
     }
   });
 
@@ -538,6 +1546,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       const rating = await storage.createRating(ratingData);
+      
+      // Notify event creator about new rating
+      const event = await storage.getEvent(eventId);
+      if (event && event.creatorId !== userId) {
+        const user = await storage.getUser(userId);
+        if (user && event) {
+          await createNotificationIfEnabled(
+            event.creatorId,
+            'notificarAvaliacaoEventoCriado',
+            {
+              type: 'event_rating',
+              title: 'Nova avaliação do seu evento',
+              message: `${user.firstName || 'Alguém'} avaliou seu evento "${event.title}"`,
+              relatedUserId: userId,
+              relatedEventId: eventId,
+              actionUrl: `/events/${eventId}`
+            }
+          );
+        }
+      }
+      
       res.json(rating);
     } catch (error) {
       console.error("Error creating rating:", error);
@@ -719,6 +1748,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error searching events:", error);
       res.status(500).json({ message: "Failed to search events" });
+    }
+  });
+
+  // Notification routes
+  app.get('/api/notifications', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const limit = parseInt(req.query.limit as string) || 20;
+      
+      const notifications = await storage.getNotifications(userId, limit);
+      res.json(notifications);
+    } catch (error) {
+      console.error("Error getting notifications:", error);
+      res.status(500).json({ message: "Failed to get notifications" });
+    }
+  });
+
+  app.get('/api/notifications/unread-count', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const count = await storage.getUnreadNotificationsCount(userId);
+      res.json({ count });
+    } catch (error) {
+      console.error("Error getting unread count:", error);
+      res.status(500).json({ message: "Failed to get unread count" });
+    }
+  });
+
+  app.patch('/api/notifications/:id/read', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const notificationId = req.params.id;
+      
+      const success = await storage.markNotificationAsRead(notificationId, userId);
+      if (success) {
+        res.json({ message: "Notification marked as read" });
+      } else {
+        res.status(404).json({ message: "Notification not found" });
+      }
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      res.status(500).json({ message: "Failed to mark notification as read" });
+    }
+  });
+
+  app.patch('/api/notifications/read-all', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      
+      await storage.markAllNotificationsAsRead(userId);
+      res.json({ message: "All notifications marked as read" });
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+      res.status(500).json({ message: "Failed to mark all notifications as read" });
+    }
+  });
+
+  // Notification preferences routes
+  app.get('/api/notifications/preferences', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      
+      const preferences = await storage.getNotificationPreferences(userId);
+      res.json(preferences);
+    } catch (error) {
+      console.error("Error getting notification preferences:", error);
+      res.status(500).json({ message: "Failed to get notification preferences" });
+    }
+  });
+
+  app.patch('/api/notifications/preferences', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const result = notificationConfigSchema.safeParse(req.body);
+      
+      if (!result.success) {
+        return res.status(400).json({ message: "Invalid notification config", errors: result.error.errors });
+      }
+      
+      const { chave, valor } = result.data;
+      const success = await storage.updateNotificationPreference(userId, chave, valor);
+      
+      if (success) {
+        res.json({ message: "Notification preference updated successfully" });
+      } else {
+        res.status(500).json({ message: "Failed to update notification preference" });
+      }
+    } catch (error) {
+      console.error("Error updating notification preference:", error);
+      res.status(500).json({ message: "Failed to update notification preference" });
     }
   });
 

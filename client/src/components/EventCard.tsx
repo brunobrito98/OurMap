@@ -1,13 +1,40 @@
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { useLocation } from "wouter";
+import { useToast } from "@/hooks/use-toast";
 import type { EventWithDetails } from "@shared/schema";
+import { Music, Utensils, Dumbbell, Palette, Laptop, Calendar, Heart, MapPin } from "lucide-react";
 
 interface EventCardProps {
   event: EventWithDetails;
   onClick: () => void;
+  isAuthenticated?: boolean;
 }
 
-export default function EventCard({ event, onClick }: EventCardProps) {
+export default function EventCard({ event, onClick, isAuthenticated = false }: EventCardProps) {
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  
+  const handleFavoriteClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Evita que o clique se propague para o card
+    
+    if (!isAuthenticated) {
+      toast({
+        title: "Login necessário",
+        description: "Faça login para favoritar eventos!",
+        variant: "destructive",
+      });
+      navigate("/");
+      return;
+    }
+    
+    // TODO: Implementar lógica de favoritar para usuários logados
+    toast({
+      title: "Em breve",
+      description: "Funcionalidade de favoritos será implementada em breve!",
+    });
+  };
+  
   const formatDate = (date: string) => {
     const eventDate = new Date(date);
     return eventDate.toLocaleDateString('pt-BR', {
@@ -24,14 +51,14 @@ export default function EventCard({ event, onClick }: EventCardProps) {
   };
 
   const getCategoryIcon = (category: string) => {
-    const icons: Record<string, string> = {
-      music: 'fas fa-music',
-      food: 'fas fa-utensils',
-      sports: 'fas fa-running',
-      art: 'fas fa-palette',
-      tech: 'fas fa-laptop-code',
+    const icons: Record<string, React.ComponentType<any>> = {
+      music: Music,
+      food: Utensils,
+      sports: Dumbbell,
+      art: Palette,
+      tech: Laptop,
     };
-    return icons[category] || 'fas fa-calendar';
+    return icons[category] || Calendar;
   };
 
   const getCategoryColor = (category: string) => {
@@ -64,17 +91,23 @@ export default function EventCard({ event, onClick }: EventCardProps) {
         <div className="absolute top-4 left-4">
           <div className="bg-white/90 backdrop-blur-sm rounded-lg px-3 py-1">
             <p className="text-xs font-semibold text-foreground" data-testid={`text-event-day-${event.id}`}>
-              {formatDate(event.startDate).split(' ')[0]}
+              {formatDate(event.dateTime.toString()).split(' ')[0]}
             </p>
             <p className="text-xs text-muted-foreground" data-testid={`text-event-month-${event.id}`}>
-              {formatDate(event.startDate).split(' ')[1]}
+              {formatDate(event.dateTime.toString()).split(' ')[1]}
             </p>
           </div>
         </div>
         <div className="absolute top-4 right-4">
-          <button className="bg-white/90 backdrop-blur-sm rounded-full p-2 hover:bg-white transition-colors">
+          <button 
+            onClick={handleFavoriteClick}
+            className={`bg-white/90 backdrop-blur-sm rounded-full p-2 hover:bg-white transition-colors ${
+              !isAuthenticated ? 'opacity-75' : ''
+            }`}
+            data-testid={`button-favorite-${event.id}`}
+          >
             <i 
-              className={`${event.userAttendance?.status === 'confirmed' ? 'fas fa-heart text-primary' : 'far fa-heart text-muted-foreground'}`}
+              className={`${event.userAttendance?.status === 'attending' ? 'fas fa-heart text-primary' : 'far fa-heart text-muted-foreground'}`}
             ></i>
           </button>
         </div>
@@ -83,12 +116,15 @@ export default function EventCard({ event, onClick }: EventCardProps) {
       <div className="p-4">
         <div className="flex items-center space-x-2 mb-2">
           <Badge className={`text-xs ${getCategoryColor(event.category)}`}>
-            <i className={`${getCategoryIcon(event.category)} mr-1`}></i>
+            {(() => {
+              const IconComponent = getCategoryIcon(event.category);
+              return <IconComponent className="w-3 h-3 mr-1" />;
+            })()}
             {event.category.charAt(0).toUpperCase() + event.category.slice(1)}
           </Badge>
           <span className="text-muted-foreground text-xs">•</span>
           <span className="text-muted-foreground text-xs" data-testid={`text-event-distance-${event.id}`}>
-            <i className="fas fa-map-marker-alt mr-1"></i>
+            <MapPin className="w-3 h-3 mr-1" />
             {event.distance ? `${event.distance.toFixed(1)} km` : 'N/A'}
           </span>
         </div>
@@ -97,11 +133,11 @@ export default function EventCard({ event, onClick }: EventCardProps) {
           {event.title}
         </h4>
         <p className="text-muted-foreground text-sm mb-3" data-testid={`text-event-datetime-${event.id}`}>
-          {new Date(event.startDate).toLocaleDateString('pt-BR', {
+          {new Date(event.dateTime).toLocaleDateString('pt-BR', {
             weekday: 'long',
             day: 'numeric',
             month: 'long'
-          })} • {formatTime(event.startDate)}
+          })} • {formatTime(event.dateTime.toString())}
         </p>
         
         <div className="flex items-center justify-between">
@@ -123,7 +159,7 @@ export default function EventCard({ event, onClick }: EventCardProps) {
             </span>
           </div>
           <span className="text-primary font-semibold" data-testid={`text-event-price-${event.id}`}>
-            {event.isFree ? 'Gratuito' : `R$ ${event.price}`}
+            {!event.price || event.price === "0" ? 'Gratuito' : `R$ ${event.price}`}
           </span>
         </div>
       </div>

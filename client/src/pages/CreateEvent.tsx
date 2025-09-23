@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import ImageUpload from "@/components/ImageUpload";
 import MapComponent from "@/components/MapComponent";
@@ -15,20 +17,31 @@ import { useToast } from "@/hooks/use-toast";
 import { insertEventSchema, type InsertEvent } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { X, Save, Loader2, Gift, Ticket, Heart } from "lucide-react";
 
 const categories = [
-  { value: "music", label: "Música", icon: "fas fa-music" },
-  { value: "food", label: "Gastronomia", icon: "fas fa-utensils" },
+  { value: "festas", label: "Festas", icon: "fas fa-glass-cheers" },
   { value: "sports", label: "Esportes", icon: "fas fa-running" },
-  { value: "art", label: "Arte", icon: "fas fa-palette" },
+  { value: "corrida", label: "Corrida", icon: "fas fa-running-fast" },
+  { value: "volei", label: "Vôlei", icon: "fas fa-volleyball" },
+  { value: "ciclismo", label: "Ciclismo", icon: "fas fa-bicycle" },
+  { value: "futebol", label: "Futebol", icon: "fas fa-futbol" },
   { value: "tech", label: "Tecnologia", icon: "fas fa-laptop-code" },
-  { value: "other", label: "Outros", icon: "fas fa-calendar" },
+  { value: "religioso", label: "Religioso", icon: "fas fa-pray" },
+  { value: "motoclube", label: "Encontro de Motoclube", icon: "fas fa-motorcycle" },
+  { value: "encontros", label: "Encontros", icon: "fas fa-users" },
+  { value: "piquenique", label: "Piquenique", icon: "fas fa-tree" },
+  { value: "food", label: "Gastronomia", icon: "fas fa-utensils" },
+  { value: "art", label: "Arte", icon: "fas fa-palette" },
+  { value: "music", label: "Música", icon: "fas fa-music" },
+  { value: "outros", label: "Outros", icon: "fas fa-calendar" },
 ];
 
 const recurringOptions = [
-  { value: "weekly", label: "Toda semana" },
-  { value: "monthly", label: "Todo mês" },
-  { value: "yearly", label: "Todo ano" },
+  { value: "daily", label: "Diariamente" },
+  { value: "weekly", label: "Semanalmente" },
+  { value: "biweekly", label: "A cada 15 dias" },
+  { value: "monthly", label: "Mensalmente" },
 ];
 
 export default function CreateEvent() {
@@ -38,6 +51,7 @@ export default function CreateEvent() {
   const queryClient = useQueryClient();
   const [coverImage, setCoverImage] = useState<File | null>(null);
   const [mapCoordinates, setMapCoordinates] = useState<{ lat: number; lng: number } | null>(null);
+  const [priceType, setPriceType] = useState<"free" | "paid" | "crowdfunding">("free");
 
   const isEditing = !!id;
 
@@ -54,8 +68,15 @@ export default function CreateEvent() {
       description: "",
       category: "",
       dateTime: "",
+      endTime: "",
       location: "",
+      priceType: "free",
+      price: "0",
+      fundraisingGoal: "",
+      minimumContribution: "",
       isRecurring: false,
+      recurrenceType: undefined,
+      recurrenceEndDate: "",
       iconEmoji: "📅",
     },
   });
@@ -63,16 +84,32 @@ export default function CreateEvent() {
   // Update form when event data is loaded
   useEffect(() => {
     if (eventData && isEditing) {
+      const formatDateTime = (dateTime: string) => {
+        const date = new Date(dateTime);
+        const offset = date.getTimezoneOffset() * 60000;
+        const localDate = new Date(date.getTime() - offset);
+        return localDate.toISOString().slice(0, 16);
+      };
+
       form.reset({
         title: eventData.title,
         description: eventData.description || "",
         category: eventData.category,
-        dateTime: new Date(eventData.dateTime).toISOString().slice(0, 16),
+        dateTime: formatDateTime(eventData.dateTime),
+        endTime: eventData.endTime ? formatDateTime(eventData.endTime) : "",
         location: eventData.location,
+        priceType: eventData.priceType || "free",
+        price: eventData.price || "0",
+        fundraisingGoal: eventData.fundraisingGoal || "",
+        minimumContribution: eventData.minimumContribution || "",
         isRecurring: eventData.isRecurring,
         recurrenceType: eventData.recurrenceType || undefined,
+        recurrenceEndDate: eventData.recurrenceEndDate ? formatDateTime(eventData.recurrenceEndDate) : "",
         iconEmoji: eventData.iconEmoji || "📅",
       });
+      
+      // Set priceType state based on event data
+      setPriceType(eventData.priceType || "free");
       
       setMapCoordinates({
         lat: parseFloat(eventData.latitude),
@@ -80,6 +117,28 @@ export default function CreateEvent() {
       });
     }
   }, [eventData, isEditing, form]);
+
+  // Calculate event duration
+  const calculateDuration = (startTime: string, endTime: string) => {
+    if (!startTime || !endTime) return "";
+    
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    const diffMs = end.getTime() - start.getTime();
+    
+    if (diffMs <= 0) return "";
+    
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hours === 0) {
+      return `${minutes} minutos`;
+    } else if (minutes === 0) {
+      return `${hours} ${hours === 1 ? 'hora' : 'horas'}`;
+    } else {
+      return `${hours} ${hours === 1 ? 'hora' : 'horas'} e ${minutes} minutos`;
+    }
+  };
 
   const createEventMutation = useMutation({
     mutationFn: async (data: FormData) => {
@@ -131,18 +190,58 @@ export default function CreateEvent() {
     const formData = new FormData();
     
     // Append form fields
-    formData.append('title', data.title);
-    formData.append('dateTime', data.dateTime);
-    formData.append('location', data.location);
-    formData.append('category', data.category);
+    formData.append('title', data.title || '');
+    // Convert datetime-local string to ISO string with timezone
+    const dateTimeWithTimezone = data.dateTime ? new Date(data.dateTime).toISOString() : '';
+    formData.append('dateTime', dateTimeWithTimezone);
+    
+    // Add endTime if provided
+    if (data.endTime) {
+      const endTimeWithTimezone = new Date(data.endTime).toISOString();
+      formData.append('endTime', endTimeWithTimezone);
+    }
+    
+    formData.append('location', data.location || '');
+    formData.append('category', data.category || '');
     
     if (data.description) {
       formData.append('description', data.description);
     }
+    
+    // Handle recurring event fields
     if (data.isRecurring) {
       formData.append('isRecurring', 'true');
-      if (data.recurrenceType) {
+      if (data.recurrenceType && data.recurrenceType.trim() !== '') {
         formData.append('recurrenceType', data.recurrenceType);
+      }
+      // Add recurrence interval (default to 1 if not specified)
+      formData.append('recurrenceInterval', data.recurrenceInterval?.toString() || '1');
+      // Add recurrence end date
+      if (data.recurrenceEndDate) {
+        const recurrenceEndDateWithTimezone = new Date(data.recurrenceEndDate).toISOString();
+        formData.append('recurrenceEndDate', recurrenceEndDateWithTimezone);
+      }
+    } else {
+      formData.append('isRecurring', 'false');
+    }
+    
+    // Add price type and related fields
+    formData.append('priceType', data.priceType || 'free');
+    
+    // Add price for paid events
+    if (data.priceType === 'paid') {
+      formData.append('price', data.price || "0");
+    } else {
+      formData.append('price', "0");
+    }
+    
+    // Add crowdfunding fields
+    if (data.priceType === 'crowdfunding') {
+      if (data.fundraisingGoal) {
+        formData.append('fundraisingGoal', data.fundraisingGoal);
+      }
+      if (data.minimumContribution) {
+        formData.append('minimumContribution', data.minimumContribution);
       }
     }
     
@@ -210,7 +309,7 @@ export default function CreateEvent() {
             size="sm"
             data-testid="button-cancel"
           >
-            <i className="fas fa-times text-xl"></i>
+            <X className="w-5 h-5" />
           </Button>
           <h2 className="font-semibold text-foreground flex-1">
             {isEditing ? "Editar Evento" : "Criar Evento"}
@@ -223,12 +322,12 @@ export default function CreateEvent() {
           >
             {createEventMutation.isPending ? (
               <>
-                <i className="fas fa-spinner fa-spin"></i>
+                <Loader2 className="w-4 h-4 animate-spin" />
                 <span>Salvando...</span>
               </>
             ) : (
               <>
-                <i className="fas fa-save"></i>
+                <Save className="w-4 h-4" />
                 <span>Salvar</span>
               </>
             )}
@@ -328,7 +427,7 @@ export default function CreateEvent() {
                 name="dateTime"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Data e Hora do Evento *</FormLabel>
+                    <FormLabel>Data e Hora de Início *</FormLabel>
                     <FormControl>
                       <Input
                         type="datetime-local"
@@ -341,6 +440,34 @@ export default function CreateEvent() {
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="endTime"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Data e Hora de Fim (opcional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="datetime-local"
+                        {...field}
+                        value={field.value || ""}
+                        data-testid="input-endtime"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Duration Display */}
+              {form.watch("dateTime") && form.watch("endTime") && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-sm text-blue-800">
+                    <span className="font-medium">Duração do evento:</span> {calculateDuration(form.watch("dateTime"), form.watch("endTime"))}
+                  </p>
+                </div>
+              )}
 
               {/* Recurring Event Option */}
               <div className="bg-secondary rounded-xl p-4">
@@ -364,12 +491,13 @@ export default function CreateEvent() {
                 />
                 
                 {form.watch("isRecurring") && (
-                  <div className="mt-3">
+                  <div className="mt-3 space-y-3">
                     <FormField
                       control={form.control}
                       name="recurrenceType"
                       render={({ field }) => (
                         <FormItem>
+                          <FormLabel>Frequência da Recorrência *</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value || ""}>
                             <FormControl>
                               <SelectTrigger data-testid="select-recurrence-type">
@@ -384,6 +512,28 @@ export default function CreateEvent() {
                               ))}
                             </SelectContent>
                           </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="recurrenceEndDate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Repetir até quando? *</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="datetime-local"
+                              {...field}
+                              value={field.value || ""}
+                              data-testid="input-recurrence-end-date"
+                            />
+                          </FormControl>
+                          <p className="text-xs text-muted-foreground">
+                            Define até quando os eventos recorrentes serão criados
+                          </p>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -435,6 +585,141 @@ export default function CreateEvent() {
               <p className="text-xs text-muted-foreground">
                 Clique ou arraste o pin para definir localização exata
               </p>
+            </div>
+
+            {/* Ticket Type Section */}
+            <div className="space-y-4">
+              <h3 className="font-semibold text-foreground">Tipo de Ingresso</h3>
+              
+              <div className="bg-secondary rounded-xl p-4">
+                <div className="space-y-4">
+                  <RadioGroup
+                    value={priceType}
+                    onValueChange={(value: "free" | "paid" | "crowdfunding") => {
+                      setPriceType(value);
+                      form.setValue("priceType", value);
+                      if (value === "free") {
+                        form.setValue("price", "0");
+                        form.setValue("fundraisingGoal", "");
+                        form.setValue("minimumContribution", "");
+                      } else if (value === "paid") {
+                        form.setValue("fundraisingGoal", "");
+                        form.setValue("minimumContribution", "");
+                      } else if (value === "crowdfunding") {
+                        form.setValue("price", "0");
+                      }
+                    }}
+                    className="space-y-3"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="free" id="free" data-testid="radio-free" />
+                      <Label htmlFor="free" className="flex items-center space-x-2 cursor-pointer">
+                        <Gift className="w-5 h-5 text-green-600" />
+                        <span>Evento Gratuito</span>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="paid" id="paid" data-testid="radio-paid" />
+                      <Label htmlFor="paid" className="flex items-center space-x-2 cursor-pointer">
+                        <Ticket className="w-5 h-5 text-blue-600" />
+                        <span>Evento Pago</span>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="crowdfunding" id="crowdfunding" data-testid="radio-crowdfunding" />
+                      <Label htmlFor="crowdfunding" className="flex items-center space-x-2 cursor-pointer">
+                        <Heart className="w-5 h-5 text-pink-600" />
+                        <span>Vaquinha</span>
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                  
+                  {/* Price field - only show when paid is selected */}
+                  {priceType === "paid" && (
+                    <div className="mt-4">
+                      <FormField
+                        control={form.control}
+                        name="price"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Preço do Ingresso (R$) *</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0.01"
+                                placeholder="Ex: 25.00"
+                                {...field}
+                                value={field.value || ""}
+                                data-testid="input-price"
+                              />
+                            </FormControl>
+                            <p className="text-xs text-muted-foreground">
+                              Digite o valor do ingresso em reais
+                            </p>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
+
+                  {/* Crowdfunding fields - only show when crowdfunding is selected */}
+                  {priceType === "crowdfunding" && (
+                    <div className="mt-4 space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="fundraisingGoal"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Meta de Arrecadação (R$) *</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="1"
+                                placeholder="Ex: 2000.00"
+                                {...field}
+                                value={field.value || ""}
+                                data-testid="input-fundraising-goal"
+                              />
+                            </FormControl>
+                            <p className="text-xs text-muted-foreground">
+                              Valor total estimado para que o evento aconteça
+                            </p>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="minimumContribution"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Valor Mínimo por Contribuição (R$)</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0.01"
+                                placeholder="Ex: 10.00 (opcional)"
+                                {...field}
+                                value={field.value || ""}
+                                data-testid="input-minimum-contribution"
+                              />
+                            </FormControl>
+                            <p className="text-xs text-muted-foreground">
+                              Valor mínimo para garantir a seriedade dos apoios (opcional)
+                            </p>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
           </form>

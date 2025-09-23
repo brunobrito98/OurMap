@@ -13,18 +13,120 @@ import EventRatingForm from "@/components/EventRatingForm";
 import Rating from "@/components/ui/rating";
 import OrganizerRating from "@/components/OrganizerRating";
 import EventRatingsDisplay from "@/components/EventRatingsDisplay";
+import { 
+  ArrowLeft, 
+  Home, 
+  Edit, 
+  Share2, 
+  Calendar, 
+  Clock, 
+  MapPin, 
+  Navigation,
+  Users,
+  Check,
+  Loader2,
+  CalendarX,
+  Music,
+  Utensils,
+  Zap,
+  Palette,
+  Laptop,
+  X,
+  Heart,
+  Target
+} from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useState } from "react";
 
 export default function EventDetails() {
   const { id } = useParams();
   const [, navigate] = useLocation();
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  // Estados para modal de contribuição
+  const [isContributionModalOpen, setIsContributionModalOpen] = useState(false);
+  const [contributionAmount, setContributionAmount] = useState("");
+  const [isPublicContribution, setIsPublicContribution] = useState(true);
 
   const { data: event, isLoading } = useQuery<EventWithDetails>({
     queryKey: ['/api/events', id],
     enabled: !!id,
   });
+
+  // Fetch attendees with their profile photos
+  const { data: attendees = [] } = useQuery<any[]>({
+    queryKey: ['/api/events', id, 'attendees'],
+    enabled: !!id,
+  });
+
+  // Query para dados de vaquinha
+  const { data: fundraisingData } = useQuery<{ totalRaised: number; contributionCount: number }>({
+    queryKey: ['/api/events', id, 'total-raised'],
+    enabled: !!id && event?.priceType === 'crowdfunding',
+  });
+
+  const handleAttendanceAction = () => {
+    if (!isAuthenticated) {
+      toast({
+        title: "Login necessário",
+        description: "Faça login para apoiar este evento!",
+        variant: "destructive",
+      });
+        setTimeout(() => {
+          const fullPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+          window.location.href = `/login?redirect=${encodeURIComponent(fullPath)}`;
+        }, 500);
+      return;
+    }
+    
+    // Para vaquinhas, abrir modal de contribuição
+    if (event?.priceType === 'crowdfunding') {
+      setIsContributionModalOpen(true);
+      return;
+    }
+    
+    // Para eventos normais, confirma diretamente
+    if (!isConfirmed) {
+      attendMutation.mutate('attending');
+    }
+    // Se já confirmado, o dialog será aberto pelo AlertDialog
+  };
+
+  const handleContribution = () => {
+    if (!contributionAmount || parseFloat(contributionAmount) <= 0) {
+      toast({
+        title: "Valor inválido",
+        description: "Por favor, insira um valor válido para sua contribuição.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Verificar valor mínimo se definido
+    if (event?.minimumContribution && parseFloat(contributionAmount) < parseFloat(event.minimumContribution)) {
+      toast({
+        title: "Valor abaixo do mínimo",
+        description: `O valor mínimo para contribuição é R$ ${event.minimumContribution}.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    contributionMutation.mutate({
+      amount: contributionAmount,
+      isPublic: isPublicContribution,
+    });
+  };
+
+  const handleCancelAttendance = () => {
+    attendMutation.mutate('not_going');
+  };
 
   const attendMutation = useMutation({
     mutationFn: async (status: string) => {
@@ -32,6 +134,7 @@ export default function EventDetails() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/events', id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/events', id, 'attendees'] });
       toast({
         title: "Sucesso",
         description: "Sua confirmação foi atualizada!",
@@ -45,13 +148,51 @@ export default function EventDetails() {
           variant: "destructive",
         });
         setTimeout(() => {
-          window.location.href = "/api/login";
+          const fullPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+          window.location.href = `/login?redirect=${encodeURIComponent(fullPath)}`;
         }, 500);
         return;
       }
       toast({
         title: "Erro",
         description: "Falha ao atualizar confirmação",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Mutation para contribuições em vaquinhas
+  const contributionMutation = useMutation({
+    mutationFn: async (contributionData: { amount: string; isPublic: boolean }) => {
+      await apiRequest('POST', `/api/events/${id}/contribute`, contributionData);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/events', id] });
+      queryClient.invalidateQueries({ queryKey: ['/api/events', id, 'attendees'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/events', id, 'contributions'] });
+      setIsContributionModalOpen(false);
+      setContributionAmount("");
+      toast({
+        title: "Contribuição realizada!",
+        description: "Obrigado por apoiar este evento!",
+      });
+    },
+    onError: (error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Unauthorized",
+          description: "You are logged out. Logging in again...",
+          variant: "destructive",
+        });
+        setTimeout(() => {
+          const fullPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+          window.location.href = `/login?redirect=${encodeURIComponent(fullPath)}`;
+        }, 500);
+        return;
+      }
+      toast({
+        title: "Erro",
+        description: "Falha ao realizar contribuição",
         variant: "destructive",
       });
     },
@@ -76,9 +217,10 @@ export default function EventDetails() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <i className="fas fa-calendar-times text-4xl text-muted-foreground mb-4"></i>
+          <CalendarX className="w-16 h-16 text-muted-foreground mb-4 mx-auto" />
           <p className="text-muted-foreground">Evento não encontrado</p>
           <Button onClick={() => navigate("/")} className="mt-4">
+            <Home className="w-4 h-4 mr-2" />
             Voltar ao início
           </Button>
         </div>
@@ -88,7 +230,7 @@ export default function EventDetails() {
 
   const isOrganizer = Boolean(user && typeof user === 'object' && user !== null && 'id' in user && user.id === event?.organizer?.id);
   const userAttendance = event.userAttendance?.status;
-  const isConfirmed = userAttendance === 'confirmed';
+  const isConfirmed = userAttendance === 'attending';
 
   const formatDate = (date: string | Date) => {
     return new Date(date).toLocaleDateString('pt-BR', {
@@ -106,14 +248,14 @@ export default function EventDetails() {
   };
 
   const getCategoryIcon = (category: string) => {
-    const icons: Record<string, string> = {
-      music: 'fas fa-music',
-      food: 'fas fa-utensils',
-      sports: 'fas fa-running',
-      art: 'fas fa-palette',
-      tech: 'fas fa-laptop-code',
+    const iconMap: Record<string, React.ComponentType<{className?: string}>> = {
+      music: Music,
+      food: Utensils,
+      sports: Zap,
+      art: Palette,
+      tech: Laptop,
     };
-    return icons[category] || 'fas fa-calendar';
+    return iconMap[category] || Calendar;
   };
 
   const getCategoryColor = (category: string) => {
@@ -140,7 +282,7 @@ export default function EventDetails() {
               data-testid="button-back"
               title="Voltar"
             >
-              <i className="fas fa-arrow-left text-xl"></i>
+              <ArrowLeft className="w-5 h-5" />
             </Button>
             <h2 className="font-semibold text-foreground">Detalhes do Evento</h2>
           </div>
@@ -152,7 +294,7 @@ export default function EventDetails() {
               data-testid="button-home"
               title="Ir para início"
             >
-              <i className="fas fa-home text-xl"></i>
+              <Home className="w-5 h-5" />
             </Button>
             {isOrganizer && (
               <Button
@@ -162,7 +304,7 @@ export default function EventDetails() {
                 data-testid="button-edit"
                 title="Editar evento"
               >
-                <i className="fas fa-edit text-xl"></i>
+                <Edit className="w-5 h-5" />
               </Button>
             )}
             <Button 
@@ -171,7 +313,7 @@ export default function EventDetails() {
               data-testid="button-share"
               title="Compartilhar"
             >
-              <i className="fas fa-share text-xl"></i>
+              <Share2 className="w-5 h-5" />
             </Button>
           </div>
         </div>
@@ -195,13 +337,13 @@ export default function EventDetails() {
               </h1>
               <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-1 text-white/90">
-                  <i className="fas fa-calendar text-sm"></i>
+                  <Calendar className="w-4 h-4" />
                   <span className="text-sm" data-testid="text-event-date">
                     {formatDate(event.dateTime)}
                   </span>
                 </div>
                 <div className="flex items-center space-x-1 text-white/90">
-                  <i className="fas fa-clock text-sm"></i>
+                  <Clock className="w-4 h-4" />
                   <span className="text-sm" data-testid="text-event-time">
                     {formatTime(event.dateTime)}
                   </span>
@@ -233,14 +375,17 @@ export default function EventDetails() {
           {/* Category and Distance */}
           <div className="flex items-center space-x-3 mb-6">
             <Badge className={getCategoryColor(event.category)}>
-              <i className={`${getCategoryIcon(event.category)} mr-1`}></i>
+              {(() => {
+                const IconComponent = getCategoryIcon(event.category);
+                return <IconComponent className="w-3 h-3 mr-1" />;
+              })()}
               {event.category.charAt(0).toUpperCase() + event.category.slice(1)}
             </Badge>
             {event.distance && (
               <>
                 <span className="text-muted-foreground text-xs">•</span>
-                <span className="text-muted-foreground text-xs" data-testid="text-event-distance">
-                  <i className="fas fa-map-marker-alt mr-1"></i>
+                <span className="text-muted-foreground text-xs flex items-center" data-testid="text-event-distance">
+                  <MapPin className="w-3 h-3 mr-1" />
                   {event.distance.toFixed(1)} km
                 </span>
               </>
@@ -257,13 +402,72 @@ export default function EventDetails() {
             </div>
           )}
 
+          {/* Progresso da Vaquinha */}
+          {event?.priceType === 'crowdfunding' && (
+            <div className="bg-gradient-to-r from-pink-50 to-purple-50 dark:from-pink-950/20 dark:to-purple-950/20 border border-pink-200 dark:border-pink-800 rounded-2xl p-4 mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <Heart className="w-5 h-5 text-pink-600" />
+                  Progresso da Vaquinha
+                </h3>
+                {fundraisingData && (
+                  <span className="text-sm text-muted-foreground">
+                    {fundraisingData.contributionCount} apoiador{fundraisingData.contributionCount !== 1 ? 'es' : ''}
+                  </span>
+                )}
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-2xl font-bold text-pink-600">
+                    R$ {fundraisingData?.totalRaised?.toFixed(2) || '0,00'}
+                  </span>
+                  {event.fundraisingGoal && (
+                    <span className="text-sm text-muted-foreground">
+                      de R$ {parseFloat(event.fundraisingGoal).toFixed(2)}
+                    </span>
+                  )}
+                </div>
+                
+                {event.fundraisingGoal && (
+                  <div className="space-y-2">
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
+                      <div 
+                        className="bg-gradient-to-r from-pink-500 to-purple-600 h-full transition-all duration-300 ease-out"
+                        style={{
+                          width: `${Math.min(
+                            ((fundraisingData?.totalRaised || 0) / parseFloat(event.fundraisingGoal)) * 100,
+                            100
+                          )}%`
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>
+                        {fundraisingData && event.fundraisingGoal 
+                          ? Math.round(((fundraisingData.totalRaised || 0) / parseFloat(event.fundraisingGoal)) * 100)
+                          : 0
+                        }% da meta
+                      </span>
+                      {event.minimumContribution && (
+                        <span>
+                          Mín: R$ {parseFloat(event.minimumContribution).toFixed(2)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Location Card */}
           <div className="bg-card border border-border rounded-2xl p-4 mb-6">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-foreground">Localização</h3>
               {event.distance && (
-                <span className="text-sm text-primary font-medium">
-                  <i className="fas fa-map-marker-alt mr-1"></i>
+                <span className="text-sm text-primary font-medium flex items-center">
+                  <MapPin className="w-4 h-4 mr-1" />
                   {event.distance.toFixed(1)} km
                 </span>
               )}
@@ -289,7 +493,7 @@ export default function EventDetails() {
               onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${event.latitude},${event.longitude}`, '_blank')}
               data-testid="button-directions"
             >
-              <i className="fas fa-directions mr-2"></i>Como chegar
+              <Navigation className="w-4 h-4 mr-2" />Como chegar
             </Button>
           </div>
 
@@ -299,24 +503,56 @@ export default function EventDetails() {
               <h3 className="font-semibold text-foreground">
                 Confirmados ({event.attendanceCount})
               </h3>
-              <button className="text-primary text-sm font-medium" data-testid="button-view-all-attendees">
-                Ver todos
-              </button>
+              {attendees.length > 5 && (
+                <button className="text-primary text-sm font-medium flex items-center" data-testid="button-view-all-attendees">
+                  <Users className="w-4 h-4 mr-1" />
+                  Ver todos
+                </button>
+              )}
             </div>
             
-            <div className="flex space-x-3 overflow-x-auto pb-2">
-              {/* Show placeholder attendees since we don't fetch the full list */}
-              {[...Array(Math.min(5, event.attendanceCount))].map((_, i) => (
-                <div key={i} className="w-12 h-12 bg-muted rounded-full flex-shrink-0"></div>
+            <div className="space-y-3">
+              {attendees.slice(0, 5).map((attendee: any) => (
+                <button
+                  key={attendee.id}
+                  onClick={() => attendee.username && navigate(`/profile/@${attendee.username}`)}
+                  className="flex items-center space-x-3 w-full text-left p-2 rounded-lg hover:bg-accent/5 transition-colors"
+                  data-testid={`link-attendee-profile-${attendee.id}`}
+                >
+                  <Avatar className="w-10 h-10 flex-shrink-0">
+                    <AvatarImage src={attendee.profileImageUrl || undefined} />
+                    <AvatarFallback>
+                      {attendee.firstName?.[0]}{attendee.lastName?.[0]}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-foreground truncate" data-testid={`text-attendee-name-${attendee.id}`}>
+                      {attendee.firstName && attendee.lastName 
+                        ? `${attendee.firstName} ${attendee.lastName}`
+                        : attendee.firstName || attendee.lastName || 'Usuário'}
+                    </p>
+                    {attendee.username && (
+                      <p className="text-sm text-muted-foreground truncate" data-testid={`text-attendee-username-${attendee.id}`}>
+                        @{attendee.username}
+                      </p>
+                    )}
+                  </div>
+                </button>
               ))}
+              {attendees.length === 0 && event.attendanceCount > 0 && (
+                <div className="flex items-center justify-center text-muted-foreground text-sm py-4">
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Carregando confirmados...
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Friends Going Section */}
-          {event.friendsGoing && event.friendsGoing.length > 0 && (
+          {/* Friends Going Section - apenas para usuários logados */}
+          {isAuthenticated && event.friendsGoing && event.friendsGoing.length > 0 && (
             <div className="bg-accent/5 border border-accent/20 rounded-2xl p-4 mb-6">
               <div className="flex items-center space-x-2 mb-3">
-                <i className="fas fa-users text-accent"></i>
+                <Users className="w-5 h-5 text-accent" />
                 <h3 className="font-semibold text-foreground">Seus amigos vão</h3>
               </div>
               <div className="flex items-center space-x-3">
@@ -361,26 +597,146 @@ export default function EventDetails() {
               Entrada livre
             </p>
           </div>
-          <Button
-            onClick={() => attendMutation.mutate(isConfirmed ? 'not_going' : 'confirmed')}
-            disabled={attendMutation.isPending}
-            className={`flex-1 py-4 text-lg ${isConfirmed ? 'bg-green-600 hover:bg-green-700' : ''}`}
-            data-testid="button-confirm-attendance"
-          >
-            {attendMutation.isPending ? (
-              "Atualizando..."
-            ) : isConfirmed ? (
-              <>
-                <i className="fas fa-check mr-2"></i>Confirmado
-              </>
-            ) : (
-              <>
-                <i className="fas fa-check mr-2"></i>Confirmar Presença
-              </>
-            )}
-          </Button>
+          {isConfirmed ? (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  disabled={attendMutation.isPending}
+                  className="flex-1 py-4 text-lg bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300"
+                  variant="outline"
+                  data-testid="button-cancel-attendance"
+                >
+                  {attendMutation.isPending ? (
+                    "Atualizando..."
+                  ) : (
+                    <>
+                      <X className="w-4 h-4 mr-2" />Cancelar Presença
+                    </>
+                  )}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Cancelar presença</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Tem certeza de que deseja cancelar sua presença neste evento? 
+                    Esta ação removerá você da lista de confirmados.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel data-testid="button-cancel-dialog">Não</AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={handleCancelAttendance}
+                    disabled={attendMutation.isPending}
+                    data-testid="button-confirm-cancel"
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    Sim, cancelar
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : (
+            <Button
+              onClick={handleAttendanceAction}
+              disabled={attendMutation.isPending}
+              className={`flex-1 py-4 text-lg ${!isAuthenticated ? 'opacity-90' : ''}`}
+              data-testid="button-confirm-attendance"
+            >
+              {attendMutation.isPending ? (
+                "Atualizando..."
+              ) : event?.priceType === 'crowdfunding' ? (
+                <>
+                  <Heart className="w-4 h-4 mr-2" />Apoiar Vaquinha
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4 mr-2" />Confirmar Presença
+                </>
+              )}
+            </Button>
+          )}
         </div>
       </div>
+
+      {/* Modal de Contribuição para Vaquinhas */}
+      <Dialog open={isContributionModalOpen} onOpenChange={setIsContributionModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Heart className="w-5 h-5 text-pink-600" />
+              Apoiar Vaquinha
+            </DialogTitle>
+            <DialogDescription>
+              Contribua para que este evento aconteça! 
+              {event?.fundraisingGoal && (
+                <span className="block mt-1">
+                  Meta: R$ {parseFloat(event.fundraisingGoal).toFixed(2)}
+                </span>
+              )}
+              {event?.minimumContribution && (
+                <span className="block text-sm text-muted-foreground">
+                  Valor mínimo: R$ {parseFloat(event.minimumContribution).toFixed(2)}
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="contribution-amount">Valor da Contribuição (R$)</Label>
+              <Input
+                id="contribution-amount"
+                type="number"
+                step="0.01"
+                min={event?.minimumContribution || "0.01"}
+                placeholder="Ex: 50.00"
+                value={contributionAmount}
+                onChange={(e) => setContributionAmount(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="public-contribution"
+                checked={isPublicContribution}
+                onCheckedChange={(checked) => setIsPublicContribution(checked as boolean)}
+              />
+              <Label htmlFor="public-contribution" className="text-sm">
+                Mostrar minha contribuição publicamente
+              </Label>
+            </div>
+          </div>
+
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsContributionModalOpen(false)}
+              disabled={contributionMutation.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleContribution}
+              disabled={contributionMutation.isPending || !contributionAmount}
+              className="bg-pink-600 hover:bg-pink-700"
+            >
+              {contributionMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                <>
+                  <Heart className="w-4 h-4 mr-2" />
+                  Contribuir
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

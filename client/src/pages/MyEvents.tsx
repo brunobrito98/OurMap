@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import EventCard from "@/components/EventCard";
 import { useAuth } from "@/hooks/useAuth";
 import type { EventWithDetails } from "@shared/schema";
+import { ArrowLeft, Plus } from "lucide-react";
 
 export default function MyEvents() {
   const [, navigate] = useLocation();
@@ -25,7 +26,7 @@ export default function MyEvents() {
               size="sm"
               data-testid="button-back"
             >
-              <i className="fas fa-arrow-left text-xl"></i>
+              <ArrowLeft className="w-5 h-5" />
             </Button>
             <h2 className="font-semibold text-foreground flex-1">Meus Eventos</h2>
           </div>
@@ -53,7 +54,7 @@ export default function MyEvents() {
             size="sm"
             data-testid="button-back"
           >
-            <i className="fas fa-arrow-left text-xl"></i>
+            <ArrowLeft className="w-5 h-5" />
           </Button>
           <h2 className="font-semibold text-foreground flex-1">Meus Eventos</h2>
           <Button
@@ -62,7 +63,7 @@ export default function MyEvents() {
             size="sm"
             data-testid="button-create-event"
           >
-            <i className="fas fa-plus text-xl"></i>
+            <Plus className="w-5 h-5" />
           </Button>
         </div>
       </div>

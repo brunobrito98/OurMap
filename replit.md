@@ -4,6 +4,32 @@
 
 OurMap is a modern event management platform built for discovering, creating, and attending local events. The application features a React frontend with TypeScript, an Express.js backend, and a PostgreSQL database using Drizzle ORM. The platform includes comprehensive event management capabilities, user authentication through Replit Auth, geolocation services, image upload functionality, and social features like friend connections and event ratings.
 
+## Recent Changes
+
+**September 23, 2025**
+- **Vaquinha (Crowdfunding) Feature Implementation**: Successfully implemented complete crowdfunding system for events
+  - Updated database schema with new crowdfunding fields (priceType, fundraisingGoal, minimumContribution) and eventContributions table
+  - Enhanced event creation form with third pricing option "Vaquinha" alongside Free/Paid events
+  - Implemented contribution modal with amount input, minimum value validation, and public/private contribution option
+  - Added visual progress bar showing fundraising goal progress with gradient styling and percentage completion
+  - Built backend API routes for creating contributions, fetching totals, and managing crowdfunding data
+  - Integrated auto-confirmation of attendance when contributing to crowdfunding events
+  - Added notification system for event organizers when receiving new contributions
+  - Enhanced event details page with fundraising progress visualization and appropriate call-to-action buttons
+- **GitHub Project Import**: Successfully imported the OurMap project to Replit environment
+- **Environment Setup**: Configured development workflow with npm run dev on port 5000
+- **Dependencies**: Verified all packages are correctly installed and compatible
+- **Replit Configuration**: Confirmed proper host settings (0.0.0.0) and proxy configuration for frontend
+- **Deployment Setup**: Configured autoscale deployment with build and start commands
+- **Secret Configuration**: Set up environment secrets for full application functionality
+
+**September 22, 2025**
+- **Home Page Access**: Changed main route "/" from Landing (login page) to Home component for public access without authentication
+- **Login Flow Optimization**: Implemented redirect parameters for seamless return to intended destinations after authentication
+- **Security Enhancement**: Fixed open redirect vulnerability by validating redirect parameters in Landing component
+- **Deep Link Support**: Enhanced URL preservation to capture complete paths (pathname + search + hash) for full deep link functionality
+- **User Experience**: Users can now browse events freely without login, authentication only required for interactions (RSVP, profile access)
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
@@ -44,8 +70,13 @@ Preferred communication style: Simple, everyday language.
 ### Security & Authentication
 - **Replit Auth Integration**: Secure OAuth-based authentication
 - **Session Management**: Server-side session storage with PostgreSQL
+- **Phone Authentication**: SMS verification with Twilio integration, OTP hashing with HMAC-SHA256
+- **Data Protection**: Comprehensive sanitization of user data in API responses to prevent sensitive field exposure
+- **Rate Limiting**: IP and phone-based rate limiting for authentication endpoints
 - **File Upload Security**: Type and size validation for image uploads
-- **API Security**: Authenticated route protection with middleware
+- **API Security**: Authenticated route protection with middleware and sanitized data projections
+- **Open Redirect Protection**: Landing page validates redirect parameters to prevent security vulnerabilities
+- **Deep Link Preservation**: Full URL (pathname + search + hash) preservation for seamless post-login redirects
 
 ## External Dependencies
 
