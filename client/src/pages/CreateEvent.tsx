@@ -38,9 +38,10 @@ const categories = [
 ];
 
 const recurringOptions = [
-  { value: "weekly", label: "Toda semana" },
-  { value: "monthly", label: "Todo mês" },
-  { value: "yearly", label: "Todo ano" },
+  { value: "daily", label: "Diariamente" },
+  { value: "weekly", label: "Semanalmente" },
+  { value: "biweekly", label: "A cada 15 dias" },
+  { value: "monthly", label: "Mensalmente" },
 ];
 
 export default function CreateEvent() {
@@ -67,9 +68,12 @@ export default function CreateEvent() {
       description: "",
       category: "",
       dateTime: "",
+      endTime: "",
       location: "",
       price: "0",
       isRecurring: false,
+      recurrenceType: undefined,
+      recurrenceEndDate: "",
       iconEmoji: "📅",
     },
   });
@@ -77,20 +81,24 @@ export default function CreateEvent() {
   // Update form when event data is loaded
   useEffect(() => {
     if (eventData && isEditing) {
+      const formatDateTime = (dateTime: string) => {
+        const date = new Date(dateTime);
+        const offset = date.getTimezoneOffset() * 60000;
+        const localDate = new Date(date.getTime() - offset);
+        return localDate.toISOString().slice(0, 16);
+      };
+
       form.reset({
         title: eventData.title,
         description: eventData.description || "",
         category: eventData.category,
-        dateTime: (() => {
-          const date = new Date(eventData.dateTime);
-          const offset = date.getTimezoneOffset() * 60000;
-          const localDate = new Date(date.getTime() - offset);
-          return localDate.toISOString().slice(0, 16);
-        })(),
+        dateTime: formatDateTime(eventData.dateTime),
+        endTime: eventData.endTime ? formatDateTime(eventData.endTime) : "",
         location: eventData.location,
         price: eventData.price || "0",
         isRecurring: eventData.isRecurring,
         recurrenceType: eventData.recurrenceType || undefined,
+        recurrenceEndDate: eventData.recurrenceEndDate ? formatDateTime(eventData.recurrenceEndDate) : "",
         iconEmoji: eventData.iconEmoji || "📅",
       });
       
@@ -103,6 +111,28 @@ export default function CreateEvent() {
       });
     }
   }, [eventData, isEditing, form]);
+
+  // Calculate event duration
+  const calculateDuration = (startTime: string, endTime: string) => {
+    if (!startTime || !endTime) return "";
+    
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    const diffMs = end.getTime() - start.getTime();
+    
+    if (diffMs <= 0) return "";
+    
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hours === 0) {
+      return `${minutes} minutos`;
+    } else if (minutes === 0) {
+      return `${hours} ${hours === 1 ? 'hora' : 'horas'}`;
+    } else {
+      return `${hours} ${hours === 1 ? 'hora' : 'horas'} e ${minutes} minutos`;
+    }
+  };
 
   const createEventMutation = useMutation({
     mutationFn: async (data: FormData) => {
@@ -158,17 +188,35 @@ export default function CreateEvent() {
     // Convert datetime-local string to ISO string with timezone
     const dateTimeWithTimezone = data.dateTime ? new Date(data.dateTime).toISOString() : '';
     formData.append('dateTime', dateTimeWithTimezone);
+    
+    // Add endTime if provided
+    if (data.endTime) {
+      const endTimeWithTimezone = new Date(data.endTime).toISOString();
+      formData.append('endTime', endTimeWithTimezone);
+    }
+    
     formData.append('location', data.location || '');
     formData.append('category', data.category || '');
     
     if (data.description) {
       formData.append('description', data.description);
     }
+    
+    // Handle recurring event fields
     if (data.isRecurring) {
       formData.append('isRecurring', 'true');
       if (data.recurrenceType && data.recurrenceType.trim() !== '') {
         formData.append('recurrenceType', data.recurrenceType);
       }
+      // Add recurrence interval (default to 1 if not specified)
+      formData.append('recurrenceInterval', data.recurrenceInterval?.toString() || '1');
+      // Add recurrence end date
+      if (data.recurrenceEndDate) {
+        const recurrenceEndDateWithTimezone = new Date(data.recurrenceEndDate).toISOString();
+        formData.append('recurrenceEndDate', recurrenceEndDateWithTimezone);
+      }
+    } else {
+      formData.append('isRecurring', 'false');
     }
     
     // Add price - if not paid, set to 0
@@ -357,7 +405,7 @@ export default function CreateEvent() {
                 name="dateTime"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Data e Hora do Evento *</FormLabel>
+                    <FormLabel>Data e Hora de Início *</FormLabel>
                     <FormControl>
                       <Input
                         type="datetime-local"
@@ -370,6 +418,34 @@ export default function CreateEvent() {
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="endTime"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Data e Hora de Fim (opcional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="datetime-local"
+                        {...field}
+                        value={field.value || ""}
+                        data-testid="input-endtime"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Duration Display */}
+              {form.watch("dateTime") && form.watch("endTime") && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-sm text-blue-800">
+                    <span className="font-medium">Duração do evento:</span> {calculateDuration(form.watch("dateTime"), form.watch("endTime"))}
+                  </p>
+                </div>
+              )}
 
               {/* Recurring Event Option */}
               <div className="bg-secondary rounded-xl p-4">
@@ -393,12 +469,13 @@ export default function CreateEvent() {
                 />
                 
                 {form.watch("isRecurring") && (
-                  <div className="mt-3">
+                  <div className="mt-3 space-y-3">
                     <FormField
                       control={form.control}
                       name="recurrenceType"
                       render={({ field }) => (
                         <FormItem>
+                          <FormLabel>Frequência da Recorrência *</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value || ""}>
                             <FormControl>
                               <SelectTrigger data-testid="select-recurrence-type">
@@ -413,6 +490,28 @@ export default function CreateEvent() {
                               ))}
                             </SelectContent>
                           </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="recurrenceEndDate"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Repetir até quando? *</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="datetime-local"
+                              {...field}
+                              value={field.value || ""}
+                              data-testid="input-recurrence-end-date"
+                            />
+                          </FormControl>
+                          <p className="text-xs text-muted-foreground">
+                            Define até quando os eventos recorrentes serão criados
+                          </p>
                           <FormMessage />
                         </FormItem>
                       )}

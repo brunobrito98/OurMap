@@ -199,6 +199,7 @@ export class DatabaseStorage implements IStorage {
         description: event.description,
         category: event.category,
         dateTime: new Date(event.dateTime),
+        endTime: event.endTime ? new Date(event.endTime) : undefined,
         location: event.location,
         creatorId: organizerId,
         latitude: coordinates.lat.toString(),
@@ -482,6 +483,7 @@ export class DatabaseStorage implements IStorage {
       ...event, 
       updatedAt: new Date(),
       ...(event.dateTime && { dateTime: new Date(event.dateTime) }),
+      ...(event.endTime && { endTime: new Date(event.endTime) }),
       ...(event.recurrenceEndDate && { recurrenceEndDate: new Date(event.recurrenceEndDate) }),
     };
     if (coordinates) {
