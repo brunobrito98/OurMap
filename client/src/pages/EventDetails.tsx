@@ -385,13 +385,8 @@ export default function EventDetails() {
                 </button>
               ))}
               {attendees.length === 0 && event.attendanceCount > 0 && (
-
-                <div className="flex items-center justify-center text-muted-foreground text-sm">
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-
                 <div className="flex items-center justify-center text-muted-foreground text-sm py-4">
-                  <i className="fas fa-spinner fa-spin mr-2"></i>
-
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Carregando confirmados...
                 </div>
               )}
