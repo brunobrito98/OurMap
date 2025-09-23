@@ -7,6 +7,15 @@ OurMap is a modern event management platform built for discovering, creating, an
 ## Recent Changes
 
 **September 23, 2025**
+- **Vaquinha (Crowdfunding) Feature Implementation**: Successfully implemented complete crowdfunding system for events
+  - Updated database schema with new crowdfunding fields (priceType, fundraisingGoal, minimumContribution) and eventContributions table
+  - Enhanced event creation form with third pricing option "Vaquinha" alongside Free/Paid events
+  - Implemented contribution modal with amount input, minimum value validation, and public/private contribution option
+  - Added visual progress bar showing fundraising goal progress with gradient styling and percentage completion
+  - Built backend API routes for creating contributions, fetching totals, and managing crowdfunding data
+  - Integrated auto-confirmation of attendance when contributing to crowdfunding events
+  - Added notification system for event organizers when receiving new contributions
+  - Enhanced event details page with fundraising progress visualization and appropriate call-to-action buttons
 - **GitHub Project Import**: Successfully imported the OurMap project to Replit environment
 - **Environment Setup**: Configured development workflow with npm run dev on port 5000
 - **Dependencies**: Verified all packages are correctly installed and compatible

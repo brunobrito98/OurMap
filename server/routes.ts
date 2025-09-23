@@ -981,7 +981,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         const createdEvents = [];
         
-        for (const [index, recurrenceDate] of recurrenceDates.entries()) {
+        for (let index = 0; index < recurrenceDates.length; index++) {
+          const recurrenceDate = recurrenceDates[index];
           let eventEndTime: Date | undefined;
           
           // Calculate end time for each occurrence if original event has endTime

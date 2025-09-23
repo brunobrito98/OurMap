@@ -335,7 +335,9 @@ export class DatabaseStorage implements IStorage {
         if (categoryValues.length > 0) {
           // Filter by any of the category values (main category + subcategories)
           const categoryConditions = categoryValues.map(value => eq(events.category, value));
-          conditions.push(or(...categoryConditions));
+          if (categoryConditions.length > 0) {
+            conditions.push(or(...categoryConditions));
+          }
         }
       }
 
