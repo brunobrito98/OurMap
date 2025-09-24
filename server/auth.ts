@@ -74,7 +74,11 @@ export function setupLocalAuth(app: Express) {
   // Local auth routes
   app.post("/api/auth/register", async (req, res) => {
     try {
-      const validatedData = insertLocalUserSchema.parse(req.body);
+      // Extend schema to include optional phoneNumber for processing
+      const registrationSchema = insertLocalUserSchema.extend({
+        phoneNumber: z.string().optional()
+      });
+      const validatedData = registrationSchema.parse(req.body);
       
       const existingUser = await storage.getUserByUsername(validatedData.username);
       if (existingUser) {
@@ -86,10 +90,31 @@ export function setupLocalAuth(app: Express) {
         return res.status(400).json({ message: "Email já está em uso" });
       }
 
-      const user = await storage.createLocalUser({
+      // Prepare user data with normalized phone if provided
+      const userData: any = {
         ...validatedData,
         password: await hashPassword(validatedData.password),
-      });
+      };
+      
+      // Process phone number if provided
+      if (validatedData.phoneNumber && validatedData.phoneNumber.trim()) {
+        const { parsePhoneNumber } = await import("libphonenumber-js");
+        try {
+          const phoneNumber = parsePhoneNumber(validatedData.phoneNumber);
+          if (phoneNumber && phoneNumber.isValid()) {
+            userData.phoneE164 = phoneNumber.format('E.164');
+            userData.phoneVerified = false; // Phone is not verified during registration
+            userData.phoneCountry = phoneNumber.country;
+          }
+        } catch {
+          // Ignore invalid phone numbers during registration
+        }
+      }
+      
+      // Remove phoneNumber from userData since it's not a database field
+      delete userData.phoneNumber;
+
+      const user = await storage.createLocalUser(userData);
 
       req.login(user, (err) => {
         if (err) {

@@ -4,14 +4,12 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupLocalAuth, isAuthenticatedLocal, isAdmin, isSuperAdmin, hashPassword } from "./auth";
 import session from "express-session";
-import { insertEventSchema, updateEventSchema, insertEventAttendanceSchema, insertEventRatingSchema, insertAdminUserSchema, insertLocalUserSchema, phoneStartSchema, phoneVerifySchema, phoneLinkSchema, contactsMatchSchema, insertNotificationSchema, notificationConfigSchema, type User } from "@shared/schema";
+import { insertEventSchema, updateEventSchema, insertEventAttendanceSchema, insertEventRatingSchema, insertAdminUserSchema, insertLocalUserSchema, contactsMatchSchema, insertNotificationSchema, notificationConfigSchema, type User } from "@shared/schema";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import twilio from "twilio";
 import { parsePhoneNumber, isValidPhoneNumber } from "libphonenumber-js";
-import { createHmac, randomBytes } from "crypto";
 
 // Helper function to sanitize event data for responses
 function sanitizeEventForUser(eventData: any, userId?: string) {
@@ -43,34 +41,6 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Phone authentication utilities
-const HMAC_SECRET = process.env.SESSION_SECRET || 'default-secret';
-
-// Initialize Twilio client (only if credentials are available)
-let twilioClient: twilio.Twilio | null = null;
-const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
-const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
-const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER;
-
-if (twilioAccountSid && twilioAuthToken) {
-  twilioClient = twilio(twilioAccountSid, twilioAuthToken);
-}
-
-// In-memory store for OTP codes (in production, use Redis or similar)
-const otpStore = new Map<string, { codeHash: string; expiresAt: number; attempts: number }>();
-
-function generateOTP(): string {
-  const otp = randomBytes(3).readUIntBE(0, 3) % 1000000;
-  return otp.toString().padStart(6, '0');
-}
-
-function hashOTP(code: string, phoneE164: string): string {
-  return createHmac('sha256', HMAC_SECRET).update(code + phoneE164).digest('hex');
-}
-
-function generatePhoneHmac(phoneE164: string): string {
-  return createHmac('sha256', HMAC_SECRET).update(phoneE164).digest('hex');
-}
 
 function normalizePhoneNumber(phone: string, country?: string): string | null {
   try {
@@ -534,16 +504,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "User ID not found" });
       }
 
-      const { firstName, lastName } = req.body;
+      const { firstName, lastName, phoneNumber } = req.body;
 
       // Validate input
-      if (!firstName && !lastName) {
+      if (!firstName && !lastName && phoneNumber === undefined) {
         return res.status(400).json({ message: "Pelo menos um campo deve ser fornecido" });
       }
 
-      const profileData: { firstName?: string; lastName?: string } = {};
+      const profileData: { firstName?: string; lastName?: string; phoneE164?: string | null; phoneVerified?: boolean; phoneCountry?: string | null } = {};
       if (firstName !== undefined) profileData.firstName = firstName;
       if (lastName !== undefined) profileData.lastName = lastName;
+      
+      // Handle phone number update
+      if (phoneNumber !== undefined) {
+        if (!phoneNumber || phoneNumber.trim() === '') {
+          // Clear phone number
+          profileData.phoneE164 = null;
+          profileData.phoneVerified = false;
+          profileData.phoneCountry = null;
+        } else {
+          // Normalize and set phone number
+          const normalizedPhone = normalizePhoneNumber(phoneNumber);
+          if (normalizedPhone) {
+            profileData.phoneE164 = normalizedPhone;
+            profileData.phoneVerified = false; // Phone is not verified when updated
+            try {
+              const phoneNumberParsed = parsePhoneNumber(normalizedPhone);
+              profileData.phoneCountry = phoneNumberParsed?.country || null;
+            } catch {
+              profileData.phoneCountry = null;
+            }
+          } else {
+            return res.status(400).json({ message: "Número de telefone inválido" });
+          }
+        }
+      }
 
       // Update user profile in database
       const updatedUser = await storage.updateUserProfile(userId, profileData);
@@ -671,233 +666,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Phone authentication routes
-  app.post('/api/auth/phone/start', async (req, res) => {
-    try {
-      const { phone, country } = phoneStartSchema.parse(req.body);
-      
-      // Normalize phone number
-      const phoneE164 = normalizePhoneNumber(phone, country);
-      if (!phoneE164) {
-        return res.status(400).json({ message: "Número de telefone inválido" });
-      }
-      
-      // Rate limiting
-      const clientIP = req.ip || req.connection.remoteAddress;
-      if (isRateLimited(`phone_start_${clientIP}`, 5, 15 * 60 * 1000) || 
-          isRateLimited(`phone_start_${phoneE164}`, 5, 15 * 60 * 1000)) {
-        return res.status(429).json({ message: "Muitas tentativas. Tente novamente em 15 minutos." });
-      }
-      
-      // Generate OTP
-      const otp = generateOTP();
-      const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
-      
-      // Store OTP hash (never store plaintext)
-      const codeHash = hashOTP(otp, phoneE164);
-      otpStore.set(phoneE164, { codeHash, expiresAt, attempts: 0 });
-      
-      // Send SMS (only if Twilio is configured)
-      if (twilioClient && twilioPhoneNumber) {
-        try {
-          await twilioClient.messages.create({
-            body: `Seu código de verificação OurMap é: ${otp}`,
-            from: twilioPhoneNumber,
-            to: phoneE164,
-          });
-        } catch (twilioError) {
-          console.error("Twilio error:", twilioError);
-          return res.status(500).json({ message: "Falha ao enviar SMS" });
-        }
-      } else {
-        // For development only - log the OTP (disabled in production)
-        if (process.env.NODE_ENV !== 'production') {
-          console.log(`[DEV] OTP for ${phoneE164}: ${otp}`);
-        }
-      }
-      
-      res.json({ 
-        message: "Código enviado com sucesso",
-        phoneE164: phoneE164.replace(/(\+\d{2})(\d{2})(\d{5})(\d{4})/, '$1 ($2) $3-$4') // Format for display
-      });
-    } catch (error) {
-      console.error("Phone start error:", error);
-      res.status(500).json({ message: "Erro interno do servidor" });
-    }
-  });
-
-  app.post('/api/auth/phone/verify', async (req, res) => {
-    try {
-      const { phone, code } = phoneVerifySchema.parse(req.body);
-      
-      // Rate limiting
-      const clientIP = req.ip || req.connection.remoteAddress;
-      if (isRateLimited(`phone_verify_${clientIP}`, 10, 15 * 60 * 1000)) {
-        return res.status(429).json({ message: "Muitas tentativas. Tente novamente em 15 minutos." });
-      }
-      
-      // Normalize phone number
-      const phoneE164 = normalizePhoneNumber(phone);
-      if (!phoneE164) {
-        return res.status(400).json({ message: "Número de telefone inválido" });
-      }
-      
-      // Additional rate limiting by phone
-      if (isRateLimited(`phone_verify_${phoneE164}`, 10, 15 * 60 * 1000)) {
-        return res.status(429).json({ message: "Muitas tentativas para este número. Tente novamente em 15 minutos." });
-      }
-      
-      // Get stored OTP
-      const storedOTP = otpStore.get(phoneE164);
-      if (!storedOTP) {
-        return res.status(400).json({ message: "Código não encontrado ou expirado" });
-      }
-      
-      // Check expiration
-      if (Date.now() > storedOTP.expiresAt) {
-        otpStore.delete(phoneE164);
-        return res.status(400).json({ message: "Código expirado" });
-      }
-      
-      // Check attempts
-      if (storedOTP.attempts >= 3) {
-        otpStore.delete(phoneE164);
-        return res.status(400).json({ message: "Muitas tentativas incorretas" });
-      }
-      
-      // Verify code using hash comparison
-      const providedCodeHash = hashOTP(code, phoneE164);
-      if (storedOTP.codeHash !== providedCodeHash) {
-        storedOTP.attempts++;
-        return res.status(400).json({ message: "Código incorreto" });
-      }
-      
-      // Clear OTP
-      otpStore.delete(phoneE164);
-      
-      // Check if user already exists with this phone
-      const existingUser = await storage.getUserByPhone(phoneE164);
-      
-      if (existingUser) {
-        // Login existing user
-        req.login(existingUser, (err) => {
-          if (err) {
-            console.error("Login error:", err);
-            return res.status(500).json({ message: "Erro no login" });
-          }
-          
-          const { password, ...sanitizedUser } = existingUser;
-          res.json({
-            message: "Login realizado com sucesso",
-            user: sanitizedUser
-          });
-        });
-      } else {
-        // Create new user
-        try {
-          const phoneHmac = generatePhoneHmac(phoneE164);
-          const phoneNumber = parsePhoneNumber(phoneE164);
-          
-          const newUser = await storage.createUser({
-            firstName: "Usuário",
-            lastName: "Telefone",
-            phoneE164,
-            phoneVerified: true,
-            phoneCountry: phoneNumber?.country || undefined,
-            phoneHmac,
-            authType: "phone",
-          });
-          
-          req.login(newUser, (err) => {
-            if (err) {
-              console.error("Login error:", err);
-              return res.status(500).json({ message: "Erro no login" });
-            }
-            
-            const { password, ...sanitizedUser } = newUser;
-            res.json({
-              message: "Conta criada e login realizado com sucesso",
-              user: sanitizedUser
-            });
-          });
-        } catch (createError) {
-          console.error("User creation error:", createError);
-          res.status(500).json({ message: "Erro ao criar usuário" });
-        }
-      }
-    } catch (error) {
-      console.error("Phone verify error:", error);
-      res.status(500).json({ message: "Erro interno do servidor" });
-    }
-  });
-
-  app.post('/api/auth/phone/link', isAuthenticatedAny, async (req: any, res) => {
-    try {
-      const userId = getUserId(req);
-      if (!userId) {
-        return res.status(401).json({ message: "User ID not found" });
-      }
-      
-      // Rate limiting
-      const clientIP = req.ip || req.connection.remoteAddress;
-      if (isRateLimited(`phone_link_${clientIP}`, 5, 15 * 60 * 1000) || 
-          isRateLimited(`phone_link_${userId}`, 5, 15 * 60 * 1000)) {
-        return res.status(429).json({ message: "Muitas tentativas. Tente novamente em 15 minutos." });
-      }
-      
-      const { phone, code } = phoneLinkSchema.parse(req.body);
-      
-      // Normalize phone number
-      const phoneE164 = normalizePhoneNumber(phone);
-      if (!phoneE164) {
-        return res.status(400).json({ message: "Número de telefone inválido" });
-      }
-      
-      // Get stored OTP
-      const storedOTP = otpStore.get(phoneE164);
-      if (!storedOTP) {
-        return res.status(400).json({ message: "Código não encontrado ou expirado" });
-      }
-      
-      // Check expiration
-      if (Date.now() > storedOTP.expiresAt) {
-        otpStore.delete(phoneE164);
-        return res.status(400).json({ message: "Código expirado" });
-      }
-      
-      // Verify code using hash comparison
-      const providedCodeHashForLink = hashOTP(code, phoneE164);
-      if (storedOTP.codeHash !== providedCodeHashForLink) {
-        storedOTP.attempts++;
-        return res.status(400).json({ message: "Código incorreto" });
-      }
-      
-      // Clear OTP
-      otpStore.delete(phoneE164);
-      
-      // Check if phone is already used by another user
-      const existingUser = await storage.getUserByPhone(phoneE164);
-      if (existingUser && existingUser.id !== userId) {
-        return res.status(400).json({ message: "Este telefone já está vinculado a outra conta" });
-      }
-      
-      // Link phone to current user
-      const phoneHmac = generatePhoneHmac(phoneE164);
-      const phoneNumber = parsePhoneNumber(phoneE164);
-      
-      await storage.updateUserPhone(userId, {
-        phoneE164,
-        phoneVerified: true,
-        phoneCountry: phoneNumber?.country || undefined,
-        phoneHmac,
-      });
-      
-      res.json({ message: "Telefone vinculado com sucesso" });
-    } catch (error) {
-      console.error("Phone link error:", error);
-      res.status(500).json({ message: "Erro interno do servidor" });
-    }
-  });
 
   // Category routes
   app.get('/api/categories', async (req, res) => {
@@ -1198,11 +966,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Ensure priceType is one of the allowed values
       if (formData.priceType && !['free', 'paid', 'crowdfunding'].includes(formData.priceType)) {
-        formData.priceType = 'free';
+        formData.priceType = 'free' as const;
       }
       
       // Use dedicated update schema that supports partial updates with validation
-      const eventData = updateEventSchema.parse(formData);
+      const eventData = updateEventSchema.parse(formData) as any;
       
       // Use eventData directly - dates are already strings from form validation
       const processedEventData = { ...eventData };
@@ -1244,7 +1012,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Ensure priceType is valid for update
       if (processedEventData.priceType && !['free', 'paid', 'crowdfunding'].includes(processedEventData.priceType)) {
-        processedEventData.priceType = 'free';
+        processedEventData.priceType = 'free' as const;
       }
       
       const event = await storage.updateEvent(eventId, processedEventData, coordinates);
@@ -1627,28 +1395,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Generate HMACs for matching
-      const contactHmacs = normalizedContacts.map(phone => generatePhoneHmac(phone));
-      
-      // Find matching users (excluding the current user)
-      const matchingUsers = await storage.getUsersByPhoneHmacs(contactHmacs, userId);
-      
-      // Get existing friendships status
-      const usersWithFriendshipStatus = await Promise.all(
-        matchingUsers.map(async (user) => {
-          const areFriends = await storage.areFriends(userId, user.id);
-          const hasPendingRequest = await storage.hasPendingFriendRequest(userId, user.id);
-          
-          return {
-            id: user.id,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            username: user.username,
-            profileImageUrl: user.profileImageUrl,
-            friendshipStatus: areFriends ? 'friends' : hasPendingRequest ? 'pending' : 'none'
-          };
-        })
-      );
+      // Note: Contact matching feature removed along with SMS authentication
+      // This endpoint can be removed or replaced with alternative friend discovery
+      const usersWithFriendshipStatus: any[] = [];
       
       res.json(usersWithFriendshipStatus);
     } catch (error) {

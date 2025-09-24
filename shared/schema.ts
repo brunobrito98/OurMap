@@ -502,23 +502,9 @@ export const insertLocalUserSchema = createInsertSchema(users).omit({
   email: z.string().email("Email deve ser válido"),
   firstName: z.string().min(1, "Nome é obrigatório"),
   lastName: z.string().min(1, "Sobrenome é obrigatório"),
+  phoneNumber: z.string().optional(), // Optional phone number field for registration
 });
 
-// Phone authentication schemas
-export const phoneStartSchema = z.object({
-  phone: z.string().min(1, "Número de telefone é obrigatório"),
-  country: z.string().length(2, "Código do país deve ter 2 caracteres").optional(),
-});
-
-export const phoneVerifySchema = z.object({
-  phone: z.string().min(1, "Número de telefone é obrigatório"),
-  code: z.string().length(6, "Código deve ter 6 dígitos").regex(/^\d{6}$/, "Código deve conter apenas números"),
-});
-
-export const phoneLinkSchema = z.object({
-  phone: z.string().min(1, "Número de telefone é obrigatório"),
-  code: z.string().length(6, "Código deve ter 6 dígitos").regex(/^\d{6}$/, "Código deve conter apenas números"),
-});
 
 export const contactsMatchSchema = z.object({
   contacts: z.array(z.string()).max(1000, "Máximo de 1000 contatos por vez"),
@@ -546,9 +532,6 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertLocalUser = z.infer<typeof insertLocalUserSchema>;
 export type InsertAdminUser = z.infer<typeof insertAdminUserSchema>;
-export type PhoneStart = z.infer<typeof phoneStartSchema>;
-export type PhoneVerify = z.infer<typeof phoneVerifySchema>;
-export type PhoneLink = z.infer<typeof phoneLinkSchema>;
 export type ContactsMatch = z.infer<typeof contactsMatchSchema>;
 export type Category = typeof categories.$inferSelect;
 export type InsertCategory = z.infer<typeof insertCategorySchema>;
