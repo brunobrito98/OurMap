@@ -231,6 +231,16 @@ export default function EventDetails() {
   const isOrganizer = Boolean(user && typeof user === 'object' && user !== null && 'id' in user && user.id === event?.organizer?.id);
   const userAttendance = event.userAttendance?.status;
   const isConfirmed = userAttendance === 'attending';
+  
+  // Check if event has ended
+  const isEventEnded = () => {
+    if (!event) return false;
+    const now = new Date();
+    const eventEndTime = event.endTime ? new Date(event.endTime) : new Date(event.dateTime);
+    return eventEndTime <= now;
+  };
+  
+  const eventHasEnded = isEventEnded();
 
   const formatDate = (date: string | Date) => {
     return new Date(date).toLocaleDateString('pt-BR', {
@@ -594,10 +604,20 @@ export default function EventDetails() {
               Gratuito
             </p>
             <p className="text-xs text-muted-foreground">
-              Entrada livre
+              {eventHasEnded ? "Evento finalizado" : "Entrada livre"}
             </p>
           </div>
-          {isConfirmed ? (
+          {eventHasEnded ? (
+            <Button
+              disabled
+              className="flex-1 py-4 text-lg bg-gray-100 text-gray-500 border border-gray-300"
+              variant="outline"
+              data-testid="button-event-ended"
+            >
+              <CalendarX className="w-4 h-4 mr-2" />
+              Evento Finalizado
+            </Button>
+          ) : isConfirmed ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button
