@@ -134,6 +134,7 @@ export interface IStorage {
   getUserContributions(userId: string): Promise<EventContribution[]>;
   getUserEventContribution(eventId: string, userId: string): Promise<EventContribution | undefined>;
   getEventTotalRaised(eventId: string): Promise<{ totalRaised: number; contributionCount: number }>;
+  removeUserContributions(eventId: string, userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1370,6 +1371,15 @@ export class DatabaseStorage implements IStorage {
       totalRaised: Number(result.totalRaised) || 0,
       contributionCount: result.contributionCount || 0,
     };
+  }
+
+  async removeUserContributions(eventId: string, userId: string): Promise<void> {
+    await db
+      .delete(eventContributions)
+      .where(and(
+        eq(eventContributions.eventId, eventId),
+        eq(eventContributions.userId, userId)
+      ));
   }
 }
 

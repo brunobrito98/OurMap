@@ -1218,6 +1218,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       } else if (status === 'not_going') {
         const event = await storage.getEvent(eventId);
+        
+        // Se for um evento de vaquinha, remove as contribuições do usuário
+        if (event && event.priceType === 'crowdfunding') {
+          await storage.removeUserContributions(eventId, userId);
+        }
+        
         if (event && event.creatorId !== userId) {
           const user = await storage.getUser(userId);
           if (user && event) {
