@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import logoImage from "@assets/image_1758571356074.png";
+import { Megaphone, MapPin, Utensils, Plus } from "lucide-react";
 
 export default function Landing() {
   const [, navigate] = useLocation();
@@ -100,14 +100,55 @@ export default function Landing() {
       <div className="relative z-10 w-full max-w-sm">
         {/* Logo and Title */}
         <div className="text-center mb-8">
-          <div className="w-32 h-32 mx-auto mb-4">
-            <img 
-              src={logoImage} 
-              alt="OurMap Logo" 
-              className="w-full h-full object-contain rounded-2xl shadow-lg"
-              data-testid="img-logo"
-            />
+          <div className="w-32 h-32 mx-auto mb-4 bg-gradient-to-br from-orange-500 via-red-500 to-red-600 rounded-2xl shadow-lg flex flex-col items-center justify-center relative overflow-hidden">
+            {/* Smiley face pattern with icons */}
+            <div className="relative w-full h-full flex items-center justify-center">
+              {/* Top icon (megaphone) */}
+              <div className="absolute top-2 left-1/2 transform -translate-x-1/2">
+                <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center">
+                  <Megaphone className="w-3 h-3 text-orange-500" />
+                </div>
+              </div>
+              
+              {/* Left icon (utensils) */}
+              <div className="absolute left-2 top-1/2 transform -translate-y-1/2">
+                <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center">
+                  <Utensils className="w-3 h-3 text-orange-500" />
+                </div>
+              </div>
+              
+              {/* Right icon (plus) */}
+              <div className="absolute right-2 top-1/2 transform -translate-y-1/2">
+                <div className="w-6 h-6 bg-white rounded-full flex items-center justify-center">
+                  <Plus className="w-3 h-3 text-orange-500" />
+                </div>
+              </div>
+              
+              {/* Center icon (map pin) */}
+              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2">
+                <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">
+                  <MapPin className="w-4 h-4 text-orange-500" />
+                </div>
+              </div>
+              
+              {/* Curved smile lines */}
+              <div className="absolute top-6 left-6 w-4 h-1 bg-white rounded-full transform rotate-12"></div>
+              <div className="absolute top-6 right-6 w-4 h-1 bg-white rounded-full transform -rotate-12"></div>
+              <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 w-12 h-1 bg-white rounded-full"></div>
+            </div>
+            
+            {/* OurMap text */}
+            <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2">
+              <span className="text-white text-xs font-bold tracking-wide">OurMap</span>
+            </div>
           </div>
+          
+          {/* Tagline */}
+          <p className="text-white/90 text-sm font-medium mt-2">
+            Descubra e organize
+            <br />
+            eventos incríveis
+          </p>
         </div>
 
         {/* Login Form */}
