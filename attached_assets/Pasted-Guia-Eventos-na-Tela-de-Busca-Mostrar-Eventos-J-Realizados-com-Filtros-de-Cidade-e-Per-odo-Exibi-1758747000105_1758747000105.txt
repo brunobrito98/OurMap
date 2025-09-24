@@ -1,0 +1,32 @@
+Guia "Eventos" na Tela de Busca: Mostrar Eventos Já Realizados com Filtros de Cidade e Período
+Exibição Inicial dos Eventos Encerrados:
+
+Quando o usuário selecionar a guia "Eventos", o principal conteúdo exibido deve ser uma lista dos eventos já encerrados (cuja data e horário_fim são anteriores ao momento atual).
+
+Priorize a exibição dos eventos mais recentes, começando pelos acontecimentos do dia atual que já encerraram.
+
+Por padrão, esta listagem deve considerar somente os eventos da cidade atualmente selecionada pelo usuário no aplicativo.
+
+Opções de Filtragem por Período:
+
+Acima ou abaixo da listagem de eventos, adicione um conjunto de botões de filtro ou um seletor para que o usuário possa refinar a busca por eventos encerrados:
+
+"Últimos 2 dias": Mostrar eventos encerrados nos últimos dois dias.
+
+"Últimos 7 dias": Mostrar eventos encerrados nos últimos sete dias.
+
+(Opcional) "Todos Anteriores": Mostrar todos os eventos encerrados para a cidade selecionada (com paginação para grandes volumes).
+
+Filtragem por Cidade Dinâmica:
+
+A listagem e os filtros de período devem sempre respeitar a cidade que o usuário tem configurada como padrão no seu perfil ou que ele selecionou no aplicativo.
+
+Se o usuário mudar sua cidade de preferência em qualquer parte do aplicativo (ex: nas configurações ou em um seletor global), a guia "Eventos" na tela de busca deve automaticamente se atualizar para refletir os eventos encerrados da nova cidade, mantendo os filtros de período aplicados (se houver).
+
+Integração com a Barra de Busca Principal:
+
+A barra de pesquisa "Digite para buscar..." no topo da tela deve continuar funcionando para filtrar os eventos encerrados exibidos, ou seja, se o usuário digitar "show" e os filtros de "Últimos 7 dias" e "Minha Cidade" estiverem ativos, ele verá apenas shows encerrados nos últimos 7 dias na sua cidade.
+
+Essa funcionalidade oferece ao usuário uma retrospectiva dinâmica do que já aconteceu em sua região, incentivando a descoberta e o engajamento com o histórico da comunidade.
+
+Para a implementação, a maior parte da lógica estará no backend, que precisará de um endpoint capaz de receber os filtros (cidade, período, termo_de_busca) e retornar os eventos encerrados correspondentes. No frontend, será necessário gerenciar o estado dos filtros e atualizar a interface quando a cidade mudar.

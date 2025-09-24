@@ -34,7 +34,7 @@ import {
   type NotificationConfig,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, desc, asc, count, avg, sql, like } from "drizzle-orm";
+import { eq, and, or, desc, asc, count, avg, sql, like, isNull, isNotNull } from "drizzle-orm";
 
 // Interface for storage operations
 export interface IStorage {
@@ -104,6 +104,7 @@ export interface IStorage {
   // Search operations
   searchUsers(query: string): Promise<UserSanitized[]>;
   searchEvents(query: string, userId?: string): Promise<EventWithDetails[]>;
+  searchEndedEvents(cityName?: string, daysBack?: number, searchQuery?: string, userId?: string): Promise<EventWithDetails[]>;
 
   // Profile operations
   getUserProfileByUsername(username: string, viewerId?: string): Promise<{
@@ -1093,6 +1094,139 @@ export class DatabaseStorage implements IStorage {
       .from(events)
       .innerJoin(users, eq(events.creatorId, users.id))
       .where(and(...conditions));
+
+    // Enhance with attendance counts
+    const enhancedEvents = await Promise.all(
+      results.map(async (result) => {
+        const [attendanceCountResult] = await db
+          .select({ count: count() })
+          .from(eventAttendees)
+          .where(and(
+            eq(eventAttendees.eventId, result.event.id),
+            eq(eventAttendees.status, 'attending')
+          ));
+
+        return {
+          ...result.event,
+          organizer: result.organizer,
+          attendanceCount: attendanceCountResult.count,
+          userAttendance: undefined,
+          friendsGoing: [],
+        };
+      })
+    );
+
+    return enhancedEvents;
+  }
+
+  async searchEndedEvents(
+    cityName?: string,
+    daysBack?: number,
+    searchQuery?: string,
+    userId?: string
+  ): Promise<EventWithDetails[]> {
+    const conditions = [];
+
+    // Add condition for ended events
+    conditions.push(
+      or(
+        // If endTime exists, use it; otherwise fall back to dateTime
+        and(
+          isNotNull(events.endTime),
+          sql`${events.endTime} < NOW()`
+        ),
+        and(
+          isNull(events.endTime),
+          sql`${events.dateTime} < NOW()`
+        )
+      )
+    );
+
+    // Add date range filter if daysBack is specified
+    if (daysBack && daysBack > 0) {
+      conditions.push(
+        or(
+          and(
+            isNotNull(events.endTime),
+            sql`${events.endTime} >= NOW() - INTERVAL '${daysBack} days'`
+          ),
+          and(
+            isNull(events.endTime),
+            sql`${events.dateTime} >= NOW() - INTERVAL '${daysBack} days'`
+          )
+        )
+      );
+    }
+
+    // Add city filter if specified
+    if (cityName && cityName.trim() !== '') {
+      const citySearchTerm = `%${cityName.trim()}%`;
+      conditions.push(like(events.location, citySearchTerm));
+    }
+
+    // Add search query filter if specified
+    if (searchQuery && searchQuery.trim() !== '' && searchQuery.length >= 2) {
+      const searchTerm = `%${searchQuery.trim()}%`;
+      conditions.push(
+        or(
+          like(events.title, searchTerm),
+          like(events.description, searchTerm),
+          like(events.location, searchTerm)
+        )
+      );
+    }
+
+    // Filter out private events unless user has access
+    if (userId) {
+      // Include public events OR private events where user is creator, invited, or attending
+      conditions.push(
+        or(
+          eq(events.isPrivate, false),
+          and(
+            eq(events.isPrivate, true),
+            or(
+              eq(events.creatorId, userId),
+              sql`EXISTS (
+                SELECT 1 FROM ${eventInvites} 
+                WHERE ${eventInvites.eventId} = ${events.id} 
+                AND ${eventInvites.userId} = ${userId}
+              )`,
+              sql`EXISTS (
+                SELECT 1 FROM ${eventAttendees} 
+                WHERE ${eventAttendees.eventId} = ${events.id} 
+                AND ${eventAttendees.userId} = ${userId}
+              )`
+            )
+          )
+        )
+      );
+    } else {
+      // No user provided, only show public events
+      conditions.push(eq(events.isPrivate, false));
+    }
+
+    const results = await db
+      .select({
+        event: events,
+        organizer: {
+          id: users.id,
+          username: users.username,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          profileImageUrl: users.profileImageUrl,
+          role: users.role,
+          authType: users.authType,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+        },
+      })
+      .from(events)
+      .innerJoin(users, eq(events.creatorId, users.id))
+      .where(and(...conditions))
+      .orderBy(
+        // Order by end time if available, otherwise by dateTime - most recent first
+        sql`COALESCE(${events.endTime}, ${events.dateTime}) DESC`
+      );
 
     // Enhance with attendance counts
     const enhancedEvents = await Promise.all(
