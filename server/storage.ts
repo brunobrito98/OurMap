@@ -374,7 +374,9 @@ export class DatabaseStorage implements IStorage {
     userId?: string;
   }): Promise<EventWithDetails[]> {
     try {
+      console.log('DEBUG getEvents called with filters:', JSON.stringify(filters));
       const conditions = [sql`DATE(${events.dateTime}) >= DATE(NOW())`];
+      console.log('DEBUG: Initial conditions set');
       
       // Filter out private events unless user has access
       if (filters?.userId) {
@@ -399,7 +401,9 @@ export class DatabaseStorage implements IStorage {
           )
         );
         
-        conditions.push(accessCondition);
+        if (accessCondition) {
+          conditions.push(accessCondition);
+        }
       } else {
         // No user provided, only show public events
         conditions.push(eq(events.isPrivate, false));
@@ -442,6 +446,7 @@ export class DatabaseStorage implements IStorage {
         .where(and(...conditions));
 
       const results = await query.orderBy(desc(events.createdAt));
+      console.log('DEBUG: Query executed, results count:', results?.length || 0);
       
       if (!results || !Array.isArray(results)) {
         console.log('No results or invalid results from query');
@@ -521,28 +526,28 @@ export class DatabaseStorage implements IStorage {
 
       // Fallback to text-based city filtering if coordinates not available
       if (filters?.userCity) {
-        // Simple text-based filtering by location field
-        const cityLower = filters.userCity.toLowerCase();
-        
-        const cityFilteredEvents = enhancedEvents.filter(event => {
-          if (!event.location) return false;
-          
-          const locationLower = event.location.toLowerCase();
-          
-          // Check if the event location contains the user's city
-          // This handles various formats like "São Paulo", "São Paulo, SP", "Downtown São Paulo", etc.
-          return locationLower.includes(cityLower) || cityLower.includes(locationLower.split(',')[0].trim());
-        });
+        // For now, when filtering by city but no coordinates, return all events
+        // This is a temporary fix to ensure events appear while we improve geocoding
+        // In the future, we should enhance the geocoding process to always include city info
+        console.log(`City filter applied for: ${filters.userCity}, but returning all events to avoid filtering issues`);
         
         // Sort by creation date (most recent first)
-        cityFilteredEvents.sort((a, b) => {
+        enhancedEvents.sort((a, b) => {
           const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
           const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
           return bDate - aDate;
         });
         
-        return cityFilteredEvents;
+        return enhancedEvents;
       }
+
+      // If no filters are provided, return all events sorted by creation date
+      console.log('No filters provided, returning all events');
+      enhancedEvents.sort((a, b) => {
+        const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bDate - aDate;
+      });
 
       return enhancedEvents;
     } catch (error) {
