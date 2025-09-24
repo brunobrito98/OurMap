@@ -9,14 +9,14 @@ packages = ["postgresql_13"]
 [deployment]
 deploymentTarget = "autoscale"
 build = ["npm", "run", "build"]
-run = ["npm", "run"]
+run = ["npm", "run", "start"]
 
 [[ports]]
 localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 36909
+localPort = 38063
 externalPort = 6000
 
 [[ports]]
