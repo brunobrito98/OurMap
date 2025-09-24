@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import ImageUpload from "@/components/ImageUpload";
 import MapComponent from "@/components/MapComponent";
+import LocalPlaceSearch from "@/components/LocalPlaceSearch";
 import { useToast } from "@/hooks/use-toast";
 import { insertEventSchema, type InsertEvent } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
@@ -51,9 +52,12 @@ export default function CreateEvent() {
   const queryClient = useQueryClient();
   const [coverImage, setCoverImage] = useState<File | null>(null);
   const [mapCoordinates, setMapCoordinates] = useState<{ lat: number; lng: number } | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [priceType, setPriceType] = useState<"free" | "paid" | "crowdfunding">("free");
   const [isPrivateEvent, setIsPrivateEvent] = useState(false);
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
+  const [isPlaceSearchOpen, setIsPlaceSearchOpen] = useState(false);
+  const [currentCityName, setCurrentCityName] = useState<string>("");
 
   const isEditing = !!id;
 
@@ -89,6 +93,38 @@ export default function CreateEvent() {
       isPrivate: false,
     },
   });
+
+  // Get user's location for proximity search
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const location = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          };
+          setUserLocation(location);
+          
+          // Get city name for local place search
+          fetch('/api/reverse-geocode', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(location),
+          })
+            .then(res => res.json())
+            .then(data => {
+              if (data.city) {
+                setCurrentCityName(data.city);
+              }
+            })
+            .catch(console.error);
+        },
+        (error) => {
+          console.error("Error getting location:", error);
+        }
+      );
+    }
+  }, []);
 
   // Update form when event data is loaded
   useEffect(() => {
@@ -295,10 +331,15 @@ export default function CreateEvent() {
     if (!address) return;
     
     try {
+      const requestBody: any = { address };
+      if (userLocation) {
+        requestBody.proximity = userLocation;
+      }
+      
       const response = await fetch('/api/geocode', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address }),
+        body: JSON.stringify(requestBody),
       });
       
       if (response.ok) {
@@ -328,6 +369,12 @@ export default function CreateEvent() {
     } catch (error) {
       console.error('Reverse geocoding error:', error);
     }
+  };
+
+  const handlePlaceSelect = (place: any) => {
+    const [lng, lat] = place.center;
+    setMapCoordinates({ lat, lng });
+    form.setValue('location', place.address);
   };
 
   return (
@@ -602,6 +649,24 @@ export default function CreateEvent() {
                 )}
               />
 
+              {/* Local Place Search Button */}
+              {userLocation && currentCityName && (
+                <div className="flex items-center justify-center">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsPlaceSearchOpen(true)}
+                    className="flex items-center gap-2"
+                    data-testid="button-search-local-places"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    Buscar Lugares em {currentCityName}
+                  </Button>
+                </div>
+              )}
+
               {/* Interactive Map for Pin Selection */}
               <div className="rounded-xl overflow-hidden">
                 <MapComponent
@@ -864,6 +929,15 @@ export default function CreateEvent() {
           </form>
         </Form>
       </div>
+
+      {/* Local Place Search Modal */}
+      <LocalPlaceSearch
+        open={isPlaceSearchOpen}
+        onOpenChange={setIsPlaceSearchOpen}
+        onPlaceSelect={handlePlaceSelect}
+        userLocation={userLocation}
+        currentCity={currentCityName}
+      />
     </div>
   );
 }

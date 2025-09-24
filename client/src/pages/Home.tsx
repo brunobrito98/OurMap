@@ -185,6 +185,7 @@ export default function Home() {
         onOpenChange={setIsLocationModalOpen}
         onLocationSelect={handleLocationSelect}
         currentLocation={locationName}
+        userCoordinates={userLocation}
       />
     </div>
   );

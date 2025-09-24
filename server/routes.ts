@@ -223,17 +223,31 @@ const upload = multer({
   }
 });
 
-// Geocoding function using Mapbox
-async function geocodeAddress(address: string): Promise<{ lat: number; lng: number }> {
+// Geocoding function using Mapbox with optional proximity filter
+async function geocodeAddress(
+  address: string, 
+  proximity?: { lat: number; lng: number },
+  types?: string[]
+): Promise<{ lat: number; lng: number }> {
   const mapboxToken = process.env.MAPBOX_ACCESS_TOKEN || process.env.VITE_MAPBOX_ACCESS_TOKEN;
   if (!mapboxToken) {
     throw new Error('Mapbox access token not configured');
   }
 
   const encodedAddress = encodeURIComponent(address);
-  const response = await fetch(
-    `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedAddress}.json?access_token=${mapboxToken}&limit=1`
-  );
+  let url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedAddress}.json?access_token=${mapboxToken}&limit=5&language=pt`;
+  
+  // Add proximity filter if coordinates provided
+  if (proximity) {
+    url += `&proximity=${proximity.lng},${proximity.lat}`;
+  }
+  
+  // Add types filter if specified
+  if (types && types.length > 0) {
+    url += `&types=${types.join(',')}`;
+  }
+
+  const response = await fetch(url);
 
   if (!response.ok) {
     throw new Error('Geocoding failed');
@@ -246,6 +260,90 @@ async function geocodeAddress(address: string): Promise<{ lat: number; lng: numb
 
   const [lng, lat] = data.features[0].center;
   return { lat, lng };
+}
+
+// Function to get city bounding box from coordinates
+async function getCityBounds(lat: number, lng: number): Promise<{ bbox?: number[], cityName?: string }> {
+  const mapboxToken = process.env.MAPBOX_ACCESS_TOKEN || process.env.VITE_MAPBOX_ACCESS_TOKEN;
+  if (!mapboxToken) {
+    throw new Error('Mapbox access token not configured');
+  }
+
+  const response = await fetch(
+    `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxToken}&types=place,locality&limit=1`
+  );
+
+  if (!response.ok) {
+    return {};
+  }
+
+  const data = await response.json();
+  const cityFeature = data.features?.[0];
+  
+  if (cityFeature && cityFeature.bbox) {
+    return {
+      bbox: cityFeature.bbox, // [minLng, minLat, maxLng, maxLat]
+      cityName: cityFeature.text
+    };
+  }
+  
+  return {};
+}
+
+// Function to search local places using Mapbox with city boundary restriction
+async function searchLocalPlaces(
+  query: string,
+  proximity: { lat: number; lng: number },
+  limit: number = 5
+): Promise<any[]> {
+  const mapboxToken = process.env.MAPBOX_ACCESS_TOKEN || process.env.VITE_MAPBOX_ACCESS_TOKEN;
+  if (!mapboxToken) {
+    throw new Error('Mapbox access token not configured');
+  }
+
+  // Get city bounds for precise filtering
+  const { bbox, cityName } = await getCityBounds(proximity.lat, proximity.lng);
+  
+  const encodedQuery = encodeURIComponent(query);
+  let url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedQuery}.json?access_token=${mapboxToken}&types=poi,address&proximity=${proximity.lng},${proximity.lat}&limit=${limit * 2}&language=pt`;
+  
+  // Add bounding box if available for more precise city filtering
+  if (bbox) {
+    url += `&bbox=${bbox.join(',')}`;
+  }
+
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error('Local place search failed');
+  }
+
+  const data = await response.json();
+  let places = data.features?.map((feature: any) => ({
+    place_name: feature.place_name,
+    center: feature.center,
+    text: feature.text,
+    category: feature.properties?.category || 'lugar',
+    address: feature.place_name,
+    context: feature.context
+  })) || [];
+  
+  // Additional filtering: keep only places that mention the current city in their context
+  if (cityName) {
+    places = places.filter((place: any) => {
+      // Check if the place's context includes the current city
+      if (place.context) {
+        return place.context.some((ctx: any) => 
+          ctx.text && ctx.text.toLowerCase().includes(cityName.toLowerCase())
+        );
+      }
+      // If no context, check if city name is in the place name
+      return place.place_name.toLowerCase().includes(cityName.toLowerCase());
+    });
+  }
+  
+  // Limit results after filtering
+  return places.slice(0, limit);
 }
 
 // Auth middleware
@@ -1522,19 +1620,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Geocoding endpoint
+  // Geocoding endpoint with optional proximity filter
   app.post('/api/geocode', async (req, res) => {
     try {
-      const { address } = req.body;
+      const { address, proximity, types } = req.body;
       if (!address) {
         return res.status(400).json({ message: "Address is required" });
       }
       
-      const coordinates = await geocodeAddress(address);
+      const coordinates = await geocodeAddress(address, proximity, types);
       res.json(coordinates);
     } catch (error) {
       console.error("Geocoding error:", error);
       res.status(500).json({ message: "Failed to geocode address" });
+    }
+  });
+
+  // Search local places endpoint
+  app.post('/api/search-places', async (req, res) => {
+    try {
+      const { query, proximity } = req.body;
+      if (!query || query.length < 2) {
+        return res.json({ places: [] });
+      }
+      
+      if (!proximity || !proximity.lat || !proximity.lng) {
+        return res.status(400).json({ message: "User location (proximity) is required for local search" });
+      }
+      
+      const places = await searchLocalPlaces(query, proximity, 10);
+      res.json({ places });
+    } catch (error) {
+      console.error("Local place search error:", error);
+      res.status(500).json({ message: "Failed to search local places" });
     }
   });
 
@@ -1605,10 +1723,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // City search endpoint for autocomplete
+  // City search endpoint for autocomplete with optional proximity
   app.post('/api/search-cities', async (req, res) => {
     try {
-      const { query } = req.body;
+      const { query, proximity } = req.body;
       if (!query || query.length < 2) {
         return res.json({ suggestions: [] });
       }
@@ -1619,9 +1737,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const encodedQuery = encodeURIComponent(query);
-      const response = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedQuery}.json?access_token=${mapboxToken}&types=place&limit=5&language=pt`
-      );
+      let url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedQuery}.json?access_token=${mapboxToken}&types=place,locality&limit=5&language=pt`;
+      
+      // Add proximity filter if coordinates provided (prioritize nearby cities)
+      if (proximity && proximity.lat && proximity.lng) {
+        url += `&proximity=${proximity.lng},${proximity.lat}`;
+      }
+      
+      const response = await fetch(url);
 
       if (!response.ok) {
         throw new Error('City search failed');

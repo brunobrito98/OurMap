@@ -9,6 +9,7 @@ interface CitySearchModalProps {
   onOpenChange: (open: boolean) => void;
   onLocationSelect: (location: { lat: number; lng: number }, cityName: string) => void;
   currentLocation: string;
+  userCoordinates?: { lat: number; lng: number } | null;
 }
 
 interface CitySuggestion {
@@ -21,7 +22,8 @@ export default function CitySearchModal({
   open, 
   onOpenChange, 
   onLocationSelect, 
-  currentLocation 
+  currentLocation,
+  userCoordinates 
 }: CitySearchModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [suggestions, setSuggestions] = useState<CitySuggestion[]>([]);
@@ -42,11 +44,16 @@ export default function CitySearchModal({
     const timeout = setTimeout(async () => {
       setIsLoading(true);
       try {
-        // Use Mapbox Search API for city suggestions
+        // Use Mapbox Search API for city suggestions with proximity filter
+        const requestBody: any = { query: searchQuery };
+        if (userCoordinates) {
+          requestBody.proximity = userCoordinates;
+        }
+        
         const response = await fetch('/api/search-cities', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: searchQuery }),
+          body: JSON.stringify(requestBody),
         });
         
         if (response.ok) {
@@ -89,10 +96,15 @@ export default function CitySearchModal({
     
     setIsLoading(true);
     try {
+      const requestBody: any = { address: searchQuery };
+      if (userCoordinates) {
+        requestBody.proximity = userCoordinates;
+      }
+      
       const response = await fetch('/api/geocode', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address: searchQuery }),
+        body: JSON.stringify(requestBody),
       });
       
       if (response.ok) {
