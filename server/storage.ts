@@ -375,8 +375,16 @@ export class DatabaseStorage implements IStorage {
   }): Promise<EventWithDetails[]> {
     try {
       console.log('DEBUG getEvents called with filters:', JSON.stringify(filters));
-      const conditions = [sql`DATE(${events.dateTime}) >= DATE(NOW())`];
-      console.log('DEBUG: Initial conditions set');
+      // Filter out events that have already ended
+      // If event has endTime, use that to check if it's still ongoing
+      // If event doesn't have endTime, use dateTime 
+      const conditions = [sql`
+        CASE 
+          WHEN ${events.endTime} IS NOT NULL THEN ${events.endTime} > NOW()
+          ELSE ${events.dateTime} > NOW()
+        END
+      `];
+      console.log('DEBUG: Initial conditions set with event end time filtering');
       
       // Filter out private events unless user has access
       if (filters?.userId) {

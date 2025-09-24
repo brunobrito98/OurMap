@@ -1160,6 +1160,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const eventId = req.params.id;
       const { status } = req.body;
       
+      // Check if event has already ended before allowing attendance
+      const event = await storage.getEvent(eventId);
+      if (!event) {
+        return res.status(404).json({ message: "Event not found" });
+      }
+      
+      // Check if event has ended
+      const now = new Date();
+      const eventEndTime = event.endTime || event.dateTime;
+      if (eventEndTime && new Date(eventEndTime) <= now) {
+        return res.status(400).json({ message: "Cannot change attendance for events that have already ended" });
+      }
+      
       const attendanceData = insertEventAttendanceSchema.parse({
         eventId,
         userId,
