@@ -13,6 +13,30 @@ import twilio from "twilio";
 import { parsePhoneNumber, isValidPhoneNumber } from "libphonenumber-js";
 import { createHmac, randomBytes } from "crypto";
 
+// Helper function to sanitize event data for responses
+function sanitizeEventForUser(eventData: any, userId?: string) {
+  // Handle both Event and EventWithDetails structures
+  if (eventData.event && eventData.organizer) {
+    // EventWithDetails structure: { event: {...}, organizer: {...}, ... }
+    const { event, ...rest } = eventData;
+    const sanitizedEvent = sanitizeEventObject(event, userId);
+    return { event: sanitizedEvent, ...rest };
+  } else {
+    // Plain Event structure
+    return sanitizeEventObject(eventData, userId);
+  }
+}
+
+// Helper to sanitize a single event object
+function sanitizeEventObject(event: any, userId?: string) {
+  // Remove shareableLink unless user is the creator
+  if (event.shareableLink && event.creatorId !== userId) {
+    const { shareableLink, ...sanitizedEvent } = event;
+    return sanitizedEvent;
+  }
+  return event;
+}
+
 // Configure multer for file uploads
 const uploadsDir = path.join(process.cwd(), 'uploads');
 if (!fs.existsSync(uploadsDir)) {
@@ -147,23 +171,46 @@ async function createNotificationIfEnabled(
 async function notifyFriendsAboutEvent(creatorId: string, eventId: string, eventTitle: string) {
   try {
     const creator = await storage.getUser(creatorId);
-    const friends = await storage.getFriends(creatorId);
-    
     if (!creator) return;
     
-    for (const friend of friends) {
-      await createNotificationIfEnabled(
-        friend.id,
-        'notificarEventoAmigo',
-        {
-          type: 'event_created',
-          title: 'Novo evento de um amigo',
-          message: `${creator.firstName || 'Um amigo'} criou um novo evento: "${eventTitle}"`,
-          relatedUserId: creatorId,
-          relatedEventId: eventId,
-          actionUrl: `/events/${eventId}`
-        }
-      );
+    // Get event to check if it's private
+    const event = await storage.getEvent(eventId, creatorId);
+    if (!event) return;
+    
+    // For private events, only notify invited users
+    if (event.isPrivate) {
+      const invites = await storage.getEventInvites(eventId);
+      for (const invite of invites) {
+        await createNotificationIfEnabled(
+          invite.userId,
+          'notificarEventoAmigo',
+          {
+            type: 'event_created',
+            title: 'Convite para evento privado',
+            message: `${creator.firstName || 'Um amigo'} te convidou para um evento privado: "${eventTitle}"`,
+            relatedUserId: creatorId,
+            relatedEventId: eventId,
+            actionUrl: `/events/${eventId}`
+          }
+        );
+      }
+    } else {
+      // For public events, notify all friends
+      const friends = await storage.getFriends(creatorId);
+      for (const friend of friends) {
+        await createNotificationIfEnabled(
+          friend.id,
+          'notificarEventoAmigo',
+          {
+            type: 'event_created',
+            title: 'Novo evento de um amigo',
+            message: `${creator.firstName || 'Um amigo'} criou um novo evento: "${eventTitle}"`,
+            relatedUserId: creatorId,
+            relatedEventId: eventId,
+            actionUrl: `/events/${eventId}`
+          }
+        );
+      }
     }
   } catch (error) {
     console.error('Error notifying friends about event:', error);
@@ -587,7 +634,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Add full profile data if connected/can view
       if (profileData.canViewFullProfile) {
         response.phone_number = profileData.phoneNumber;
-        response.events = profileData.confirmedEvents || [];
+        // Sanitize events to remove shareableLink for non-creators
+        const events = profileData.confirmedEvents || [];
+        response.events = events.map(event => sanitizeEventForUser(event, viewerId));
       }
       
       res.json(response);
@@ -875,7 +924,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userId,
       });
       
-      res.json(events);
+      // Sanitize events to remove shareableLink for non-creators
+      const sanitizedEvents = events.map(event => sanitizeEventForUser(event, userId));
+      res.json(sanitizedEvents);
     } catch (error) {
       console.error("Error fetching events:", error);
       res.status(500).json({ message: "Failed to fetch events" });
@@ -889,7 +940,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "User ID not found" });
       }
       const events = await storage.getUserEvents(userId);
-      res.json(events);
+      
+      // Sanitize events to remove shareableLink for non-creators (though user should be creator of their own events)
+      const sanitizedEvents = events.map(event => sanitizeEventForUser(event, userId));
+      res.json(sanitizedEvents);
     } catch (error) {
       console.error("Error fetching user events:", error);
       res.status(500).json({ message: "Failed to fetch user events" });
@@ -905,7 +959,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Event not found" });
       }
       
-      res.json(event);
+      // Sanitize event to remove shareableLink for non-creators
+      const sanitizedEvent = sanitizeEventForUser(event, userId);
+      res.json(sanitizedEvent);
     } catch (error) {
       console.error("Error fetching event:", error);
       res.status(500).json({ message: "Failed to fetch event" });
@@ -932,11 +988,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (formData.isRecurring !== undefined) {
         formData.isRecurring = formData.isRecurring === 'true';
       }
+      if (formData.isPrivate !== undefined) {
+        formData.isPrivate = formData.isPrivate === 'true';
+      }
       
       // Convert numeric fields from strings - price should remain as string for schema validation
       if (formData.price !== undefined && formData.price !== '') {
         // Ensure price is a string (FormData values are strings by default)
         formData.price = formData.price.toString();
+      }
+      if (formData.maxAttendees !== undefined && formData.maxAttendees !== '') {
+        formData.maxAttendees = parseInt(formData.maxAttendees, 10);
+      }
+      if (formData.recurrenceInterval !== undefined && formData.recurrenceInterval !== '') {
+        formData.recurrenceInterval = parseInt(formData.recurrenceInterval, 10);
       }
       
       const eventData = insertEventSchema.parse(formData);
@@ -1048,8 +1113,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
           coordinates
         );
         
-        // Notify friends about the new event
-        await notifyFriendsAboutEvent(userId, event.id, event.title);
+        // Handle private event invitations
+        if (processedEventData.isPrivate && req.body.invitedFriends) {
+          try {
+            const invitedFriends = JSON.parse(req.body.invitedFriends);
+            if (Array.isArray(invitedFriends) && invitedFriends.length > 0) {
+              await storage.inviteFriendsToEvent(event.id, invitedFriends);
+              
+              // Send notifications to invited friends
+              for (const friendId of invitedFriends) {
+                await storage.createNotification({
+                  userId: friendId,
+                  type: 'event_invite',
+                  title: 'Convite para evento privado',
+                  message: `Você foi convidado para o evento "${event.title}"`,
+                  relatedUserId: userId,
+                  relatedEventId: event.id,
+                  actionUrl: `/events/${event.id}`,
+                });
+              }
+            }
+          } catch (error) {
+            console.error('Error processing friend invitations:', error);
+          }
+        }
+        
+        // Notify friends about the new event (only for public events)
+        if (!processedEventData.isPrivate) {
+          await notifyFriendsAboutEvent(userId, event.id, event.title);
+        }
         
         res.status(201).json(event);
       }
@@ -1080,7 +1172,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const eventId = req.params.id;
       
       // Check if user owns the event
-      const existingEvent = await storage.getEvent(eventId);
+      const existingEvent = await storage.getEvent(eventId, userId);
       if (!existingEvent || existingEvent.creatorId !== userId) {
         return res.status(403).json({ message: "Not authorized to edit this event" });
       }
@@ -1092,6 +1184,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (formData.isRecurring !== undefined) {
         formData.isRecurring = formData.isRecurring === 'true';
       }
+      if (formData.isPrivate !== undefined) {
+        formData.isPrivate = formData.isPrivate === 'true';
+      }
       
       // Convert numeric fields from strings
       if (formData.maxAttendees !== undefined && formData.maxAttendees !== '') {
@@ -1099,6 +1194,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       if (formData.recurrenceInterval !== undefined && formData.recurrenceInterval !== '') {
         formData.recurrenceInterval = parseInt(formData.recurrenceInterval, 10);
+      }
+      
+      // Ensure priceType is one of the allowed values
+      if (formData.priceType && !['free', 'paid', 'crowdfunding'].includes(formData.priceType)) {
+        formData.priceType = 'free';
       }
       
       // Use dedicated update schema that supports partial updates with validation
@@ -1140,6 +1240,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             fs.unlinkSync(oldPath);
           }
         }
+      }
+      
+      // Ensure priceType is valid for update
+      if (processedEventData.priceType && !['free', 'paid', 'crowdfunding'].includes(processedEventData.priceType)) {
+        processedEventData.priceType = 'free';
       }
       
       const event = await storage.updateEvent(eventId, processedEventData, coordinates);
@@ -1193,7 +1298,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Notify event creator about attendance changes
       if (status === 'attending') {
-        const event = await storage.getEvent(eventId);
+        const event = await storage.getEvent(eventId, userId);
         if (event && event.creatorId !== userId) {
           const user = await storage.getUser(userId);
           if (user && event) {
@@ -1212,7 +1317,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
       } else if (status === 'not_going') {
-        const event = await storage.getEvent(eventId);
+        const event = await storage.getEvent(eventId, userId);
+        
+        // Se for um evento de vaquinha, remove as contribuições do usuário
+        if (event && event.priceType === 'crowdfunding') {
+          await storage.removeUserContributions(eventId, userId);
+        }
+        
         if (event && event.creatorId !== userId) {
           const user = await storage.getUser(userId);
           if (user && event) {
@@ -1283,7 +1394,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check if event exists and is crowdfunding type
-      const event = await storage.getEvent(eventId);
+      const event = await storage.getEvent(eventId, userId);
       if (!event) {
         return res.status(404).json({ message: "Evento não encontrado" });
       }
@@ -1570,7 +1681,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const rating = await storage.createRating(ratingData);
       
       // Notify event creator about new rating
-      const event = await storage.getEvent(eventId);
+      const event = await storage.getEvent(eventId, userId);
       if (event && event.creatorId !== userId) {
         const user = await storage.getUser(userId);
         if (user && event) {
@@ -1798,8 +1909,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json([]);
       }
       
-      const events = await storage.searchEvents(query);
-      res.json(events);
+      const userId = getUserId(req);
+      const events = await storage.searchEvents(query, userId);
+      
+      // Sanitize events to remove shareableLink for non-creators
+      const sanitizedEvents = events.map(event => sanitizeEventForUser(event, userId));
+      res.json(sanitizedEvents);
     } catch (error) {
       console.error("Error searching events:", error);
       res.status(500).json({ message: "Failed to search events" });
@@ -1893,6 +2008,154 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating notification preference:", error);
       res.status(500).json({ message: "Failed to update notification preference" });
+    }
+  });
+
+  // Private events routes
+  app.post('/api/events/:id/invite', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
+      
+      const eventId = req.params.id;
+      const { friendIds } = req.body;
+      
+      // Validate input
+      if (!Array.isArray(friendIds) || friendIds.length === 0) {
+        return res.status(400).json({ message: "Friend IDs array is required" });
+      }
+      
+      // Check if user owns the event
+      const event = await storage.getEvent(eventId, userId);
+      if (!event || event.creatorId !== userId) {
+        return res.status(403).json({ message: "Not authorized to invite to this event" });
+      }
+      
+      if (!event.isPrivate) {
+        return res.status(400).json({ message: "This event is not private" });
+      }
+      
+      // Validate that all friendIds are actual friends
+      const friendships = await Promise.all(
+        friendIds.map((friendId: string) => 
+          storage.hasPendingFriendRequest(userId, friendId).then(pending => ({
+            friendId,
+            isFriend: !pending // If no pending request, they are already friends
+          }))
+        )
+      );
+      
+      const validFriendIds = friendships
+        .filter(f => f.isFriend)
+        .map(f => f.friendId);
+      
+      if (validFriendIds.length === 0) {
+        return res.status(400).json({ message: "No valid friends found to invite" });
+      }
+      
+      // Send invitations
+      await storage.inviteFriendsToEvent(eventId, validFriendIds);
+      
+      res.json({ 
+        message: `Invited ${validFriendIds.length} friends to the event`,
+        invitedCount: validFriendIds.length
+      });
+    } catch (error) {
+      console.error("Error inviting friends to event:", error);
+      res.status(500).json({ message: "Failed to invite friends" });
+    }
+  });
+
+  app.get('/api/events/:id/invites', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
+      
+      const eventId = req.params.id;
+      
+      // Check if user owns the event
+      const event = await storage.getEvent(eventId, userId);
+      if (!event || event.creatorId !== userId) {
+        return res.status(403).json({ message: "Not authorized to view invites for this event" });
+      }
+      
+      const invites = await storage.getEventInvites(eventId);
+      res.json(invites);
+    } catch (error) {
+      console.error("Error fetching event invites:", error);
+      res.status(500).json({ message: "Failed to fetch event invites" });
+    }
+  });
+
+  app.post('/api/invites/:id/respond', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
+      
+      const inviteId = req.params.id;
+      const { response } = req.body; // 'accepted' or 'declined'
+      
+      if (!['accepted', 'declined'].includes(response)) {
+        return res.status(400).json({ message: "Response must be 'accepted' or 'declined'" });
+      }
+      
+      // TODO: Implement invite response logic in storage
+      // For now, return a placeholder response
+      res.json({ message: "Invite response recorded" });
+    } catch (error) {
+      console.error("Error responding to invite:", error);
+      res.status(500).json({ message: "Failed to respond to invite" });
+    }
+  });
+
+  app.get('/api/events/link/:shareableLink', async (req, res) => {
+    try {
+      const { shareableLink } = req.params;
+      const userId = getUserId(req);
+      
+      const event = await storage.getEventByShareableLink(shareableLink);
+      if (!event) {
+        return res.status(404).json({ message: "Event not found" });
+      }
+      
+      // For private events accessed via link, we allow access but still require auth for details
+      if (event.isPrivate && !userId) {
+        return res.status(401).json({ message: "Authentication required to access this private event" });
+      }
+      
+      // Get full event details
+      const eventWithDetails = await storage.getEventWithDetails(event.id, userId);
+      if (!eventWithDetails) {
+        return res.status(404).json({ message: "Event details not found" });
+      }
+      
+      // Sanitize event to remove shareableLink for non-creators
+      const sanitizedEvent = sanitizeEventForUser(eventWithDetails, userId);
+      res.json(sanitizedEvent);
+    } catch (error) {
+      console.error("Error accessing event by shareable link:", error);
+      res.status(500).json({ message: "Failed to access event" });
+    }
+  });
+
+  app.get('/api/user/invites', isAuthenticatedAny, async (req: any, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
+      
+      const invites = await storage.getUserEventInvites(userId);
+      res.json(invites);
+    } catch (error) {
+      console.error("Error fetching user invites:", error);
+      res.status(500).json({ message: "Failed to fetch user invites" });
     }
   });
 

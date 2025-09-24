@@ -1,0 +1,51 @@
+Criar eventos privados é essencial para festas de aniversário, reuniões de amigos e encontros corporativos. A implementação pode ser dividida em duas partes principais: a criação do evento e o controle de acesso.
+
+Aqui está um resumo de como essa funcionalidade pode ser estruturada:
+
+1. Modificação na Tela de Criação de Evento
+
+Na tela onde o organizador insere os detalhes do evento (nome, data, local), você precisará adicionar uma nova opção:
+
+Controle de Privacidade: Um toggle switch (botão de ligar/desligar) com o rótulo "Evento Privado" é a melhor opção de interface.
+
+Se "Evento Privado" estiver desligado (padrão): O evento é público e visível para todos, como já funciona hoje.
+
+Se "Evento Privado" estiver ligado: Novas opções devem aparecer abaixo para o organizador escolher como os convidados terão acesso.
+
+2. Opções de Acesso para Eventos Privados
+
+Quando a opção "Evento Privado" é ativada, o organizador verá duas formas de convidar pessoas:
+
+Acesso por Link Secreto:
+
+O sistema deve gerar automaticamente um link único e difícil de adivinhar para este evento.
+
+O organizador pode copiar este link e compartilhá-lo via WhatsApp, e-mail ou qualquer outro meio. Apenas quem tiver o link poderá visualizar e participar do evento.
+
+Convidar Amigos da Lista:
+
+O aplicativo deve exibir a lista de amigos do organizador.
+
+O organizador pode selecionar (marcando checkboxes) quais amigos ele deseja convidar diretamente.
+
+Os amigos selecionados receberão uma notificação no aplicativo e verão o evento em uma seção especial, como "Meus Convites".
+
+3. Como o Sistema Controla o Acesso
+
+Para que isso funcione, seu backend e banco de dados precisam de alguns ajustes:
+
+No Banco de Dados: A tabela de eventos precisará de uma nova coluna, como is_private (do tipo booleano, true ou false). Também precisará de uma coluna para o link secreto, como shareable_link_id.
+
+Na Lógica do Backend:
+
+A busca geral por eventos no aplicativo deve filtrar e mostrar apenas os eventos onde is_private é false.
+
+Quando um usuário tenta acessar um evento específico (seja pelo link ou por um convite), o sistema deve verificar:
+
+O link corresponde ao shareable_link_id do evento?
+
+OU, o ID do usuário está na lista de convidados para aquele evento?
+
+Se uma dessas condições for verdadeira, o acesso é permitido. Caso contrário, o acesso é negado.
+
+Essa abordagem oferece flexibilidade para o organizador e garante a privacidade do evento.
