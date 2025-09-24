@@ -1799,6 +1799,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Search ended events endpoint
+  app.get('/api/search/ended-events', async (req, res) => {
+    try {
+      const { cityName, daysBack, searchQuery } = req.query;
+      
+      // Parse daysBack to number if provided
+      const daysBackNumber = daysBack && typeof daysBack === 'string' ? parseInt(daysBack, 10) : undefined;
+      if (daysBack && (isNaN(daysBackNumber!) || daysBackNumber! < 0)) {
+        return res.status(400).json({ message: "Invalid daysBack parameter" });
+      }
+      
+      const userId = getUserId(req);
+      const events = await storage.searchEndedEvents(
+        cityName as string || undefined,
+        daysBackNumber,
+        searchQuery as string || undefined,
+        userId
+      );
+      
+      // Sanitize events to remove shareableLink for non-creators
+      const sanitizedEvents = events.map(event => sanitizeEventForUser(event, userId));
+      res.json(sanitizedEvents);
+    } catch (error) {
+      console.error("Error searching ended events:", error);
+      res.status(500).json({ message: "Failed to search ended events" });
+    }
+  });
+
   // Notification routes
   app.get('/api/notifications', isAuthenticatedAny, async (req: any, res) => {
     try {
