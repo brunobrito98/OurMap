@@ -143,7 +143,7 @@ export default function Landing() {
                 {!isRegistering && (
                   <div>
                     <Label htmlFor="username" className="text-sm font-medium">
-                      Email ou Usuário
+                      Email, Telefone ou Usuário
                     </Label>
                     <Input
                       id="username"
@@ -152,6 +152,7 @@ export default function Landing() {
                       value={formData.username}
                       onChange={handleInputChange}
                       required
+                      placeholder="Digite seu email, telefone ou nome de usuário"
                       className="mt-1"
                       data-testid="input-username"
                     />

@@ -5,7 +5,7 @@ import { Express, RequestHandler } from "express";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
-import { User as SelectUser, InsertLocalUser, InsertAdminUser, insertLocalUserSchema, insertAdminUserSchema } from "@shared/schema";
+import { User, User as SelectUser, InsertLocalUser, InsertAdminUser, insertLocalUserSchema, insertAdminUserSchema } from "@shared/schema";
 import { z } from "zod";
 
 const scryptAsync = promisify(scrypt);
@@ -28,12 +28,44 @@ export function setupLocalAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
 
+  // Helper function to find user by username, email, or phone
+  async function findUserByCredential(credential: string): Promise<User | undefined> {
+    // Try by username first
+    let user = await storage.getUserByUsername(credential);
+    if (user) return user;
+    
+    // Try by email
+    user = await storage.getUserByEmail(credential);
+    if (user) return user;
+    
+    // Try by phone (if it looks like a phone number)
+    // Check if it's in E.164 format or can be converted
+    if (credential.startsWith('+') || /^\d+$/.test(credential.replace(/[\s\-\(\)]/g, ''))) {
+      try {
+        const { parsePhoneNumber } = await import("libphonenumber-js");
+        const phoneNumber = parsePhoneNumber(credential);
+        if (phoneNumber && phoneNumber.isValid()) {
+          user = await storage.getUserByPhone(phoneNumber.format('E.164'));
+          if (user) return user;
+        }
+      } catch {
+        // If phone parsing fails, ignore and continue
+      }
+      
+      // Also try as is (in case it's already in E.164)
+      user = await storage.getUserByPhone(credential);
+      if (user) return user;
+    }
+    
+    return undefined;
+  }
+
   // Setup local strategy for passport
   passport.use(
     "local",
     new LocalStrategy(async (username, password, done) => {
       try {
-        const user = await storage.getUserByUsername(username);
+        const user = await findUserByCredential(username);
         if (!user || !user.password || !(await comparePasswords(password, user.password))) {
           return done(null, false, { message: "Credenciais inválidas" });
         }
