@@ -6,6 +6,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/PhoneInput";
+import { type Value } from "react-phone-number-input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -199,15 +201,15 @@ export default function ChangePhone() {
                           <span>Novo Número de Telefone</span>
                         </FormLabel>
                         <FormControl>
-                          <Input
-                            {...field}
-                            type="tel"
-                            placeholder="+55 (11) 99999-9999"
+                          <PhoneInput
+                            value={field.value as Value}
+                            onChange={field.onChange}
+                            placeholder="Número de telefone"
                             data-testid="input-new-phone"
                           />
                         </FormControl>
                         <div className="text-xs text-muted-foreground">
-                          Use o formato internacional com código do país (ex: +55 para Brasil)
+                          Selecione o país e digite seu número de telefone
                         </div>
                         <FormMessage />
                       </FormItem>
