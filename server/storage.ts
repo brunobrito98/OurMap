@@ -419,78 +419,27 @@ export class DatabaseStorage implements IStorage {
 
       // Filter events by city if user city is provided
       if (filters?.userCity) {
-        // Helper function to get city from coordinates
-        const getCityFromCoordinates = async (lat: string, lng: string): Promise<string | null> => {
-          try {
-            const mapboxToken = process.env.MAPBOX_ACCESS_TOKEN || process.env.VITE_MAPBOX_ACCESS_TOKEN;
-            if (!mapboxToken) return null;
-
-            const response = await fetch(
-              `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxToken}&limit=1`
-            );
-
-            if (!response.ok) return null;
-
-            const data = await response.json();
-            if (!data.features || data.features.length === 0) return null;
-
-            const feature = data.features[0];
-            
-            // Extract city name using same logic as in routes
-            if (feature.context) {
-              for (const context of feature.context) {
-                if (context.id && (context.id.startsWith('place.') || context.id.startsWith('locality.'))) {
-                  return context.text;
-                }
-              }
-            }
-            
-            // Fallback
-            const placeName = feature.place_name;
-            if (placeName) {
-              const parts = placeName.split(',');
-              if (parts.length > 0) {
-                return parts[0].trim();
-              }
-            }
-            
-            return null;
-          } catch (error) {
-            console.error("Error getting city from coordinates:", error);
-            return null;
-          }
-        };
-
-        // Filter events by same city
-        const sameCityEvents = await Promise.all(
-          enhancedEvents.map(async (event) => {
-            if (!event.latitude || !event.longitude) return null;
-            
-            const eventCity = await getCityFromCoordinates(event.latitude, event.longitude);
-            
-            // Compare cities (case-insensitive)
-            if (eventCity && filters.userCity) {
-              const eventCityLower = eventCity.toLowerCase();
-              const userCityLower = filters.userCity.toLowerCase();
-              
-              if (eventCityLower.includes(userCityLower) || userCityLower.includes(eventCityLower)) {
-                return event;
-              }
-            }
-            
-            return null;
-          })
-        );
-
-        // Filter out null values and sort by date
-        const filteredEvents = sameCityEvents.filter(event => event !== null);
-        filteredEvents.sort((a, b) => {
+        // Simple text-based filtering by location field - much more efficient than reverse geocoding each event
+        const cityLower = filters.userCity.toLowerCase();
+        
+        const cityFilteredEvents = enhancedEvents.filter(event => {
+          if (!event.location) return false;
+          
+          const locationLower = event.location.toLowerCase();
+          
+          // Check if the event location contains the user's city
+          // This handles various formats like "São Paulo", "São Paulo, SP", "Downtown São Paulo", etc.
+          return locationLower.includes(cityLower) || cityLower.includes(locationLower.split(',')[0].trim());
+        });
+        
+        // Sort by creation date (most recent first)
+        cityFilteredEvents.sort((a, b) => {
           const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
           const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
           return bDate - aDate;
         });
         
-        return filteredEvents;
+        return cityFilteredEvents;
       }
 
       // Fallback to distance-based filtering if coordinates provided but no city
