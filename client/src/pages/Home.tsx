@@ -18,6 +18,7 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationName, setLocationName] = useState("São Paulo, SP");
+  const [userCity, setUserCity] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
 
@@ -32,7 +33,7 @@ export default function Home() {
           };
           setUserLocation(location);
           
-          // Reverse geocode to get location name
+          // Reverse geocode to get location name and city
           fetch('/api/reverse-geocode', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -42,6 +43,9 @@ export default function Home() {
             .then(data => {
               if (data.address) {
                 setLocationName(data.address);
+              }
+              if (data.city) {
+                setUserCity(data.city);
               }
             })
             .catch(console.error);
@@ -54,15 +58,12 @@ export default function Home() {
   }, []);
 
   const { data: events = [], isLoading } = useQuery<EventWithDetails[]>({
-    queryKey: ['/api/events', selectedCategory, userLocation?.lat, userLocation?.lng],
+    queryKey: ['/api/events', selectedCategory, userCity],
     queryFn: async ({ queryKey }) => {
-      const [, category, lat, lng] = queryKey;
+      const [, category, city] = queryKey;
       const params = new URLSearchParams();
       if (category) params.set('category', category as string);
-      if (lat && lng) {
-        params.set('lat', lat.toString());
-        params.set('lng', lng.toString());
-      }
+      if (city) params.set('city', city as string);
       
       const response = await fetch(`/api/events?${params}`);
       if (!response.ok) throw new Error('Failed to fetch events');
@@ -77,6 +78,10 @@ export default function Home() {
   const handleLocationSelect = (location: { lat: number; lng: number }, cityName: string) => {
     setUserLocation(location);
     setLocationName(cityName);
+    
+    // Extract just the city name from full address for filtering
+    const cityOnly = cityName.split(',')[0].trim();
+    setUserCity(cityOnly);
   };
 
   const handleChangeLocation = () => {

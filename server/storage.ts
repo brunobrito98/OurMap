@@ -325,6 +325,7 @@ export class DatabaseStorage implements IStorage {
     category?: string;
     userLat?: number;
     userLng?: number;
+    userCity?: string;
     userId?: string;
   }): Promise<EventWithDetails[]> {
     try {
@@ -416,7 +417,83 @@ export class DatabaseStorage implements IStorage {
         })
       );
 
-      // Filter events by proximity (same city) and sort by distance if coordinates provided
+      // Filter events by city if user city is provided
+      if (filters?.userCity) {
+        // Helper function to get city from coordinates
+        const getCityFromCoordinates = async (lat: string, lng: string): Promise<string | null> => {
+          try {
+            const mapboxToken = process.env.MAPBOX_ACCESS_TOKEN || process.env.VITE_MAPBOX_ACCESS_TOKEN;
+            if (!mapboxToken) return null;
+
+            const response = await fetch(
+              `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxToken}&limit=1`
+            );
+
+            if (!response.ok) return null;
+
+            const data = await response.json();
+            if (!data.features || data.features.length === 0) return null;
+
+            const feature = data.features[0];
+            
+            // Extract city name using same logic as in routes
+            if (feature.context) {
+              for (const context of feature.context) {
+                if (context.id && (context.id.startsWith('place.') || context.id.startsWith('locality.'))) {
+                  return context.text;
+                }
+              }
+            }
+            
+            // Fallback
+            const placeName = feature.place_name;
+            if (placeName) {
+              const parts = placeName.split(',');
+              if (parts.length > 0) {
+                return parts[0].trim();
+              }
+            }
+            
+            return null;
+          } catch (error) {
+            console.error("Error getting city from coordinates:", error);
+            return null;
+          }
+        };
+
+        // Filter events by same city
+        const sameCityEvents = await Promise.all(
+          enhancedEvents.map(async (event) => {
+            if (!event.latitude || !event.longitude) return null;
+            
+            const eventCity = await getCityFromCoordinates(event.latitude, event.longitude);
+            
+            // Compare cities (case-insensitive)
+            if (eventCity && filters.userCity) {
+              const eventCityLower = eventCity.toLowerCase();
+              const userCityLower = filters.userCity.toLowerCase();
+              
+              if (eventCityLower.includes(userCityLower) || userCityLower.includes(eventCityLower)) {
+                return event;
+              }
+            }
+            
+            return null;
+          })
+        );
+
+        // Filter out null values and sort by date
+        const filteredEvents = sameCityEvents.filter(event => event !== null);
+        filteredEvents.sort((a, b) => {
+          const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return bDate - aDate;
+        });
+        
+        return filteredEvents;
+      }
+
+      // Fallback to distance-based filtering if coordinates provided but no city
       if (filters?.userLat && filters?.userLng) {
         // Filter events within 50km (same city/region)
         const nearbyEvents = enhancedEvents.filter(event => 

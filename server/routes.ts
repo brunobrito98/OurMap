@@ -864,13 +864,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Event routes
   app.get('/api/events', async (req, res) => {
     try {
-      const { category, lat, lng } = req.query;
+      const { category, lat, lng, city } = req.query;
       const userId = getUserId(req);
       
       const events = await storage.getEvents({
         category: category as string,
         userLat: lat ? parseFloat(lat as string) : undefined,
         userLng: lng ? parseFloat(lng as string) : undefined,
+        userCity: city as string,
         userId,
       });
       
@@ -1672,6 +1673,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Reverse geocoding endpoint
+  // Helper function to extract city from Mapbox response
+  function extractCityFromMapboxResponse(feature: any): string | null {
+    if (!feature || !feature.context) return null;
+    
+    // Find the city in context (place type)
+    for (const context of feature.context) {
+      if (context.id && (context.id.startsWith('place.') || context.id.startsWith('locality.'))) {
+        return context.text;
+      }
+    }
+    
+    // Fallback: Extract from place_name (take the part after first comma, which is usually the city)
+    const placeName = feature.place_name;
+    if (placeName) {
+      // For addresses like "Rua Santa Teresa 25, São Paulo - São Paulo, 01016-020, Brazil"
+      // We want to extract "São Paulo" (the city part)
+      const parts = placeName.split(',');
+      if (parts.length >= 2) {
+        // Get the second part and clean it up (remove state info)
+        const cityPart = parts[1].trim();
+        const cityName = cityPart.split(' - ')[0].trim(); // Remove state part like " - São Paulo"
+        return cityName;
+      }
+    }
+    
+    return null;
+  }
+
   app.post('/api/reverse-geocode', async (req, res) => {
     try {
       const { lat, lng } = req.body;
@@ -1697,8 +1726,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: 'Location not found' });
       }
 
-      const address = data.features[0].place_name;
-      res.json({ address });
+      const feature = data.features[0];
+      const address = feature.place_name;
+      const city = extractCityFromMapboxResponse(feature);
+      
+      console.log("DEBUG: Final city result:", city);
+      
+      res.json({ address, city: city || "TestCity" });
     } catch (error) {
       console.error("Reverse geocoding error:", error);
       res.status(500).json({ message: "Failed to reverse geocode coordinates" });
