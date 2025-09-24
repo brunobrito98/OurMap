@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web", "postgresql-16"]
+modules = ["nodejs-20", "web"]
 run = "npm run dev"
 hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
@@ -9,15 +9,11 @@ packages = ["postgresql_13"]
 [deployment]
 deploymentTarget = "autoscale"
 build = ["npm", "run", "build"]
-run = ["npm", "run", "start"]
+run = ["npm", "run"]
 
 [[ports]]
 localPort = 5000
 externalPort = 80
-
-[[ports]]
-localPort = 43625
-externalPort = 6000
 
 [[ports]]
 localPort = 36909
@@ -42,6 +38,10 @@ externalPort = 3001
 [[ports]]
 localPort = 44735
 externalPort = 5173
+
+[[ports]]
+localPort = 45091
+externalPort = 3002
 
 [[ports]]
 localPort = 45327
