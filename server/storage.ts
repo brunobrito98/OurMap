@@ -247,8 +247,14 @@ export class DatabaseStorage implements IStorage {
     return newEvent;
   }
 
-  async getEvent(id: string, userId?: string): Promise<Event | undefined> {
+  // Internal method to get event without access checks (used by canUserAccessPrivateEvent)
+  private async getEventInternal(id: string): Promise<Event | undefined> {
     const [event] = await db.select().from(events).where(eq(events.id, id));
+    return event;
+  }
+
+  async getEvent(id: string, userId?: string): Promise<Event | undefined> {
+    const event = await this.getEventInternal(id);
     if (!event) return undefined;
     
     // Check access for private events
@@ -372,28 +378,28 @@ export class DatabaseStorage implements IStorage {
       
       // Filter out private events unless user has access
       if (filters?.userId) {
-        // Include public events OR private events where user is creator, invited, or attending
-        conditions.push(
-          or(
-            eq(events.isPrivate, false),
-            and(
-              eq(events.isPrivate, true),
-              or(
-                eq(events.creatorId, filters.userId),
-                sql`EXISTS (
-                  SELECT 1 FROM ${eventInvites} 
-                  WHERE ${eventInvites.eventId} = ${events.id} 
-                  AND ${eventInvites.userId} = ${filters.userId}
-                )`,
-                sql`EXISTS (
-                  SELECT 1 FROM ${eventAttendees} 
-                  WHERE ${eventAttendees.eventId} = ${events.id} 
-                  AND ${eventAttendees.userId} = ${filters.userId}
-                )`
-              )
+        // Include public events OR private events where user is creator, invited, or attending        
+        const accessCondition = or(
+          eq(events.isPrivate, false),
+          and(
+            eq(events.isPrivate, true),
+            or(
+              eq(events.creatorId, filters.userId),
+              sql`EXISTS (
+                SELECT 1 FROM ${eventInvites} 
+                WHERE ${eventInvites.eventId} = ${events.id} 
+                AND ${eventInvites.userId} = ${filters.userId}
+              )`,
+              sql`EXISTS (
+                SELECT 1 FROM ${eventAttendees} 
+                WHERE ${eventAttendees.eventId} = ${events.id} 
+                AND ${eventAttendees.userId} = ${filters.userId}
+              )`
             )
           )
         );
+        
+        conditions.push(accessCondition);
       } else {
         // No user provided, only show public events
         conditions.push(eq(events.isPrivate, false));
@@ -408,7 +414,10 @@ export class DatabaseStorage implements IStorage {
           if (categoryConditions.length === 1) {
             conditions.push(categoryConditions[0]);
           } else if (categoryConditions.length > 1) {
-            conditions.push(or(...categoryConditions));
+            const categoryOr = or(...categoryConditions);
+            if (categoryOr) {
+              conditions.push(categoryOr);
+            }
           }
         }
       }
@@ -1597,19 +1606,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   async canUserAccessPrivateEvent(eventId: string, userId: string): Promise<boolean> {
-    // Get the event to check if it's private
-    const event = await this.getEvent(eventId);
+    // Get the event to check if it's private (use internal method to avoid recursion)
+    const event = await this.getEventInternal(eventId);
     if (!event) return false;
     
     // If event is not private, everyone can access
     if (!event.isPrivate) return true;
     
-    // If user is the organizer, they can access
+    // CRITICAL: If user is the organizer, they can ALWAYS access their own private events
     if (event.creatorId === userId) return true;
     
     // Check if user is invited
     const isInvited = await this.isUserInvitedToEvent(eventId, userId);
-    return isInvited;
+    if (isInvited) return true;
+    
+    // Check if user is already attending (e.g., via shared link)
+    const [attendance] = await db
+      .select()
+      .from(eventAttendees)
+      .where(and(
+        eq(eventAttendees.eventId, eventId),
+        eq(eventAttendees.userId, userId)
+      ));
+    
+    return !!attendance;
   }
 }
 

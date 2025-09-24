@@ -27,8 +27,14 @@ function sanitizeEventForUser(eventData: any, userId?: string) {
 
 // Helper to sanitize a single event object
 function sanitizeEventObject(event: any, userId?: string) {
-  // Remove shareableLink unless user is the creator
-  if (event.shareableLink && event.creatorId !== userId) {
+  // Only show shareableLink to the event creator
+  // For private events, the shareableLink is essential for sharing with invited users
+  if (event.shareableLink && userId && event.creatorId !== userId) {
+    const { shareableLink, ...sanitizedEvent } = event;
+    return sanitizedEvent;
+  }
+  // If no userId provided, remove shareableLink
+  if (event.shareableLink && !userId) {
     const { shareableLink, ...sanitizedEvent } = event;
     return sanitizedEvent;
   }
