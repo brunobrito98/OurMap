@@ -165,8 +165,16 @@ export default function CreateEvent() {
       });
       
       if (!response.ok) {
-        const error = await response.text();
-        throw new Error(error);
+        let errorMessage = isEditing ? "Falha ao atualizar evento" : "Falha ao criar evento";
+        try {
+          const errorData = await response.json();
+          if (errorData.message) {
+            errorMessage = errorData.message;
+          }
+        } catch {
+          // If JSON parsing fails, use default message
+        }
+        throw new Error(errorMessage);
       }
       
       return response.json();
@@ -195,8 +203,8 @@ export default function CreateEvent() {
         return;
       }
       toast({
-        title: "Erro",
-        description: isEditing ? "Falha ao atualizar evento" : "Falha ao criar evento",
+        title: "Aviso",
+        description: error.message || (isEditing ? "Falha ao atualizar evento" : "Falha ao criar evento"),
         variant: "destructive",
       });
     },
