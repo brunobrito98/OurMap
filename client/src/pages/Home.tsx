@@ -65,7 +65,9 @@ export default function Home() {
       if (category) params.set('category', category as string);
       if (city) params.set('city', city as string);
       
-      const response = await fetch(`/api/events?${params}`);
+      const response = await fetch(`/api/events?${params}`, {
+        credentials: 'include'
+      });
       if (!response.ok) throw new Error('Failed to fetch events');
       return response.json();
     },
