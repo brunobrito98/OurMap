@@ -7,6 +7,14 @@ OurMap is a modern event management platform built for discovering, creating, an
 ## Recent Changes
 
 **September 24, 2025**
+- **Event Lifecycle Management**: Successfully implemented filtering and restriction system for ended events
+  - Modified backend `getEvents()` query to filter out events that have already ended from main screen
+  - Enhanced filtering logic to check `endTime` if available, otherwise uses `dateTime` for event completion
+  - Added validation to `/api/events/:id/attend` endpoint to prevent attendance changes on ended events
+  - Updated `EventDetails.tsx` frontend component to disable attendance buttons for ended events
+  - Added visual indicator showing "Evento Finalizado" (Event Ended) when event has concluded
+  - Implemented real-time validation using event end time or start time comparison with current time
+  - Enhanced user experience by preventing interactions with past events while maintaining data integrity
 - **SMS Authentication Removal**: Successfully completed full removal of SMS authentication system
   - Removed all SMS authentication routes from backend (/api/auth/phone/start, /verify, /link)
   - Updated registration system to accept optional phone number field without verification requirements
