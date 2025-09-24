@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Bell, BellOff, Check, CheckCheck, Users, Calendar, Star, UserPlus } from "lucide-react";
+import { Bell, BellOff, Check, CheckCheck, Users, Calendar, Star, UserPlus, ArrowLeft } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 
 type NotificationWithDetails = {
   id: string;
@@ -53,13 +53,14 @@ function getNotificationIcon(type: string) {
 export function Notifications() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
 
-  const { data: notifications = [], isLoading } = useQuery({
+  const { data: notifications = [], isLoading } = useQuery<NotificationWithDetails[]>({
     queryKey: ['/api/notifications'],
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
-  const { data: unreadData } = useQuery({
+  const { data: unreadData } = useQuery<{ count: number }>({
     queryKey: ['/api/notifications/unread-count'],
     staleTime: 1000 * 30, // 30 seconds
   });
@@ -131,6 +132,15 @@ export function Notifications() {
     <div className="container mx-auto p-4 max-w-2xl">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center space-x-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/")}
+            className="mr-2"
+            data-testid="button-back"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
           <Bell className="h-6 w-6" />
           <h1 className="text-2xl font-bold">Notificações</h1>
           {unreadCount > 0 && (
@@ -168,7 +178,7 @@ export function Notifications() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {(notifications as NotificationWithDetails[]).map((notification, index) => (
+          {notifications.map((notification, index) => (
             <div key={notification.id}>
               <Card 
                 className={`transition-all hover:shadow-md ${
