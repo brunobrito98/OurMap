@@ -99,6 +99,9 @@ export const events = pgTable("events", {
   recurrenceType: text("recurrence_type"),
   recurrenceInterval: integer("recurrence_interval").default(1),
   recurrenceEndDate: timestamp("recurrence_end_date", { withTimezone: true }),
+  // Private event fields
+  isPrivate: boolean("is_private").default(false),
+  shareableLink: uuid("shareable_link").default(sql`gen_random_uuid()`),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
@@ -147,10 +150,20 @@ export const eventRatings = pgTable("event_ratings", {
   uniqueUserEventRating: unique().on(table.eventId, table.userId),
 }));
 
+export const eventInvites = pgTable("event_invites", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending"), // pending, accepted, declined
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqueEventInvite: unique().on(table.eventId, table.userId),
+}));
+
 export const notifications = pgTable("notifications", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  type: text("type").notNull(), // 'friend_invite', 'event_attendance', 'event_created', 'event_reminder', 'event_rating'
+  type: text("type").notNull(), // 'friend_invite', 'event_attendance', 'event_created', 'event_reminder', 'event_rating', 'event_invite'
   title: text("title").notNull(),
   message: text("message").notNull(),
   relatedUserId: uuid("related_user_id").references(() => users.id, { onDelete: "cascade" }), // User who triggered the notification
@@ -180,6 +193,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   ratings: many(eventRatings),
   notifications: many(notifications),
   triggeredNotifications: many(notifications, { relationName: "relatedUser" }),
+  eventInvites: many(eventInvites),
 }));
 
 export const eventsRelations = relations(events, ({ one, many }) => ({
@@ -191,6 +205,7 @@ export const eventsRelations = relations(events, ({ one, many }) => ({
   contributions: many(eventContributions),
   ratings: many(eventRatings),
   notifications: many(notifications, { relationName: "relatedEvent" }),
+  invites: many(eventInvites),
 }));
 
 export const eventAttendeesRelations = relations(eventAttendees, ({ one }) => ({
@@ -239,6 +254,17 @@ export const eventRatingsRelations = relations(eventRatings, ({ one }) => ({
   }),
 }));
 
+export const eventInvitesRelations = relations(eventInvites, ({ one }) => ({
+  event: one(events, {
+    fields: [eventInvites.eventId],
+    references: [events.id],
+  }),
+  user: one(users, {
+    fields: [eventInvites.userId],
+    references: [users.id],
+  }),
+}));
+
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(users, {
     fields: [notifications.userId],
@@ -271,6 +297,7 @@ export const insertEventSchema = createInsertSchema(events).omit({
   latitude: true,
   longitude: true,
   totalRaised: true, // Calculado automaticamente
+  shareableLink: true, // Gerado automaticamente
 }).extend({
   dateTime: z.string().min(1, "Data e hora são obrigatórias").refine((val) => {
     // Accept both datetime-local format (YYYY-MM-DDTHH:mm) and ISO with timezone
@@ -293,6 +320,8 @@ export const insertEventSchema = createInsertSchema(events).omit({
     if (!val) return true; // recurrenceEndDate é opcional
     return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?([+-]\d{2}:\d{2})?$/.test(val);
   }, "Formato de data de fim da recorrência inválido"),
+  isPrivate: z.boolean().optional().default(false),
+  invitedFriends: z.array(z.string()).optional(), // IDs dos amigos convidados
 }).refine((data) => {
   // Validação para garantir que endTime seja posterior a dateTime
   if (data.endTime && data.dateTime) {
@@ -427,6 +456,11 @@ export const insertEventRatingSchema = createInsertSchema(eventRatings).omit({
   createdAt: true,
 });
 
+export const insertEventInviteSchema = createInsertSchema(eventInvites).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertNotificationSchema = createInsertSchema(notifications).omit({
   id: true,
   createdAt: true,
@@ -530,6 +564,8 @@ export type InsertFriendship = z.infer<typeof insertFriendshipSchema>;
 export type EventRating = typeof eventRatings.$inferSelect;
 export type InsertEventRating = z.infer<typeof insertEventRatingSchema>;
 export type Notification = typeof notifications.$inferSelect;
+export type EventInvite = typeof eventInvites.$inferSelect;
+export type InsertEventInvite = z.infer<typeof insertEventInviteSchema>;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type NotificationConfig = z.infer<typeof notificationConfigSchema>;
 

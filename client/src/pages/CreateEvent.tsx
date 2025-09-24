@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { insertEventSchema, type InsertEvent } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { X, Save, Loader2, Gift, Ticket, Heart } from "lucide-react";
+import { X, Save, Loader2, Gift, Ticket, Heart, Lock, Users, Link, Copy } from "lucide-react";
 
 const categories = [
   { value: "festas", label: "Festas", icon: "fas fa-glass-cheers" },
@@ -52,6 +52,8 @@ export default function CreateEvent() {
   const [coverImage, setCoverImage] = useState<File | null>(null);
   const [mapCoordinates, setMapCoordinates] = useState<{ lat: number; lng: number } | null>(null);
   const [priceType, setPriceType] = useState<"free" | "paid" | "crowdfunding">("free");
+  const [isPrivateEvent, setIsPrivateEvent] = useState(false);
+  const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
 
   const isEditing = !!id;
 
@@ -59,6 +61,12 @@ export default function CreateEvent() {
   const { data: eventData } = useQuery<any>({
     queryKey: ['/api/events', id],
     enabled: isEditing,
+  });
+
+  // Fetch friends list for private event invitations
+  const { data: friendsList } = useQuery<any[]>({
+    queryKey: ['/api/friends'],
+    enabled: isPrivateEvent,
   });
 
   const form = useForm<InsertEvent>({
@@ -78,6 +86,7 @@ export default function CreateEvent() {
       recurrenceType: undefined,
       recurrenceEndDate: "",
       iconEmoji: "📅",
+      isPrivate: false,
     },
   });
 
@@ -106,10 +115,14 @@ export default function CreateEvent() {
         recurrenceType: eventData.recurrenceType || undefined,
         recurrenceEndDate: eventData.recurrenceEndDate ? formatDateTime(eventData.recurrenceEndDate) : "",
         iconEmoji: eventData.iconEmoji || "📅",
+        isPrivate: eventData.isPrivate || false,
       });
       
       // Set priceType state based on event data
       setPriceType(eventData.priceType || "free");
+      
+      // Set private event state
+      setIsPrivateEvent(eventData.isPrivate || false);
       
       setMapCoordinates({
         lat: parseFloat(eventData.latitude),
@@ -249,6 +262,14 @@ export default function CreateEvent() {
     if (mapCoordinates) {
       formData.append('latitude', mapCoordinates.lat.toString());
       formData.append('longitude', mapCoordinates.lng.toString());
+    }
+    
+    // Add private event fields
+    formData.append('isPrivate', data.isPrivate ? 'true' : 'false');
+    
+    // Add invited friends if private event
+    if (data.isPrivate && selectedFriends.length > 0) {
+      formData.append('invitedFriends', JSON.stringify(selectedFriends));
     }
     
     // Append cover image if selected
@@ -464,7 +485,7 @@ export default function CreateEvent() {
               {form.watch("dateTime") && form.watch("endTime") && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                   <p className="text-sm text-blue-800">
-                    <span className="font-medium">Duração do evento:</span> {calculateDuration(form.watch("dateTime"), form.watch("endTime"))}
+                    <span className="font-medium">Duração do evento:</span> {calculateDuration(form.watch("dateTime") || "", form.watch("endTime") || "")}
                   </p>
                 </div>
               )}
@@ -585,6 +606,113 @@ export default function CreateEvent() {
               <p className="text-xs text-muted-foreground">
                 Clique ou arraste o pin para definir localização exata
               </p>
+            </div>
+
+            {/* Privacy Section */}
+            <div className="space-y-4">
+              <h3 className="font-semibold text-foreground">Privacidade do Evento</h3>
+              
+              <div className="bg-secondary rounded-xl p-4">
+                <FormField
+                  control={form.control}
+                  name="isPrivate"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value || false}
+                          onCheckedChange={(checked) => {
+                            field.onChange(checked);
+                            setIsPrivateEvent(!!checked);
+                          }}
+                          data-testid="checkbox-private"
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel className="flex items-center space-x-2">
+                          <Lock className="w-4 h-4" />
+                          <span>Evento Privado</span>
+                        </FormLabel>
+                        <p className="text-xs text-muted-foreground">
+                          Apenas pessoas convidadas poderão ver e participar do evento
+                        </p>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+                
+                {isPrivateEvent && (
+                  <div className="mt-4 space-y-4">
+                    {/* Link Secreto Info */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <Link className="w-4 h-4 text-blue-600" />
+                        <h4 className="font-medium text-blue-800">Link Secreto</h4>
+                      </div>
+                      <p className="text-sm text-blue-700 mb-2">
+                        Um link único será gerado automaticamente para compartilhar com pessoas específicas.
+                      </p>
+                      <p className="text-xs text-blue-600">
+                        💡 Você poderá copiar e compartilhar o link após criar o evento
+                      </p>
+                    </div>
+
+                    {/* Friends Selection */}
+                    <div>
+                      <label className="flex items-center space-x-2 text-sm font-medium text-foreground mb-3">
+                        <Users className="w-4 h-4" />
+                        <span>Convidar Amigos</span>
+                      </label>
+                      
+                      {friendsList && friendsList.length > 0 ? (
+                        <div className="space-y-2 max-h-48 overflow-y-auto">
+                          {friendsList.map((friend: any) => (
+                            <div key={friend.id} className="flex items-center space-x-3 p-2 bg-white rounded-lg border">
+                              <Checkbox
+                                id={`friend-${friend.id}`}
+                                checked={selectedFriends.includes(friend.id)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setSelectedFriends(prev => [...prev, friend.id]);
+                                  } else {
+                                    setSelectedFriends(prev => prev.filter(id => id !== friend.id));
+                                  }
+                                }}
+                                data-testid={`checkbox-friend-${friend.id}`}
+                              />
+                              <div className="flex items-center space-x-2 flex-1">
+                                {friend.profileImageUrl ? (
+                                  <img
+                                    src={friend.profileImageUrl}
+                                    alt={friend.firstName}
+                                    className="w-8 h-8 rounded-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center">
+                                    <Users className="w-4 h-4 text-gray-600" />
+                                  </div>
+                                )}
+                                <label 
+                                  htmlFor={`friend-${friend.id}`}
+                                  className="text-sm font-medium cursor-pointer"
+                                >
+                                  {friend.firstName} {friend.lastName}
+                                </label>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-4 text-muted-foreground">
+                          <Users className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">Nenhum amigo encontrado</p>
+                          <p className="text-xs">Adicione amigos para poder convidá-los</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Ticket Type Section */}
