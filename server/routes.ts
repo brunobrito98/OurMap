@@ -937,6 +937,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Ensure price is a string (FormData values are strings by default)
         formData.price = formData.price.toString();
       }
+      if (formData.maxAttendees !== undefined && formData.maxAttendees !== '') {
+        formData.maxAttendees = parseInt(formData.maxAttendees, 10);
+      }
+      if (formData.recurrenceInterval !== undefined && formData.recurrenceInterval !== '') {
+        formData.recurrenceInterval = parseInt(formData.recurrenceInterval, 10);
+      }
       
       const eventData = insertEventSchema.parse(formData);
       
