@@ -55,7 +55,7 @@ export default function ChangePhone() {
   // Update phone mutation (simplified without SMS verification)
   const updatePhoneMutation = useMutation({
     mutationFn: async (data: PhoneForm) => {
-      return apiRequest('/api/users/profile', 'PATCH', {
+      return apiRequest('/api/user/profile', 'PATCH', {
         phoneNumber: data.phoneNumber || null
       });
     },
