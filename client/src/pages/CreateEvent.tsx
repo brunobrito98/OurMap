@@ -172,7 +172,10 @@ export default function CreateEvent() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/events'] });
+      // Invalidate all queries that start with '/api/events'
+      queryClient.invalidateQueries({ 
+        predicate: (query) => query.queryKey[0] === '/api/events'
+      });
       toast({
         title: "Sucesso",
         description: isEditing ? "Evento atualizado com sucesso!" : "Evento criado com sucesso!",

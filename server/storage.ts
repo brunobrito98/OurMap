@@ -487,9 +487,32 @@ export class DatabaseStorage implements IStorage {
         })
       );
 
-      // Filter events by city if user city is provided
+      // Prioritize distance-based filtering if coordinates are available
+      if (filters?.userLat && filters?.userLng) {
+        // Filter events within 50km (same city/region)
+        const nearbyEvents = enhancedEvents.filter(event => 
+          event.distance === undefined || event.distance <= 50
+        );
+        
+        // Sort by distance, then by creation date
+        nearbyEvents.sort((a, b) => {
+          const distanceA = a.distance || 0;
+          const distanceB = b.distance || 0;
+          if (distanceA !== distanceB) {
+            return distanceA - distanceB;
+          }
+          // If distances are equal, sort by creation date (most recent first)
+          const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return bDate - aDate;
+        });
+        
+        return nearbyEvents;
+      }
+
+      // Fallback to text-based city filtering if coordinates not available
       if (filters?.userCity) {
-        // Simple text-based filtering by location field - much more efficient than reverse geocoding each event
+        // Simple text-based filtering by location field
         const cityLower = filters.userCity.toLowerCase();
         
         const cityFilteredEvents = enhancedEvents.filter(event => {
@@ -510,19 +533,6 @@ export class DatabaseStorage implements IStorage {
         });
         
         return cityFilteredEvents;
-      }
-
-      // Fallback to distance-based filtering if coordinates provided but no city
-      if (filters?.userLat && filters?.userLng) {
-        // Filter events within 50km (same city/region)
-        const nearbyEvents = enhancedEvents.filter(event => 
-          event.distance === undefined || event.distance <= 50
-        );
-        
-        // Sort by distance
-        nearbyEvents.sort((a, b) => (a.distance || 0) - (b.distance || 0));
-        
-        return nearbyEvents;
       }
 
       return enhancedEvents;
