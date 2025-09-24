@@ -6,6 +6,17 @@ OurMap is a modern event management platform built for discovering, creating, an
 
 ## Recent Changes
 
+**September 24, 2025**
+- **SMS Authentication Removal**: Successfully completed full removal of SMS authentication system
+  - Removed all SMS authentication routes from backend (/api/auth/phone/start, /verify, /link)
+  - Updated registration system to accept optional phone number field without verification requirements
+  - Enhanced profile update route (/api/user/profile) to handle phone number updates and clearing
+  - Simplified frontend authentication to credentials-only, removing SMS verification UI components
+  - Fixed ChangePhone.tsx to allow simple phone number updates without SMS verification
+  - Phone number is now purely optional contact information with no verification requirements
+  - Maintained data consistency with phoneE164, phoneCountry, and phoneVerified fields in database
+  - Application now functions completely without Twilio dependencies or SMS verification
+
 **September 23, 2025**
 - **Vaquinha (Crowdfunding) Feature Implementation**: Successfully implemented complete crowdfunding system for events
   - Updated database schema with new crowdfunding fields (priceType, fundraisingGoal, minimumContribution) and eventContributions table
