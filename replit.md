@@ -6,6 +6,25 @@ OurMap is a modern event management platform built for discovering, creating, an
 
 ## Recent Changes
 
+**September 24, 2025**
+- **Event Lifecycle Management**: Successfully implemented filtering and restriction system for ended events
+  - Modified backend `getEvents()` query to filter out events that have already ended from main screen
+  - Enhanced filtering logic to check `endTime` if available, otherwise uses `dateTime` for event completion
+  - Added validation to `/api/events/:id/attend` endpoint to prevent attendance changes on ended events
+  - Updated `EventDetails.tsx` frontend component to disable attendance buttons for ended events
+  - Added visual indicator showing "Evento Finalizado" (Event Ended) when event has concluded
+  - Implemented real-time validation using event end time or start time comparison with current time
+  - Enhanced user experience by preventing interactions with past events while maintaining data integrity
+- **SMS Authentication Removal**: Successfully completed full removal of SMS authentication system
+  - Removed all SMS authentication routes from backend (/api/auth/phone/start, /verify, /link)
+  - Updated registration system to accept optional phone number field without verification requirements
+  - Enhanced profile update route (/api/user/profile) to handle phone number updates and clearing
+  - Simplified frontend authentication to credentials-only, removing SMS verification UI components
+  - Fixed ChangePhone.tsx to allow simple phone number updates without SMS verification
+  - Phone number is now purely optional contact information with no verification requirements
+  - Maintained data consistency with phoneE164, phoneCountry, and phoneVerified fields in database
+  - Application now functions completely without Twilio dependencies or SMS verification
+
 **September 23, 2025**
 - **Supabase Database Integration**: Successfully integrated Supabase PostgreSQL database as external data source
   - Configured database connection using DATABASE_URL secret with SSL mode
