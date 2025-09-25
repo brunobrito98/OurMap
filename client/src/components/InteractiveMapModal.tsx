@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, MapPin, Check, X } from "lucide-react";
+import { Search, MapPin, Check, X, Loader2, Navigation } from "lucide-react";
 import MapComponent from "./MapComponent";
 
 interface InteractiveMapModalProps {
@@ -26,15 +26,52 @@ export default function InteractiveMapModal({
   const [selectedLng, setSelectedLng] = useState(initialLng);
   const [searchAddress, setSearchAddress] = useState(initialAddress);
   const [isSearching, setIsSearching] = useState(false);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
 
-  // Reset state when modal opens
+  // Reset state when modal opens and get user location
   useEffect(() => {
     if (open) {
       setSelectedLat(initialLat);
       setSelectedLng(initialLng);
       setSearchAddress(initialAddress);
+      
+      // Auto-detect user location when modal opens
+      getUserLocation();
     }
   }, [open, initialLat, initialLng, initialAddress]);
+
+  const getUserLocation = () => {
+    if (!navigator.geolocation) {
+      console.log('Geolocation is not supported by this browser.');
+      return;
+    }
+
+    setIsGettingLocation(true);
+    
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setSelectedLat(latitude);
+        setSelectedLng(longitude);
+        
+        // Get address for the detected location
+        reverseGeocode(latitude, longitude);
+        setIsGettingLocation(false);
+      },
+      (error) => {
+        console.error('Error getting user location:', error);
+        setIsGettingLocation(false);
+        
+        // Fallback to default location or keep current
+        // No need to show error to user, just use default location
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000 // 5 minutes
+      }
+    );
+  };
 
   const handleMapClick = (lat: number, lng: number) => {
     setSelectedLat(lat);
@@ -100,6 +137,12 @@ export default function InteractiveMapModal({
           <DialogTitle className="flex items-center gap-2">
             <MapPin className="w-5 h-5" />
             Selecionar Localização do Evento
+            {isGettingLocation && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground ml-4">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Detectando sua localização...
+              </div>
+            )}
           </DialogTitle>
         </DialogHeader>
         
@@ -124,6 +167,20 @@ export default function InteractiveMapModal({
             >
               <Search className="w-4 h-4" />
             </Button>
+            <Button 
+              onClick={getUserLocation}
+              disabled={isGettingLocation}
+              variant="outline"
+              size="icon"
+              title="Buscar minha localização"
+              data-testid="button-get-location"
+            >
+              {isGettingLocation ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Navigation className="w-4 h-4" />
+              )}
+            </Button>
           </div>
 
           {/* Map Container */}
@@ -145,6 +202,8 @@ export default function InteractiveMapModal({
               💡 <strong>Como usar:</strong>
             </p>
             <ul className="text-xs text-blue-600 dark:text-blue-400 mt-1 space-y-1">
+              <li>• Sua localização atual é detectada automaticamente</li>
+              <li>• Use o botão 📍 para buscar sua localização novamente</li>
               <li>• Digite um endereço na barra de busca ou</li>
               <li>• Clique diretamente no mapa para marcar a localização</li>
               <li>• Arraste o marcador azul para ajustar a posição</li>
