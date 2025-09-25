@@ -10,8 +10,8 @@ const portugueseProfanity = [
   // Insultos homofóbicos ofensivos (removendo identidades legítimas)
   'viado', 'bicha', 'boiola', 'sapatão', 'maricas', 'fresco',
   
-  // Termos racistas graves
-  'macaco', 'símio', 'tição', 'carvão',
+  // Termos racistas graves (removidos termos zoológicos comuns)
+  'tição',
   
   // Termos sexuais explícitos ofensivos
   'buceta', 'xoxota', 'piroca', 'rola', 'piru',
@@ -20,8 +20,7 @@ const portugueseProfanity = [
   // Insultos graves
   'escroto', 'escrota', 'desgraçado', 'maldito',
   
-  // Termos de ódio extremo
-  'nazista', 'hitler', 'holocausto', 'kkk', 'supremacista', 'fascista',
+  // Termos de ódio extremo apenas mais graves (removido kkk para evitar falsos positivos com risadas)
   
   // Variações com símbolos/números comuns de evasão
   'p0rra', 'm3rda', 'c4ralho', 'put4', 'f0der'

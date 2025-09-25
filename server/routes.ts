@@ -1531,6 +1531,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Use dedicated update schema that supports partial updates with validation
       const eventData = updateEventSchema.parse(formData) as any;
       
+      // Validate content for offensive language
+      const contentValidation = validateEventContent({
+        title: eventData.title,
+        description: eventData.description,
+        location: eventData.location
+      });
+
+      if (!contentValidation.isValid) {
+        return res.status(400).json({ 
+          message: "Conteúdo contém palavras ofensivas ou inadequadas",
+          errors: contentValidation.errors 
+        });
+      }
+      
       // Use eventData directly - dates are already strings from form validation
       const processedEventData = { ...eventData };
       
