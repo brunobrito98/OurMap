@@ -295,7 +295,6 @@ export const insertEventSchema = createInsertSchema(events).omit({
   creatorId: true,
   latitude: true,
   longitude: true,
-  totalRaised: true, // Calculado automaticamente
   shareableLink: true, // Gerado automaticamente
 }).extend({
   dateTime: z.string().min(1, "Data e hora são obrigatórias").refine((val) => {
@@ -491,10 +490,6 @@ export const insertLocalUserSchema = createInsertSchema(users).omit({
   profileImageUrl: true,
   authType: true,
   role: true,
-  phoneE164: true,
-  phoneVerified: true,
-  phoneCountry: true,
-  phoneHmac: true,
 }).extend({
   username: z.string().min(3, "Username deve ter pelo menos 3 caracteres"),
   password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
