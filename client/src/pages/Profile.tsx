@@ -265,6 +265,11 @@ export default function Profile() {
           <h1 className="text-2xl font-bold text-white mb-1" data-testid="text-user-name">
             {user.firstName} {user.lastName}
           </h1>
+          {user.username && (
+            <p className="text-white/80 text-lg mb-1" data-testid="text-user-username">
+              @{user.username}
+            </p>
+          )}
           <p className="text-white/90" data-testid="text-user-email">{user.email}</p>
           <div className="flex items-center justify-center space-x-1 mt-2">
             <Star className="w-4 h-4 text-yellow-300 fill-current" />
