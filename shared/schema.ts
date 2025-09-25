@@ -55,6 +55,11 @@ export const users = pgTable("users", {
   // notificarContatoCadastrado: boolean("notificar_contato_cadastrado").default(true),
   // notificarConfirmacaoPresenca: boolean("notificar_confirmacao_presenca").default(true),
   // notificarAvaliacaoEventoCriado: boolean("notificar_avaliacao_evento_criado").default(true),
+  
+  // Password reset fields
+  resetPasswordToken: varchar("reset_password_token"),
+  resetPasswordTokenExpires: timestamp("reset_password_token_expires"),
+  
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

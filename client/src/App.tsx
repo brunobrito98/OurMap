@@ -21,6 +21,8 @@ import ChangePhone from "@/pages/ChangePhone";
 import { Notifications } from "@/pages/Notifications";
 import { NotificationSettings } from "@/pages/NotificationSettings";
 import MyRatings from "@/pages/MyRatings";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 
 import NotFound from "@/pages/not-found";
 
@@ -105,6 +107,9 @@ function Router() {
           <MyRatings />
         </ProtectedRoute>
       </Route>
+
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password/:token" component={ResetPassword} />
 
       <Route component={NotFound} />
     </Switch>
