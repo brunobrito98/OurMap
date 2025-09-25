@@ -1,38 +1,44 @@
 import { profanity } from '@2toad/profanity';
 
-// Lista de palavras ofensivas em português brasileiro
+// Lista refinada apenas de palavras verdadeiramente ofensivas em português
 const portugueseProfanity = [
-  // Palavras básicas de baixo-calão
-  'porra', 'merda', 'caralho', 'puta', 'putinha', 'vadias', 'vadia', 'safada', 'safado',
+  // Palavrões graves (sem termos técnicos ou identidades)
+  'porra', 'merda', 'caralho', 'puta', 'putinha', 'vadia', 'safada', 'safado',
   'fdp', 'filho da puta', 'filha da puta', 'desgraça', 'desgraçado', 'desgraçada',
-  'otário', 'otária', 'babaca', 'imbecil', 'idiota', 'burro', 'burra', 'corno', 'cornudo',
-  'viado', 'bicha', 'gay', 'lésbica', 'traveco', 'sapatão', 'boiola',
+  'otário', 'otária', 'babaca', 'imbecil', 'retardado', 'corno', 'cornudo',
   
-  // Termos pejorativos e ofensivos
-  'negro', 'preto', 'macaco', 'símio', 'favelado', 'favelada', 'noia', 'cracudo', 'cracuda',
-  'drogado', 'drogada', 'bandido', 'bandida', 'vagabundo', 'vagabunda', 'marginal',
-  'terrorista', 'comunista', 'petista', 'bolsominion', 'mortadela', 'coxinha',
+  // Insultos homofóbicos ofensivos (removendo identidades legítimas)
+  'viado', 'bicha', 'boiola', 'sapatão', 'maricas', 'fresco',
   
-  // Termos sexuais explícitos
-  'buceta', 'xoxota', 'piroca', 'pau', 'rola', 'piça', 'xana', 'pepeca', 'bunda', 'cu',
-  'ânus', 'pênis', 'vagina', 'clitóris', 'masturbação', 'punheta', 'siririca',
-  'foder', 'trepar', 'transar', 'comer', 'gozar', 'gozada', 'gozo', 'porra',
+  // Termos racistas graves
+  'macaco', 'símio', 'tição', 'carvão',
   
-  // Insultos gerais
-  'lixo', 'merda', 'bosta', 'nojento', 'nojenta', 'nojo', 'asqueroso', 'asquerosa',
-  'escroto', 'escrota', 'podre', 'fedido', 'fedida', 'maluco', 'maluca', 'doido', 'doida',
+  // Termos sexuais explícitos ofensivos
+  'buceta', 'xoxota', 'piroca', 'rola', 'piru',
+  'foder', 'fodido', 'punheta', 'puteiro', 'putona',
   
-  // Palavras relacionadas a drogas
-  'maconha', 'cocaína', 'crack', 'droga', 'drogas', 'traficante', 'dealer', 'biqueira',
-  'baseado', 'beck', 'erva', 'pó', 'farinha', 'pedra',
+  // Insultos graves
+  'escroto', 'escrota', 'desgraçado', 'maldito',
   
-  // Variações com números/símbolos comuns
-  'p0rra', 'm3rda', 'c4ralho', 'put4', 'foder', 'f0der', '@sshole', 'sh1t', 'f*ck',
-  
-  // Termos de ódio/extremismo
+  // Termos de ódio extremo
   'nazista', 'hitler', 'holocausto', 'kkk', 'supremacista', 'fascista',
-  'morte', 'matar', 'assassinar', 'suicídio', 'suicidar', 'morrer', 'morra'
+  
+  // Variações com símbolos/números comuns de evasão
+  'p0rra', 'm3rda', 'c4ralho', 'put4', 'f0der'
 ];
+
+// Função para normalizar texto (remover acentos e espaços extras)
+function normalizeText(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    // Normalizar caracteres especiais
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Remover acentos
+    // Reduzir espaçamento e pontuação excessiva para detectar evasões
+    .replace(/[\s\-_\.]+/g, ' ')
+    .replace(/[^\w\s]/g, '');
+}
 
 // Configurar o filtro com palavras em português
 profanity.addWords(portugueseProfanity);
@@ -59,24 +65,23 @@ export function validateText(text: string, fieldName: string): { isValid: boolea
     return { isValid: true };
   }
 
-  const cleanText = text.trim().toLowerCase();
+  const cleanText = text.trim();
+  const normalizedText = normalizeText(cleanText);
   
-  // Verificar se contém palavras ofensivas
-  if (profanity.exists(cleanText)) {
+  // Verificar se contém palavras ofensivas usando a biblioteca
+  if (profanity.exists(cleanText) || profanity.exists(normalizedText)) {
     return {
       isValid: false,
       error: `O campo "${fieldName}" contém conteúdo ofensivo ou inadequado. Por favor, use uma linguagem respeitosa.`
     };
   }
 
-  // Verificar padrões adicionais de conteúdo ofensivo
-  const offensivePatterns = [
-    /(.)\1{4,}/g, // Repetição excessiva de caracteres (aaaaaaa)
-    /[^\w\s]{5,}/g, // Muitos símbolos seguidos (@#$%^&*)
-    /\b\w*\d+\w*\b/g // Palavras misturadas com números suspeitos
+  // Verificar apenas padrões realmente problemáticos (não números normais)
+  const problematicPatterns = [
+    /(.)\1{7,}/g, // Repetição excessiva de caracteres (8+ vezes - mais tolerante)
   ];
 
-  for (const pattern of offensivePatterns) {
+  for (const pattern of problematicPatterns) {
     if (pattern.test(cleanText)) {
       return {
         isValid: false,
