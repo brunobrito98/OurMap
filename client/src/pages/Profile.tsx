@@ -321,6 +321,7 @@ export default function Profile() {
             <div className="border-t border-border"></div>
             
             <Button
+              onClick={() => navigate("/search?tab=saved")}
               variant="ghost"
               className="w-full flex items-center space-x-4 p-4 h-auto justify-start"
               data-testid="button-saved-events"
@@ -338,6 +339,7 @@ export default function Profile() {
             <div className="border-t border-border"></div>
             
             <Button
+              onClick={() => navigate("/friends")}
               variant="ghost"
               className="w-full flex items-center space-x-4 p-4 h-auto justify-start"
               data-testid="button-friends"
@@ -355,6 +357,7 @@ export default function Profile() {
 
           <div className="bg-card border border-border rounded-2xl overflow-hidden">
             <Button
+              onClick={() => navigate("/profile/ratings")}
               variant="ghost"
               className="w-full flex items-center space-x-4 p-4 h-auto justify-start"
               data-testid="button-ratings"
@@ -372,6 +375,7 @@ export default function Profile() {
             <div className="border-t border-border"></div>
             
             <Button
+              onClick={() => navigate("/notifications")}
               variant="ghost"
               className="w-full flex items-center space-x-4 p-4 h-auto justify-start"
               data-testid="button-notifications"
@@ -389,6 +393,7 @@ export default function Profile() {
             <div className="border-t border-border"></div>
             
             <Button
+              onClick={() => navigate("/profile/edit")}
               variant="ghost"
               className="w-full flex items-center space-x-4 p-4 h-auto justify-start"
               data-testid="button-account-settings"
