@@ -14,11 +14,12 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import ImageUpload from "@/components/ImageUpload";
 import MapComponent from "@/components/MapComponent";
 import LocalPlaceSearch from "@/components/LocalPlaceSearch";
+import InteractiveMapModal from "@/components/InteractiveMapModal";
 import { useToast } from "@/hooks/use-toast";
 import { insertEventSchema, type InsertEvent } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { X, Save, Loader2, Gift, Ticket, Heart, Lock, Users, Link, Copy } from "lucide-react";
+import { X, Save, Loader2, Gift, Ticket, Heart, Lock, Users, Link, Copy, MapPin, Maximize2 } from "lucide-react";
 
 const categories = [
   { value: "festas", label: "Festas", icon: "fas fa-glass-cheers" },
@@ -57,6 +58,7 @@ export default function CreateEvent() {
   const [isPrivateEvent, setIsPrivateEvent] = useState(false);
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [isPlaceSearchOpen, setIsPlaceSearchOpen] = useState(false);
+  const [isMapModalOpen, setIsMapModalOpen] = useState(false);
   const [currentCityName, setCurrentCityName] = useState<string>("");
 
   const isEditing = !!id;
@@ -371,6 +373,13 @@ export default function CreateEvent() {
     }
   };
 
+  const handleMapModalLocationSelect = (lat: number, lng: number, address?: string) => {
+    setMapCoordinates({ lat, lng });
+    if (address) {
+      form.setValue('location', address);
+    }
+  };
+
   const handlePlaceSelect = (place: any) => {
     const [lng, lat] = place.center;
     setMapCoordinates({ lat, lng });
@@ -668,20 +677,37 @@ export default function CreateEvent() {
               )}
 
               {/* Interactive Map for Pin Selection */}
-              <div className="rounded-xl overflow-hidden">
-                <MapComponent
-                  latitude={mapCoordinates?.lat || -23.5505}
-                  longitude={mapCoordinates?.lng || -46.6333}
-                  height={192}
-                  showMarker
-                  draggableMarker
-                  onMarkerDrag={handleMapClick}
-                  onClick={handleMapClick}
-                />
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Localização no Mapa</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsMapModalOpen(true)}
+                    className="flex items-center gap-2"
+                    data-testid="button-open-map-modal"
+                  >
+                    <Maximize2 className="w-4 h-4" />
+                    Abrir Mapa Completo
+                  </Button>
+                </div>
+                
+                <div className="rounded-xl overflow-hidden">
+                  <MapComponent
+                    latitude={mapCoordinates?.lat || -23.5505}
+                    longitude={mapCoordinates?.lng || -46.6333}
+                    height={192}
+                    showMarker
+                    draggableMarker
+                    onMarkerDrag={handleMapClick}
+                    onClick={handleMapClick}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Clique ou arraste o pin para definir localização exata, ou use o botão "Abrir Mapa Completo" para uma melhor visualização
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Clique ou arraste o pin para definir localização exata
-              </p>
             </div>
 
             {/* Privacy Section */}
@@ -937,6 +963,16 @@ export default function CreateEvent() {
         onPlaceSelect={handlePlaceSelect}
         userLocation={userLocation}
         currentCity={currentCityName}
+      />
+
+      {/* Interactive Map Modal */}
+      <InteractiveMapModal
+        open={isMapModalOpen}
+        onOpenChange={setIsMapModalOpen}
+        onLocationSelect={handleMapModalLocationSelect}
+        initialLat={mapCoordinates?.lat || userLocation?.lat || -23.5505}
+        initialLng={mapCoordinates?.lng || userLocation?.lng || -46.6333}
+        initialAddress={form.watch('location') || ''}
       />
     </div>
   );
