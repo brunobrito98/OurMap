@@ -91,13 +91,13 @@ export const events = pgTable("events", {
   iconEmoji: text("icon_emoji").default("🎉"),
   coverImageUrl: text("cover_image_url"),
   popularityScore: integer("popularity_score").default(0),
-  // Pricing fields (disabled as columns don't exist in current DB)
-  // priceType: text("price_type").notNull().default("free"), // "free", "paid", "crowdfunding"
-  // price: text("price").default("0"), // Price for paid events
+  // Pricing fields
+  priceType: text("price_type").notNull().default("free"), // "free", "paid", "crowdfunding"
+  price: text("price").default("0"), // Price for paid events
   // Crowdfunding fields
-  // fundraisingGoal: numeric("fundraising_goal"), // Meta de arrecadação
-  // minimumContribution: numeric("minimum_contribution"), // Valor mínimo (opcional)
-  // totalRaised: numeric("total_raised").default("0"), // Total arrecadado
+  fundraisingGoal: numeric("fundraising_goal"), // Meta de arrecadação
+  minimumContribution: numeric("minimum_contribution"), // Valor mínimo (opcional)
+  totalRaised: numeric("total_raised").default("0"), // Total arrecadado
   // Recurring event fields
   isRecurring: boolean("is_recurring").default(false),
   recurrenceType: text("recurrence_type"),
