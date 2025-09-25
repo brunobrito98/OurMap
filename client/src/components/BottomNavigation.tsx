@@ -21,7 +21,7 @@ export default function BottomNavigation({ activeTab }: BottomNavigationProps) {
     refetchInterval: 1000 * 60, // 1 minute
   });
   
-  const unreadCount = unreadData?.count || 0;
+  const unreadCount = (unreadData as any)?.count || 0;
 
   const tabs = [
     { id: 'home', icon: Home, label: 'Início', path: '/', requiresAuth: false },

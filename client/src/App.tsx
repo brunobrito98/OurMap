@@ -14,6 +14,8 @@ import UserProfile from "@/pages/UserProfile";
 import MyEvents from "@/pages/MyEvents";
 import Friends from "@/pages/Friends";
 import Search from "@/pages/Search";
+import Chat from "@/pages/Chat";
+import ChatConversation from "@/pages/ChatConversation";
 
 import EditProfile from "@/pages/EditProfile";
 import ChangePassword from "@/pages/ChangePassword";
@@ -69,6 +71,18 @@ function Router() {
       <Route path="/friends">
         <ProtectedRoute>
           <Friends />
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/chat">
+        <ProtectedRoute>
+          <Chat />
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/chat/:id">
+        <ProtectedRoute>
+          <ChatConversation />
         </ProtectedRoute>
       </Route>
       
