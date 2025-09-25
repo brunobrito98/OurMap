@@ -254,6 +254,18 @@ export default function Landing() {
                     className="mt-1"
                     data-testid="input-password"
                   />
+                  {!isRegistering && (
+                    <div className="text-right mt-2">
+                      <button
+                        type="button"
+                        onClick={() => navigate("/forgot-password")}
+                        className="text-sm text-primary hover:underline bg-transparent border-none p-0 cursor-pointer"
+                        data-testid="button-forgot-password"
+                      >
+                        Esqueci minha senha
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <Button
