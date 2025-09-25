@@ -10,8 +10,64 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { parsePhoneNumber, isValidPhoneNumber } from "libphonenumber-js";
+<<<<<<< HEAD
 import { sendEmail } from "./sendgrid";
 import crypto from 'crypto';
+=======
+import crypto from "crypto";
+import twilio from "twilio";
+
+// Phone authentication schemas
+export const phoneStartSchema = z.object({
+  phone: z.string().min(1, "Número de telefone é obrigatório"),
+  country: z.string().optional(),
+});
+
+export const phoneVerifySchema = z.object({
+  phone: z.string().min(1, "Número de telefone é obrigatório"),
+  code: z.string().min(1, "Código é obrigatório"),
+});
+
+export const phoneLinkSchema = z.object({
+  phone: z.string().min(1, "Número de telefone é obrigatório"),
+  code: z.string().min(1, "Código é obrigatório"),
+});
+
+// OTP storage interface
+interface OTPRecord {
+  codeHash: string;
+  expiresAt: number;
+  attempts: number;
+}
+
+// Global stores and clients
+const otpStore = new Map<string, OTPRecord>();
+
+// Initialize Twilio (if configured)
+const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
+const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
+const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER;
+
+let twilioClient: any = null;
+if (twilioAccountSid && twilioAuthToken) {
+  twilioClient = twilio(twilioAccountSid, twilioAuthToken);
+}
+
+// Utility functions
+function generateOTP(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+function hashOTP(otp: string, phone: string): string {
+  const secret = process.env.OTP_SECRET || 'default-secret-key';
+  return crypto.createHmac('sha256', secret).update(`${otp}:${phone}`).digest('hex');
+}
+
+function generatePhoneHmac(phone: string): string {
+  const secret = process.env.PHONE_HMAC_SECRET || 'default-phone-secret';
+  return crypto.createHmac('sha256', secret).update(phone).digest('hex');
+}
+>>>>>>> f6368e95a61daed170399ce282aaea1e49b073c3
 
 // Helper function to sanitize event data for responses
 function sanitizeEventForUser(eventData: any, userId?: string) {
