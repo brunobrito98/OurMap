@@ -775,7 +775,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-<<<<<<< HEAD
   // Phone authentication routes
   app.post('/api/auth/phone/start', async (req, res) => {
     try {
@@ -1004,8 +1003,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Erro interno do servidor" });
     }
   });
-=======
->>>>>>> 3a816ee118f10ed6d5e49e408b4019a7af6e14ee
 
   // Category routes
   app.get('/api/categories', async (req, res) => {

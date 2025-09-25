@@ -34,7 +34,7 @@ import {
   type NotificationConfig,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, desc, asc, count, avg, sql, like, isNull, isNotNull } from "drizzle-orm";
+import { eq, and, or, desc, asc, count, avg, sql, like, isNull, isNotNull, gte } from "drizzle-orm";
 
 // Interface for storage operations
 export interface IStorage {
@@ -376,14 +376,8 @@ export class DatabaseStorage implements IStorage {
     try {
       console.log('DEBUG getEvents called with filters:', JSON.stringify(filters));
       // Filter out events that have already ended
-      // If event has endTime, use that to check if it's still ongoing
-      // If event doesn't have endTime, use dateTime 
-      const conditions = [sql`
-        CASE 
-          WHEN ${events.endTime} IS NOT NULL THEN ${events.endTime} > NOW()
-          ELSE ${events.dateTime} > NOW()
-        END
-      `];
+      // Use dateTime to check if event is still upcoming (assuming events last a few hours)
+      const conditions = [gte(events.dateTime, new Date())];
       console.log('DEBUG: Initial conditions set with event end time filtering');
       
       // Filter out private events unless user has access
