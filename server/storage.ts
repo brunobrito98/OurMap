@@ -1524,6 +1524,7 @@ export class DatabaseStorage implements IStorage {
         { value: "natacao", name: "Natação", parentValue: "sports", icon: "fas fa-swimmer" },
         { value: "ciclismo", name: "Ciclismo", parentValue: "sports", icon: "fas fa-bicycle" },
         { value: "basquete", name: "Basquete", parentValue: "sports", icon: "fas fa-basketball-ball" },
+        { value: "volei", name: "Vôlei", parentValue: "sports", icon: "fas fa-volleyball-ball" },
         
         // Subcategorias de Tech
         { value: "programacao", name: "Programação", parentValue: "tech", icon: "fas fa-code" },
