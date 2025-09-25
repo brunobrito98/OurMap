@@ -70,6 +70,13 @@ export default function Search() {
   // Search users
   const { data: userResults = [], isLoading: usersLoading } = useQuery<User[]>({
     queryKey: ['/api/search/users', debouncedQuery],
+    queryFn: async () => {
+      const response = await fetch(`/api/search/users?query=${encodeURIComponent(debouncedQuery)}`, {
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to search users');
+      return response.json();
+    },
     enabled: debouncedQuery.length >= 2 && activeTab === "users",
   });
 

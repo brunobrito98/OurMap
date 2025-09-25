@@ -39,8 +39,9 @@ export default function Chat() {
 
   // Mutation to create or get conversation
   const createConversationMutation = useMutation({
-    mutationFn: async (otherUserId: string) => {
-      return await apiRequest('/api/conversations', 'POST', { userId: otherUserId });
+    mutationFn: async (otherUserId: string): Promise<Conversation> => {
+      const response = await apiRequest('/api/conversations', 'POST', { friendId: otherUserId });
+      return await response.json();
     },
     onSuccess: (conversation, otherUserId) => {
       navigate(`/chat/${conversation.id}?with=${otherUserId}`);

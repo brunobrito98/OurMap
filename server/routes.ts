@@ -962,6 +962,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get user by ID for chat functionality
+  app.get('/api/users/:id', async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      const user = await storage.getUser(id);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Return sanitized user data
+      const response = {
+        id: user.id,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        profileImageUrl: user.profileImageUrl
+      };
+      
+      res.json(response);
+    } catch (error) {
+      console.error("Error fetching user by ID:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Logout route - clears server session
   app.post('/api/auth/logout', async (req, res) => {
     try {
@@ -2580,7 +2607,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user!.id;
       const conversations = await storage.getConversations(userId);
-      res.json(conversations);
+      
+      // Map otherUser to otherParticipant for frontend compatibility
+      const mappedConversations = conversations.map(conv => ({
+        ...conv,
+        otherParticipant: conv.otherUser
+      }));
+      
+      res.json(mappedConversations);
     } catch (error) {
       console.error("Error fetching conversations:", error);
       res.status(500).json({ message: "Failed to fetch conversations" });

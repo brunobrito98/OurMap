@@ -6,7 +6,42 @@ Uma plataforma completa de gerenciamento de eventos com sistema social, constru�
 
 Este é um aplicativo fullstack para criação, descoberta e participação em eventos com recursos sociais como sistema de amizades, chat, avaliações e notificações.
 
+<<<<<<< HEAD
 ## Arquitetura
+=======
+**September 25, 2025**
+- **Replit Environment Setup**: Successfully configured application for Replit environment
+  - tsx already installed and configured in package.json devDependencies
+  - Vite configuration properly set with host "0.0.0.0" and port 5000
+  - allowedHosts: true configured in server/vite.ts for Replit proxy support
+  - Workflow configured with webview output type for frontend display
+  - Application successfully running with Supabase database connection
+  - Mapbox integration configured with VITE_MAPBOX_ACCESS_TOKEN
+  - Deploy configuration set for autoscale deployment target
+- **Environment Variables**: MAPBOX_ACCESS_TOKEN configured and working
+  - Admin user creation pending ADMIN_USERNAME and ADMIN_PASSWORD secrets
+  - Email functionality disabled (SENDGRID_API_KEY not required)
+  - Application fully operational with existing database data
+
+**September 24, 2025**
+- **Event Lifecycle Management**: Successfully implemented filtering and restriction system for ended events
+  - Modified backend `getEvents()` query to filter out events that have already ended from main screen
+  - Enhanced filtering logic to check `endTime` if available, otherwise uses `dateTime` for event completion
+  - Added validation to `/api/events/:id/attend` endpoint to prevent attendance changes on ended events
+  - Updated `EventDetails.tsx` frontend component to disable attendance buttons for ended events
+  - Added visual indicator showing "Evento Finalizado" (Event Ended) when event has concluded
+  - Implemented real-time validation using event end time or start time comparison with current time
+  - Enhanced user experience by preventing interactions with past events while maintaining data integrity
+- **SMS Authentication Removal**: Successfully completed full removal of SMS authentication system
+  - Removed all SMS authentication routes from backend (/api/auth/phone/start, /verify, /link)
+  - Updated registration system to accept optional phone number field without verification requirements
+  - Enhanced profile update route (/api/user/profile) to handle phone number updates and clearing
+  - Simplified frontend authentication to credentials-only, removing SMS verification UI components
+  - Fixed ChangePhone.tsx to allow simple phone number updates without SMS verification
+  - Phone number is now purely optional contact information with no verification requirements
+  - Maintained data consistency with phoneE164, phoneCountry, and phoneVerified fields in database
+  - Application now functions completely without Twilio dependencies or SMS verification
+>>>>>>> b4834d820d9b5fb53e5ca847f2282afbcbe31e5a
 
 ### Frontend
 - **Framework**: React 18 com TypeScript
