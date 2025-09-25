@@ -376,14 +376,8 @@ export class DatabaseStorage implements IStorage {
     try {
       console.log('DEBUG getEvents called with filters:', JSON.stringify(filters));
       // Filter out events that have already ended
-      // If event has endTime, use that to check if it's still ongoing
-      // If event doesn't have endTime, use dateTime 
-      const conditions = [sql`
-        CASE 
-          WHEN ${events.endTime} IS NOT NULL THEN ${events.endTime} > NOW()
-          ELSE ${events.dateTime} > NOW()
-        END
-      `];
+      // Only use dateTime since endTime is not in the current schema
+      const conditions = [sql`${events.dateTime} > NOW()`];
       console.log('DEBUG: Initial conditions set with event end time filtering');
       
       // Filter out private events unless user has access
