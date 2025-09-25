@@ -10,6 +10,8 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { parsePhoneNumber, isValidPhoneNumber } from "libphonenumber-js";
+import { sendEmail } from "./sendgrid";
+import crypto from 'crypto';
 
 // Helper function to sanitize event data for responses
 function sanitizeEventForUser(eventData: any, userId?: string) {
@@ -712,6 +714,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error changing password:", error);
       res.status(500).json({ message: "Failed to change password" });
+    }
+  });
+
+  // Forgot password endpoint
+  app.post('/api/auth/forgot-password', async (req, res) => {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ message: "Email é obrigatório" });
+      }
+
+      // Find user by email
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        // Don't reveal if email exists for security
+        return res.status(200).json({ message: "Se o email existir, um link de recuperação será enviado" });
+      }
+
+      // Generate reset token
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const tokenExpires = new Date(Date.now() + 3600000); // 1 hour from now
+
+      // Save token to database
+      await storage.setPasswordResetToken(user.id, resetToken, tokenExpires);
+
+      // Get the app domain for the reset link
+      const domain = process.env.REPL_SLUG ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` : 'http://localhost:5000';
+      const resetLink = `${domain}/reset-password/${resetToken}`;
+
+      // Send email
+      const emailSent = await sendEmail({
+        to: email,
+        from: 'noreply@ourmap.app',
+        subject: 'Redefinir sua senha - OurMap',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #333;">Redefinir sua senha</h2>
+            <p>Olá ${user.firstName || user.username},</p>
+            <p>Você solicitou a redefinição da sua senha no OurMap. Clique no link abaixo para criar uma nova senha:</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${resetLink}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Redefinir Senha</a>
+            </div>
+            <p style="color: #666; font-size: 14px;">Este link expira em 1 hora. Se você não solicitou a redefinição da senha, ignore este email.</p>
+            <p style="color: #666; font-size: 14px;">Se o botão não funcionar, copie e cole este link no seu navegador:</p>
+            <p style="color: #666; font-size: 12px; word-break: break-all;">${resetLink}</p>
+          </div>
+        `,
+        text: `
+          Redefinir sua senha - OurMap
+          
+          Olá ${user.firstName || user.username},
+          
+          Você solicitou a redefinição da sua senha no OurMap. Acesse o link abaixo para criar uma nova senha:
+          
+          ${resetLink}
+          
+          Este link expira em 1 hora. Se você não solicitou a redefinição da senha, ignore este email.
+        `
+      });
+
+      if (!emailSent) {
+        console.error('Failed to send password reset email');
+        return res.status(500).json({ message: "Erro ao enviar email de recuperação" });
+      }
+
+      res.status(200).json({ message: "Email de recuperação enviado com sucesso" });
+    } catch (error) {
+      console.error("Error in forgot password:", error);
+      res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  // Validate reset token endpoint
+  app.get('/api/auth/validate-reset-token/:token', async (req, res) => {
+    try {
+      const { token } = req.params;
+
+      if (!token) {
+        return res.status(400).json({ message: "Token é obrigatório" });
+      }
+
+      const user = await storage.getUserByResetToken(token);
+      if (!user) {
+        return res.status(404).json({ message: "Token inválido ou expirado" });
+      }
+
+      res.status(200).json({ message: "Token válido" });
+    } catch (error) {
+      console.error("Error validating reset token:", error);
+      res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  // Reset password endpoint
+  app.post('/api/auth/reset-password', async (req, res) => {
+    try {
+      const { token, password } = req.body;
+
+      if (!token || !password) {
+        return res.status(400).json({ message: "Token e senha são obrigatórios" });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({ message: "A senha deve ter pelo menos 6 caracteres" });
+      }
+
+      // Find user by token
+      const user = await storage.getUserByResetToken(token);
+      if (!user) {
+        return res.status(404).json({ message: "Token inválido ou expirado" });
+      }
+
+      // Hash new password
+      const hashedPassword = await hashPassword(password);
+
+      // Update password
+      await storage.changeUserPassword(user.id, hashedPassword);
+
+      // Clear reset token
+      await storage.clearPasswordResetToken(user.id);
+
+      res.status(200).json({ message: "Senha redefinida com sucesso" });
+    } catch (error) {
+      console.error("Error resetting password:", error);
+      res.status(500).json({ message: "Erro interno do servidor" });
     }
   });
 

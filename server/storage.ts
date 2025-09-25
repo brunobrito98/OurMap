@@ -62,6 +62,11 @@ export interface IStorage {
   updateUserProfileImage(userId: string, profileImageUrl: string | null): Promise<User | undefined>;
   updateUserProfile(userId: string, profileData: { firstName?: string; lastName?: string }): Promise<User | undefined>;
   changeUserPassword(userId: string, newPassword: string): Promise<User | undefined>;
+  
+  // Password reset operations
+  setPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<void>;
+  getUserByResetToken(token: string): Promise<User | undefined>;
+  clearPasswordResetToken(userId: string): Promise<void>;
 
   // Event operations
   createEvent(event: InsertEvent, organizerId: string, coordinates: { lat: number; lng: number }): Promise<Event>;
@@ -1012,6 +1017,38 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId))
       .returning();
     return user;
+  }
+
+  // Password reset operations
+  async setPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<void> {
+    await db
+      .update(users)
+      .set({ 
+        resetPasswordToken: token,
+        resetPasswordTokenExpires: expiresAt 
+      })
+      .where(eq(users.id, userId));
+  }
+
+  async getUserByResetToken(token: string): Promise<User | undefined> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(and(
+        eq(users.resetPasswordToken, token),
+        gte(users.resetPasswordTokenExpires, new Date())
+      ));
+    return user;
+  }
+
+  async clearPasswordResetToken(userId: string): Promise<void> {
+    await db
+      .update(users)
+      .set({ 
+        resetPasswordToken: null,
+        resetPasswordTokenExpires: null 
+      })
+      .where(eq(users.id, userId));
   }
 
   // Search operations
