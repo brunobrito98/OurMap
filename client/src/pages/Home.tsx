@@ -113,24 +113,20 @@ export default function Home() {
     <div className="min-h-screen bg-background pb-20">
       {/* Header with Location */}
       <div className="bg-white border-b border-border p-4 sticky top-0 z-30">
-        <div className="flex items-center justify-between">
+        <button
+          onClick={handleChangeLocation}
+          className="w-full flex items-center justify-between hover:bg-secondary/50 rounded-lg p-2 transition-colors group"
+          data-testid="button-change-location"
+        >
           <div className="flex items-center space-x-2">
             <MapPin className="w-5 h-5 text-primary" />
-            <div>
+            <div className="text-left">
               <p className="text-sm text-muted-foreground">Sua localização</p>
               <p className="font-semibold text-foreground" data-testid="text-location">{locationName}</p>
             </div>
           </div>
-          <Button
-            onClick={handleChangeLocation}
-            variant="ghost"
-            size="sm"
-            className="text-primary hover:bg-secondary"
-            data-testid="button-change-location"
-          >
-            <MapPin className="w-4 h-4" />
-          </Button>
-        </div>
+          <MapPin className="w-4 h-4 text-primary opacity-60 group-hover:opacity-100 transition-opacity" />
+        </button>
       </div>
 
       {/* Search Bar */}
