@@ -198,14 +198,6 @@ export default function Profile() {
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h2 className="font-semibold text-foreground flex-1">Perfil</h2>
-          <Button
-            onClick={() => navigate("/settings/profile")}
-            variant="ghost"
-            size="sm"
-            data-testid="button-settings"
-          >
-            <Settings className="w-5 h-5" />
-          </Button>
         </div>
       </div>
 
