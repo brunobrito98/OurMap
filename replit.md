@@ -1,127 +1,141 @@
-# OurMap - Event Management Platform
+# Event Management Platform
 
-## Overview
+Uma plataforma completa de gerenciamento de eventos com sistema social, construída com React, Express.js e PostgreSQL.
 
-OurMap is a modern event management platform built for discovering, creating, and attending local events. The application features a React frontend with TypeScript, an Express.js backend, and a PostgreSQL database using Drizzle ORM. The platform includes comprehensive event management capabilities, user authentication through Replit Auth, geolocation services, image upload functionality, and social features like friend connections and event ratings.
+## Visão Geral
 
-## Recent Changes
+Este é um aplicativo fullstack para criação, descoberta e participação em eventos com recursos sociais como sistema de amizades, chat, avaliações e notificações.
 
-**September 24, 2025**
-- **Event Lifecycle Management**: Successfully implemented filtering and restriction system for ended events
-  - Modified backend `getEvents()` query to filter out events that have already ended from main screen
-  - Enhanced filtering logic to check `endTime` if available, otherwise uses `dateTime` for event completion
-  - Added validation to `/api/events/:id/attend` endpoint to prevent attendance changes on ended events
-  - Updated `EventDetails.tsx` frontend component to disable attendance buttons for ended events
-  - Added visual indicator showing "Evento Finalizado" (Event Ended) when event has concluded
-  - Implemented real-time validation using event end time or start time comparison with current time
-  - Enhanced user experience by preventing interactions with past events while maintaining data integrity
-- **SMS Authentication Removal**: Successfully completed full removal of SMS authentication system
-  - Removed all SMS authentication routes from backend (/api/auth/phone/start, /verify, /link)
-  - Updated registration system to accept optional phone number field without verification requirements
-  - Enhanced profile update route (/api/user/profile) to handle phone number updates and clearing
-  - Simplified frontend authentication to credentials-only, removing SMS verification UI components
-  - Fixed ChangePhone.tsx to allow simple phone number updates without SMS verification
-  - Phone number is now purely optional contact information with no verification requirements
-  - Maintained data consistency with phoneE164, phoneCountry, and phoneVerified fields in database
-  - Application now functions completely without Twilio dependencies or SMS verification
+## Arquitetura
 
-**September 23, 2025**
-- **Supabase Database Integration**: Successfully integrated Supabase PostgreSQL database as external data source
-  - Configured database connection using DATABASE_URL secret with SSL mode
-  - Resolved schema compatibility issues between existing Supabase tables and Drizzle schema definitions
-  - Disabled unsupported features (crowdfunding, phone auth, notifications) due to missing database columns
-  - Verified core functionality working: events, users, authentication, and basic operations
-  - Maintained data integrity by preserving existing table structures without destructive migrations
-- **Mapbox Integration**: Configured secure Mapbox token management through VITE_MAPBOX_ACCESS_TOKEN
-  - Proper environment variable setup for frontend access to geolocation services
-  - Maintained existing map functionality with external API key management
-- **Schema Compatibility**: Aligned application schema with existing Supabase database structure
-  - Commented out non-existent fields (price_type, phone_e164, notification preferences) to prevent SQL errors
-  - Preserved existing data relationships and foreign key constraints
-  - Ensured backward compatibility with current database state
-- **Deployment Optimization**: Verified production readiness with external database integration
-  - Application runs successfully with remote Supabase database connection
-  - Maintained performance with optimized query patterns and connection pooling
-- **Earlier Implementation**: Vaquinha (crowdfunding) feature was previously implemented but disabled due to schema mismatch
-  - Feature remains in codebase but commented out pending database schema updates
-  - Can be re-enabled once corresponding database columns are added to Supabase instance
+### Frontend
+- **Framework**: React 18 com TypeScript
+- **Roteamento**: Wouter
+- **UI**: Radix UI + Tailwind CSS + shadcn/ui
+- **Estado**: TanStack Query (React Query)
+- **Mapas**: Mapbox GL JS
+- **Bundler**: Vite
 
-**September 22, 2025**
-- **Home Page Access**: Changed main route "/" from Landing (login page) to Home component for public access without authentication
-- **Login Flow Optimization**: Implemented redirect parameters for seamless return to intended destinations after authentication
-- **Security Enhancement**: Fixed open redirect vulnerability by validating redirect parameters in Landing component
-- **Deep Link Support**: Enhanced URL preservation to capture complete paths (pathname + search + hash) for full deep link functionality
-- **User Experience**: Users can now browse events freely without login, authentication only required for interactions (RSVP, profile access)
+### Backend
+- **Runtime**: Node.js com TypeScript
+- **Framework**: Express.js
+- **ORM**: Drizzle ORM
+- **Database**: PostgreSQL (Supabase)
+- **Autenticação**: Sistema híbrido (Replit Auth + Local Auth)
+- **Upload**: Multer para arquivos
+- **Email**: SendGrid (opcional)
+- **SMS**: Twilio (para verificação de telefone)
 
-## User Preferences
+### Recursos Principais
 
-Preferred communication style: Simple, everyday language.
+1. **Sistema de Eventos**
+   - Criação e edição de eventos
+   - Categorização hierárquica
+   - Localização com mapas (Mapbox)
+   - Eventos públicos e privados
+   - Sistema de convites
+   - Crowdfunding/vaquinhas
+   - Eventos recorrentes
 
-## System Architecture
+2. **Sistema Social**
+   - Sistema de amizades
+   - Chat privado entre usuários
+   - Avaliações de eventos e organizadores
+   - Notificações em tempo real
 
-### Frontend Architecture
-- **React with TypeScript**: Component-based UI architecture using functional components and hooks
-- **Routing**: Wouter for lightweight client-side routing
-- **State Management**: TanStack Query for server state management and caching
-- **UI Framework**: shadcn/ui components built on Radix UI primitives with Tailwind CSS
-- **Form Handling**: React Hook Form with Zod validation schemas
-- **Mobile-First Design**: Responsive design optimized for mobile devices with bottom navigation
+3. **Autenticação**
+   - Login com Replit Auth
+   - Registro local com username/password
+   - Sistema de reset de senha
+   - Autenticação por telefone (preparado)
 
-### Backend Architecture
-- **Express.js Server**: RESTful API with TypeScript support
-- **Authentication**: Replit Auth with OpenID Connect integration and session management
-- **File Upload**: Multer middleware for handling image uploads with validation
-- **API Structure**: Modular route organization with centralized error handling
-- **Session Storage**: PostgreSQL-backed session store using connect-pg-simple
+## Configuração do Ambiente
 
-### Database Design
-- **PostgreSQL**: Primary database with Supabase hosting (external managed service)
-- **ORM**: Drizzle ORM for type-safe database operations with schema compatibility layer
-- **Schema Management**: Adaptive schema definitions aligned with existing Supabase database structure
-- **Tables**: Users, events, event attendances, friendships, event ratings, and sessions (inherited from Supabase)
-- **Relationships**: Proper foreign key relationships with type casting for compatibility between varchar and uuid fields
+### Secrets Necessários
 
-### Core Features
-- **Event Management**: Full CRUD operations for events with image upload support
-- **Geolocation Services**: Mapbox integration for geocoding addresses and interactive maps
-- **User Profiles**: Complete user management with statistics and social connections
-- **Attendance System**: RSVP functionality with status tracking
-- **Rating System**: Post-event rating and review capabilities
-- **Social Features**: Friend requests, connections, and social event discovery
-- **Real-time Updates**: Optimistic updates with proper error handling
+O projeto requer os seguintes secrets configurados no Replit:
 
-### Security & Authentication
-- **Replit Auth Integration**: Secure OAuth-based authentication
-- **Session Management**: Server-side session storage with PostgreSQL
-- **Phone Authentication**: SMS verification with Twilio integration, OTP hashing with HMAC-SHA256
-- **Data Protection**: Comprehensive sanitization of user data in API responses to prevent sensitive field exposure
-- **Rate Limiting**: IP and phone-based rate limiting for authentication endpoints
-- **File Upload Security**: Type and size validation for image uploads
-- **API Security**: Authenticated route protection with middleware and sanitized data projections
-- **Open Redirect Protection**: Landing page validates redirect parameters to prevent security vulnerabilities
-- **Deep Link Preservation**: Full URL (pathname + search + hash) preservation for seamless post-login redirects
+- `DATABASE_URL`: String de conexão do PostgreSQL/Supabase
+- `MAPBOX_ACCESS_TOKEN`: Token de acesso do Mapbox ✓ (configurado)
+- `ADMIN_USERNAME`: Username para usuário admin inicial
+- `ADMIN_PASSWORD`: Senha para usuário admin inicial
+- `SENDGRID_API_KEY`: Chave da API do SendGrid (opcional)
+- `TWILIO_ACCOUNT_SID`: SID da conta Twilio (opcional)
+- `TWILIO_AUTH_TOKEN`: Token de autenticação Twilio (opcional)
 
-## External Dependencies
+### Estado Atual da Configuração
 
-### Core Infrastructure
-- **Supabase Database**: PostgreSQL hosting for production database with managed services
-- **Replit Deployment**: Platform hosting and development environment with external database integration
+✅ **Funcionando**:
+- Servidor Express rodando na porta 5000
+- Frontend React servido pelo Vite
+- Conexão com banco Supabase estabelecida
+- Mapbox configurado
+- Sistema de roteamento funcionando
+- APIs respondendo corretamente
 
-### Third-Party Services
-- **Mapbox**: Geocoding API and interactive maps (requires MAPBOX_ACCESS_TOKEN)
-- **Replit Auth**: OAuth authentication service for user management
+⚠️ **Pendente**:
+- Configuração de ADMIN_USERNAME e ADMIN_PASSWORD
+- SendGrid (opcional para emails)
+- Twilio (opcional para SMS)
 
-### Development Tools
-- **Vite**: Frontend build tool and development server
-- **ESBuild**: Backend bundling for production builds
-- **Drizzle Kit**: Database migrations and schema management
+## Scripts Disponíveis
 
-### UI & Styling
-- **Tailwind CSS**: Utility-first CSS framework
-- **shadcn/ui**: Component library built on Radix UI
-- **Radix UI**: Headless UI primitives for accessibility
-- **Lucide React**: Icon library for consistent iconography
+- `npm run dev`: Inicia servidor de desenvolvimento
+- `npm run build`: Build para produção
+- `npm run start`: Inicia servidor de produção
+- `npm run db:push`: Sincroniza schema do banco
 
-### File Handling
-- **Multer**: Server-side file upload handling
-- **File System**: Local file storage with organized upload directory structure
+## Deploy
+
+O projeto está configurado para deploy no Replit com:
+- **Tipo**: Autoscale
+- **Build**: `npm run build`
+- **Start**: `npm run start`
+- **Porta**: 5000
+
+## Estrutura de Pastas
+
+```
+├── client/                 # Frontend React
+│   ├── src/
+│   │   ├── components/     # Componentes React + UI
+│   │   ├── pages/          # Páginas/rotas
+│   │   ├── hooks/          # Custom hooks
+│   │   └── lib/            # Utilitários
+├── server/                 # Backend Express
+│   ├── auth.ts            # Sistema de autenticação
+│   ├── db.ts              # Configuração do banco
+│   ├── routes.ts          # Rotas da API
+│   └── storage.ts         # Interface de dados
+├── shared/                 # Schemas compartilhados
+└── migrations/             # Migrações do banco
+```
+
+## Data Model
+
+O banco utiliza PostgreSQL com as seguintes entidades principais:
+- `users`: Usuários e autenticação
+- `events`: Eventos e detalhes
+- `categories`: Categorias hierárquicas
+- `event_attendees`: Participação em eventos
+- `friendships`: Sistema de amizades
+- `conversations`: Conversas de chat
+- `notifications`: Sistema de notificações
+- `event_ratings`: Avaliações de eventos
+
+## Últimas Atualizações
+
+**25/09/2025 20:50**:
+- Projeto importado e configurado para o Replit
+- Workflow configurado com output webview na porta 5000
+- Conexão com Supabase estabelecida
+- Frontend e backend comunicando corretamente
+- Mapbox configurado e funcionando
+- Aguardando configuração dos secrets de admin
+
+## Próximos Passos
+
+1. Configurar ADMIN_USERNAME e ADMIN_PASSWORD nos secrets
+2. Verificar funcionamento completo da aplicação
+3. Testar criação de eventos e sistema social
+4. Configurar SendGrid se necessário para emails
