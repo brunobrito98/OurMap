@@ -82,6 +82,9 @@ async function initializeAdminUser() {
   
   // Initialize admin user if needed
   await initializeAdminUser();
+  
+  // Initialize categories if needed
+  await storage.initializeCategories();
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

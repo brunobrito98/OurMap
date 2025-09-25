@@ -1481,6 +1481,92 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async initializeCategories(): Promise<void> {
+    try {
+      // Verificar se as categorias já existem
+      const existingCategories = await this.getCategories();
+      if (existingCategories.length > 0) {
+        return; // Categorias já inicializadas
+      }
+
+      console.log('Initializing categories...');
+
+      // Definir categorias principais
+      const mainCategories = [
+        { value: "festas", name: "Festas", icon: "fas fa-glass-cheers" },
+        { value: "sports", name: "Esportes", icon: "fas fa-running" },
+        { value: "tech", name: "Tecnologia", icon: "fas fa-laptop-code" },
+        { value: "religioso", name: "Religioso", icon: "fas fa-pray" },
+        { value: "food", name: "Gastronomia", icon: "fas fa-utensils" },
+        { value: "art", name: "Arte", icon: "fas fa-palette" },
+        { value: "music", name: "Música", icon: "fas fa-music" },
+        { value: "outros", name: "Outros", icon: "fas fa-calendar" },
+      ];
+
+      // Inserir categorias principais
+      const insertedCategories: { [key: string]: string } = {};
+      
+      for (const category of mainCategories) {
+        const [inserted] = await db.insert(categories).values({
+          name: category.name,
+          value: category.value,
+          icon: category.icon,
+          displayOrder: mainCategories.indexOf(category),
+        }).returning();
+        insertedCategories[category.value] = inserted.id;
+      }
+
+      // Definir subcategorias
+      const subcategories = [
+        // Subcategorias de Sports
+        { value: "corrida", name: "Corrida", parentValue: "sports", icon: "fas fa-running" },
+        { value: "futebol", name: "Futebol", parentValue: "sports", icon: "fas fa-futbol" },
+        { value: "natacao", name: "Natação", parentValue: "sports", icon: "fas fa-swimmer" },
+        { value: "ciclismo", name: "Ciclismo", parentValue: "sports", icon: "fas fa-bicycle" },
+        { value: "basquete", name: "Basquete", parentValue: "sports", icon: "fas fa-basketball-ball" },
+        
+        // Subcategorias de Tech
+        { value: "programacao", name: "Programação", parentValue: "tech", icon: "fas fa-code" },
+        { value: "startups", name: "Startups", parentValue: "tech", icon: "fas fa-rocket" },
+        { value: "ia", name: "Inteligência Artificial", parentValue: "tech", icon: "fas fa-robot" },
+        
+        // Subcategorias de Music
+        { value: "rock", name: "Rock", parentValue: "music", icon: "fas fa-guitar" },
+        { value: "eletronica", name: "Eletrônica", parentValue: "music", icon: "fas fa-headphones" },
+        { value: "sertanejo", name: "Sertanejo", parentValue: "music", icon: "fas fa-microphone" },
+        { value: "samba", name: "Samba", parentValue: "music", icon: "fas fa-drum" },
+        
+        // Subcategorias de Food
+        { value: "churrasco", name: "Churrasco", parentValue: "food", icon: "fas fa-fire" },
+        { value: "vegetariano", name: "Vegetariano", parentValue: "food", icon: "fas fa-leaf" },
+        { value: "pizza", name: "Pizza", parentValue: "food", icon: "fas fa-pizza-slice" },
+        
+        // Subcategorias de Art
+        { value: "pintura", name: "Pintura", parentValue: "art", icon: "fas fa-paint-brush" },
+        { value: "teatro", name: "Teatro", parentValue: "art", icon: "fas fa-theater-masks" },
+        { value: "danca", name: "Dança", parentValue: "art", icon: "fas fa-dancing" },
+      ];
+
+      // Inserir subcategorias
+      for (const subcategory of subcategories) {
+        const parentId = insertedCategories[subcategory.parentValue];
+        if (parentId) {
+          await db.insert(categories).values({
+            name: subcategory.name,
+            value: subcategory.value,
+            icon: subcategory.icon,
+            parentId: parentId,
+            displayOrder: subcategories.filter(s => s.parentValue === subcategory.parentValue).indexOf(subcategory),
+          });
+        }
+      }
+
+      console.log('Categories initialized successfully');
+    } catch (error) {
+      console.error('Error initializing categories:', error);
+    }
+  }
+
   async getCategoryWithSubcategories(categoryValue: string): Promise<string[]> {
     try {
       // Se categoryValue estiver vazio, retorna todos
@@ -1491,6 +1577,7 @@ export class DatabaseStorage implements IStorage {
       // Busca a categoria principal
       const category = await this.getCategoryByValue(categoryValue);
       if (!category) {
+        console.log(`Category '${categoryValue}' not found in database`);
         return [categoryValue]; // Retorna o valor original se não encontrar
       }
 
@@ -1498,6 +1585,7 @@ export class DatabaseStorage implements IStorage {
       if (!category.parentId) {
         const subcategories = await this.getSubcategories(category.id);
         const subcategoryValues = subcategories.map(sub => sub.value);
+        console.log(`Found ${subcategoryValues.length} subcategories for '${categoryValue}':`, subcategoryValues);
         return [categoryValue, ...subcategoryValues];
       }
 
