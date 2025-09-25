@@ -34,7 +34,7 @@ import {
   type NotificationConfig,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, desc, asc, count, avg, sql, like, isNull, isNotNull } from "drizzle-orm";
+import { eq, and, or, desc, asc, count, avg, sql, like, isNull, isNotNull, gte, lte } from "drizzle-orm";
 
 // Interface for storage operations
 export interface IStorage {
@@ -376,8 +376,13 @@ export class DatabaseStorage implements IStorage {
     try {
       console.log('DEBUG getEvents called with filters:', JSON.stringify(filters));
       // Filter out events that have already ended
+
       // Only use dateTime since endTime is not in the current schema
       const conditions = [sql`${events.dateTime} > NOW()`];
+
+      // Use dateTime to check if event is still upcoming (assuming events last a few hours)
+      const conditions = [gte(events.dateTime, new Date())];
+
       console.log('DEBUG: Initial conditions set with event end time filtering');
       
       // Filter out private events unless user has access
@@ -1119,6 +1124,7 @@ export class DatabaseStorage implements IStorage {
   ): Promise<EventWithDetails[]> {
     const conditions = [];
 
+
     // Add condition for ended events
     // Only use dateTime since endTime is not in the current schema
     conditions.push(
@@ -1130,6 +1136,16 @@ export class DatabaseStorage implements IStorage {
       conditions.push(
         sql`${events.dateTime} >= NOW() - INTERVAL '${daysBack} days'`
       );
+
+    // Add condition for ended events (events that have already occurred)
+    conditions.push(lte(events.dateTime, new Date()));
+
+    // Add date range filter if daysBack is specified
+    if (daysBack && daysBack > 0) {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+      conditions.push(gte(events.dateTime, cutoffDate));
+
     }
 
     // Add city filter if specified
@@ -1197,10 +1213,14 @@ export class DatabaseStorage implements IStorage {
       .from(events)
       .innerJoin(users, eq(events.creatorId, users.id))
       .where(and(...conditions))
+
       .orderBy(
         // Order by dateTime - most recent first
         desc(events.dateTime)
       );
+
+      .orderBy(desc(events.dateTime));
+
 
     // Enhance with attendance counts
     const enhancedEvents = await Promise.all(
