@@ -6,6 +6,20 @@ OurMap is a modern event management platform built for discovering, creating, an
 
 ## Recent Changes
 
+**September 25, 2025**
+- **Replit Environment Setup**: Successfully configured application for Replit environment
+  - tsx already installed and configured in package.json devDependencies
+  - Vite configuration properly set with host "0.0.0.0" and port 5000
+  - allowedHosts: true configured in server/vite.ts for Replit proxy support
+  - Workflow configured with webview output type for frontend display
+  - Application successfully running with Supabase database connection
+  - Mapbox integration configured with VITE_MAPBOX_ACCESS_TOKEN
+  - Deploy configuration set for autoscale deployment target
+- **Environment Variables**: MAPBOX_ACCESS_TOKEN configured and working
+  - Admin user creation pending ADMIN_USERNAME and ADMIN_PASSWORD secrets
+  - Email functionality disabled (SENDGRID_API_KEY not required)
+  - Application fully operational with existing database data
+
 **September 24, 2025**
 - **Event Lifecycle Management**: Successfully implemented filtering and restriction system for ended events
   - Modified backend `getEvents()` query to filter out events that have already ended from main screen
