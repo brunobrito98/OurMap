@@ -8,7 +8,7 @@ import CategoryFilter from "@/components/CategoryFilter";
 import BottomNavigation from "@/components/BottomNavigation";
 import FloatingCreateButton from "@/components/FloatingCreateButton";
 import CitySearchModal from "@/components/CitySearchModal";
-import { MapPin, Search, ArrowUpDown, CalendarX, Calendar, Navigation } from "lucide-react";
+import { MapPin, Search, ArrowUpDown, CalendarX, Calendar, Navigation, Bell } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import type { EventWithDetails } from "@shared/schema";
 
@@ -22,6 +22,16 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
   const [sortBy, setSortBy] = useState<"distance" | "date">("distance");
+
+  // Fetch unread notifications count for authenticated users
+  const { data: unreadData } = useQuery({
+    queryKey: ['/api/notifications/unread-count'],
+    enabled: isAuthenticated,
+    staleTime: 1000 * 30, // 30 seconds
+    refetchInterval: 1000 * 60, // 1 minute
+  });
+  
+  const unreadCount = (unreadData as any)?.count || 0;
 
   // Get user's location
   useEffect(() => {
@@ -125,7 +135,22 @@ export default function Home() {
               <p className="font-semibold text-foreground" data-testid="text-location">{locationName}</p>
             </div>
           </div>
-          <MapPin className="w-4 h-4 text-primary opacity-60 group-hover:opacity-100 transition-opacity" />
+          {isAuthenticated ? (
+            <button
+              onClick={() => navigate("/notifications")}
+              className="relative p-2 rounded-lg hover:bg-secondary/50 transition-colors"
+              data-testid="button-notifications"
+            >
+              <Bell className="w-5 h-5 text-primary" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+          ) : (
+            <MapPin className="w-4 h-4 text-primary opacity-60 group-hover:opacity-100 transition-opacity" />
+          )}
         </button>
       </div>
 
