@@ -152,7 +152,7 @@ export const eventRatings = pgTable("event_ratings", {
 export const eventInvites = pgTable("event_invites", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   status: text("status").notNull().default("pending"), // pending, accepted, declined
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
@@ -161,13 +161,8 @@ export const eventInvites = pgTable("event_invites", {
 
 export const notifications = pgTable("notifications", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-<<<<<<< HEAD
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  type: text("type").notNull(), // 'friend_invite', 'event_attendance', 'event_created', 'event_reminder', 'event_rating'
-=======
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   type: text("type").notNull(), // 'friend_invite', 'event_attendance', 'event_created', 'event_reminder', 'event_rating', 'event_invite'
->>>>>>> 3a816ee118f10ed6d5e49e408b4019a7af6e14ee
   title: text("title").notNull(),
   message: text("message").notNull(),
   relatedUserId: varchar("related_user_id").references(() => users.id, { onDelete: "cascade" }), // User who triggered the notification
