@@ -100,6 +100,7 @@ export interface IStorage {
   canUserRateEvent(eventId: string, userId: string): Promise<{ canRate: boolean; reason?: string }>;
   getEventRatingsAverage(eventId: string): Promise<{ eventAverage: number; organizerAverage: number; totalRatings: number }>;
   getOrganizerRatingsAverage(organizerId: string): Promise<{ average: number; totalRatings: number }>;
+  getOrganizerReceivedRatings(organizerId: string): Promise<EventRating[]>;
 
   // Search operations
   searchUsers(query: string): Promise<UserSanitized[]>;
@@ -867,6 +868,16 @@ export class DatabaseStorage implements IStorage {
       average: result.average ? Number(result.average) : 0,
       totalRatings: result.totalRatings,
     };
+  }
+
+  async getOrganizerReceivedRatings(organizerId: string): Promise<EventRating[]> {
+    return await db
+      .select()
+      .from(eventRatings)
+      .innerJoin(events, eq(eventRatings.eventId, events.id))
+      .where(eq(events.creatorId, organizerId))
+      .orderBy(desc(eventRatings.createdAt))
+      .then(results => results.map(result => result.event_ratings));
   }
 
   // Additional user operations for local authentication from javascript_auth_all_persistance blueprint

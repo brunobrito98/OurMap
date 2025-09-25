@@ -20,6 +20,7 @@ import ChangePassword from "@/pages/ChangePassword";
 import ChangePhone from "@/pages/ChangePhone";
 import { Notifications } from "@/pages/Notifications";
 import { NotificationSettings } from "@/pages/NotificationSettings";
+import MyRatings from "@/pages/MyRatings";
 
 import NotFound from "@/pages/not-found";
 
@@ -96,6 +97,12 @@ function Router() {
       <Route path="/notifications/settings">
         <ProtectedRoute>
           <NotificationSettings />
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/profile/my-ratings">
+        <ProtectedRoute>
+          <MyRatings />
         </ProtectedRoute>
       </Route>
 

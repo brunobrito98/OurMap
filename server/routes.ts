@@ -1885,6 +1885,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get all ratings received by a user as organizer
+  app.get('/api/users/:id/received-ratings', async (req, res) => {
+    try {
+      const userId = req.params.id;
+      const ratings = await storage.getOrganizerReceivedRatings(userId);
+      res.json(ratings);
+    } catch (error) {
+      console.error("Error fetching received ratings:", error);
+      res.status(500).json({ message: "Failed to fetch received ratings" });
+    }
+  });
+
   // Geocoding endpoint with optional proximity filter
   app.post('/api/geocode', async (req, res) => {
     try {

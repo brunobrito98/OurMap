@@ -357,7 +357,7 @@ export default function Profile() {
 
           <div className="bg-card border border-border rounded-2xl overflow-hidden">
             <Button
-              onClick={() => navigate("/profile/ratings")}
+              onClick={() => navigate("/profile/my-ratings")}
               variant="ghost"
               className="w-full flex items-center space-x-4 p-4 h-auto justify-start"
               data-testid="button-ratings"
@@ -393,7 +393,7 @@ export default function Profile() {
             <div className="border-t border-border"></div>
             
             <Button
-              onClick={() => navigate("/profile/edit")}
+              onClick={() => navigate("/settings/profile")}
               variant="ghost"
               className="w-full flex items-center space-x-4 p-4 h-auto justify-start"
               data-testid="button-account-settings"
