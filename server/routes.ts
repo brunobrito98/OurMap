@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import express from "express";
 import { createServer, type Server } from "http";
+import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { setupLocalAuth, isAuthenticatedLocal, isAdmin, isSuperAdmin, hashPassword } from "./auth";
 import session from "express-session";
@@ -432,7 +433,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     process.exit(1);
   }
   
-  app.use(session({
+  // Store session parser reference for WebSocket authentication
+  const sessionParser = session({
     secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
@@ -442,7 +444,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       sameSite: 'lax', // CSRF protection
       maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
     },
-  }));
+  });
+  
+  app.use(sessionParser);
 
   // Setup auth system
   setupLocalAuth(app);
@@ -2350,5 +2354,319 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
+  
+  // Setup WebSocket server for real-time chat
+  const wss = new WebSocketServer({ 
+    noServer: true,  // We'll handle upgrade manually
+    path: '/ws'
+  });
+  
+  // Handle WebSocket upgrade with proper authentication and CSRF protection
+  httpServer.on('upgrade', (request, socket, head) => {
+    const req = request as any;
+    const pathname = new URL(req.url || '', `http://${req.headers.host}`).pathname;
+    
+    if (pathname === '/ws') {
+      // CSRF Protection: Validate Origin header
+      const origin = req.headers.origin;
+      const host = req.headers.host;
+      
+      // Allow connections from same origin or localhost for development
+      const allowedOrigins = [
+        `https://${host}`,
+        `http://${host}`,
+        'http://localhost:5000', // Development
+        process.env.NODE_ENV === 'development' ? 'https://530056ba-9d7a-473b-993f-c066392ca964-00-2um4pby6yv5uh.worf.replit.dev' : null
+      ].filter(Boolean);
+      
+      if (!origin || !allowedOrigins.includes(origin)) {
+        console.log(`WebSocket connection denied: Invalid origin ${origin}`);
+        socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+      
+      // Parse session from upgrade request
+      sessionParser(req, {} as any, () => {
+        // Check authentication
+        const isAuthenticated = req.session && 
+                               req.session.passport && 
+                               req.session.passport.user;
+        
+        if (isAuthenticated) {
+          // Store user info for connection handler
+          req.authenticatedUser = req.session.passport.user;
+          
+          // Proceed with WebSocket upgrade
+          wss.handleUpgrade(request, socket, head, (ws) => {
+            wss.emit('connection', ws, request);
+          });
+        } else {
+          console.log('WebSocket connection denied: Not authenticated');
+          socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+          socket.destroy();
+        }
+      });
+    } else {
+      socket.destroy();
+    }
+  });
+  
+  // Support multiple connections per user
+  const connectedUsers = new Map<string, Set<WebSocket>>();
+  
+  wss.on('connection', (ws, request) => {
+    const req = request as any;
+    const userId = req.authenticatedUser;
+    
+    // Additional security check - this should never happen with proper upgrade handler
+    if (!userId) {
+      console.error('WebSocket connection without authenticated user - closing');
+      ws.close(1008, 'Unauthorized');
+      return;
+    }
+    
+    console.log(`WebSocket connection established for user ${userId}`);
+    
+    // Add connection to user's set
+    if (!connectedUsers.has(userId)) {
+      connectedUsers.set(userId, new Set());
+    }
+    connectedUsers.get(userId)!.add(ws);
+    
+    // Send authentication success
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'auth_success', userId }));
+    }
+    
+    ws.on('message', async (data) => {
+      try {
+        const message = JSON.parse(data.toString());
+        
+        switch (message.type) {
+            
+          case 'chat_message':
+            // Handle sending chat message - use authenticated userId from session
+            const { recipientId, content } = message;
+            
+            if (!recipientId || !content) {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ 
+                  type: 'error', 
+                  message: 'Missing recipientId or content' 
+                }));
+              }
+              return;
+            }
+            
+            // Verify users are friends before allowing chat
+            const areFriends = await storage.areFriends(userId, recipientId);
+            if (!areFriends) {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ 
+                  type: 'error', 
+                  message: 'You can only chat with friends' 
+                }));
+              }
+              return;
+            }
+            
+            // Save message to database
+            let conversation = await storage.getOrCreateConversation(userId, recipientId);
+            const savedMessage = await storage.createMessage(conversation.id, userId, content);
+            
+            // Send message to recipient if they're online (all their connections)
+            const recipientConnections = connectedUsers.get(recipientId);
+            if (recipientConnections) {
+              const messageData = {
+                type: 'chat_message',
+                message: {
+                  id: savedMessage.id,
+                  conversationId: savedMessage.conversationId,
+                  senderId: savedMessage.senderId,
+                  content: savedMessage.content,
+                  createdAt: savedMessage.createdAt
+                }
+              };
+              
+              recipientConnections.forEach(connection => {
+                if (connection.readyState === WebSocket.OPEN) {
+                  connection.send(JSON.stringify(messageData));
+                }
+              });
+            }
+            
+            // Confirm message sent to sender
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({
+                type: 'message_sent',
+                message: {
+                  id: savedMessage.id,
+                  conversationId: savedMessage.conversationId,
+                  senderId: savedMessage.senderId,
+                  content: savedMessage.content,
+                  createdAt: savedMessage.createdAt
+                }
+              }));
+            }
+            break;
+            
+          case 'mark_read':
+            // Validate mark_read message payload
+            const markReadSchema = z.object({
+              type: z.literal('mark_read'),
+              messageIds: z.array(z.string().uuid()).min(1).max(50) // Limit array size
+            });
+            
+            const markReadValidation = markReadSchema.safeParse(rawMessage);
+            if (!markReadValidation.success) {
+              ws.send(JSON.stringify({ 
+                type: 'error', 
+                message: 'Invalid mark_read message format' 
+              }));
+              return;
+            }
+            
+            const { messageIds } = markReadValidation.data;
+            
+            try {
+              await storage.markMessagesAsRead(messageIds, userId);
+              
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ 
+                  type: 'messages_marked_read', 
+                  messageIds 
+                }));
+              }
+            } catch (error) {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ 
+                  type: 'error', 
+                  message: error instanceof Error ? error.message : 'Failed to mark messages as read'
+                }));
+              }
+            }
+            break;
+        }
+      } catch (error) {
+        console.error('WebSocket message error:', error);
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ 
+            type: 'error', 
+            message: 'Invalid message format' 
+          }));
+        }
+      }
+    });
+    
+    ws.on('close', () => {
+      // Remove this connection from user's set
+      const userConnections = connectedUsers.get(userId);
+      if (userConnections) {
+        userConnections.delete(ws);
+        
+        // If no more connections, remove user entirely
+        if (userConnections.size === 0) {
+          connectedUsers.delete(userId);
+        }
+        
+        console.log(`User ${userId} disconnected from WebSocket (${userConnections.size} connections remaining)`);
+      }
+    });
+  });
+
+  // Chat API routes
+  app.get("/api/conversations", isAuthenticatedLocal, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const conversations = await storage.getConversations(userId);
+      res.json(conversations);
+    } catch (error) {
+      console.error("Error fetching conversations:", error);
+      res.status(500).json({ message: "Failed to fetch conversations" });
+    }
+  });
+
+  app.get("/api/conversations/:conversationId/messages", isAuthenticatedLocal, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const { conversationId } = req.params;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      
+      // Validate pagination parameters
+      if (limit > 100 || limit < 1 || offset < 0) {
+        return res.status(400).json({ message: "Invalid pagination parameters" });
+      }
+      
+      const messages = await storage.getMessages(conversationId, userId, limit, offset);
+      res.json(messages);
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+      if (error instanceof Error && error.message.includes('not found or access denied')) {
+        res.status(403).json({ message: "Access denied to this conversation" });
+      } else {
+        res.status(500).json({ message: "Failed to fetch messages" });
+      }
+    }
+  });
+
+  app.post("/api/conversations/:conversationId/messages/read", isAuthenticatedLocal, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const { conversationId } = req.params;
+      
+      // Validate request body
+      const messageIdsSchema = z.object({
+        messageIds: z.array(z.string().uuid()).min(1, "At least one messageId required")
+      });
+      
+      const validationResult = messageIdsSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid request body", 
+          errors: validationResult.error.issues 
+        });
+      }
+      
+      const { messageIds } = validationResult.data;
+      
+      // Verify user is participant in the conversation before marking messages as read
+      // This will be enforced in the storage function, which already checks conversation membership
+      await storage.markMessagesAsRead(messageIds, userId);
+      res.json({ success: true, message: "Messages marked as read" });
+    } catch (error) {
+      console.error("Error marking messages as read:", error);
+      if (error instanceof Error && error.message.includes('not found or access denied')) {
+        res.status(403).json({ message: "Access denied to this conversation" });
+      } else {
+        res.status(500).json({ message: "Failed to mark messages as read" });
+      }
+    }
+  });
+
+  app.post("/api/conversations", isAuthenticatedLocal, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const { friendId } = req.body;
+      
+      if (!friendId) {
+        return res.status(400).json({ message: "friendId is required" });
+      }
+      
+      // Check if users are friends
+      const areFriends = await storage.areFriends(userId, friendId);
+      if (!areFriends) {
+        return res.status(403).json({ message: "You can only chat with friends" });
+      }
+      
+      const conversation = await storage.getOrCreateConversation(userId, friendId);
+      res.json(conversation);
+    } catch (error) {
+      console.error("Error creating/getting conversation:", error);
+      res.status(500).json({ message: "Failed to create conversation" });
+    }
+  });
+  
   return httpServer;
 }

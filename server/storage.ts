@@ -8,6 +8,8 @@ import {
   eventContributions,
   categories,
   notifications,
+  conversations,
+  messages,
   type User,
   type UpsertUser,
   type Event,
@@ -32,9 +34,11 @@ import {
   type InsertNotification,
   type NotificationWithDetails,
   type NotificationConfig,
+  type Conversation,
+  type Message,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, desc, asc, count, avg, sql, like, isNull, isNotNull, gte, lte } from "drizzle-orm";
+import { eq, and, or, desc, asc, count, avg, sql, like, isNull, isNotNull, gte, lte, inArray, ne, max } from "drizzle-orm";
 
 // Interface for storage operations
 export interface IStorage {
@@ -153,6 +157,13 @@ export interface IStorage {
   getEventByShareableLink(shareableLink: string): Promise<Event | undefined>;
   isUserInvitedToEvent(eventId: string, userId: string): Promise<boolean>;
   canUserAccessPrivateEvent(eventId: string, userId: string): Promise<boolean>;
+  
+  // Chat operations
+  getOrCreateConversation(userId1: string, userId2: string): Promise<Conversation>;
+  createMessage(conversationId: string, senderId: string, content: string): Promise<Message>;
+  markMessagesAsRead(messageIds: string[], userId: string): Promise<void>;
+  getConversations(userId: string): Promise<(Conversation & { otherUser: User, unreadCount: number, lastMessage?: Message })[]>;
+  getMessages(conversationId: string, userId: string, limit?: number, offset?: number): Promise<Message[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1865,6 +1876,184 @@ export class DatabaseStorage implements IStorage {
       ));
     
     return !!attendance;
+  }
+
+  // Chat operations
+  async getOrCreateConversation(userId1: string, userId2: string): Promise<Conversation> {
+    // Ensure consistent ordering to prevent duplicate conversations
+    const [smallerId, largerId] = [userId1, userId2].sort();
+    
+    // Try to find existing conversation
+    const [existing] = await db
+      .select()
+      .from(conversations)
+      .where(and(
+        eq(conversations.user1Id, smallerId),
+        eq(conversations.user2Id, largerId)
+      ));
+    
+    if (existing) {
+      return existing;
+    }
+    
+    // Create new conversation
+    const [newConversation] = await db
+      .insert(conversations)
+      .values({
+        user1Id: smallerId,
+        user2Id: largerId,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      })
+      .returning();
+    
+    return newConversation;
+  }
+
+  async createMessage(conversationId: string, senderId: string, content: string): Promise<Message> {
+    const now = new Date();
+    
+    const [message] = await db
+      .insert(messages)
+      .values({
+        conversationId,
+        senderId,
+        content,
+        createdAt: now,
+        updatedAt: now
+      })
+      .returning();
+    
+    // Update conversation's last message timestamp
+    await db
+      .update(conversations)
+      .set({ 
+        lastMessageAt: now,
+        updatedAt: now 
+      })
+      .where(eq(conversations.id, conversationId));
+    
+    return message;
+  }
+
+  async markMessagesAsRead(messageIds: string[], userId: string): Promise<void> {
+    if (messageIds.length === 0) return;
+    
+    // First, verify that all messages belong to conversations where the user is a participant
+    const messagesWithConversations = await db
+      .select({
+        messageId: messages.id,
+        conversationId: messages.conversationId,
+        user1Id: conversations.user1Id,
+        user2Id: conversations.user2Id
+      })
+      .from(messages)
+      .innerJoin(conversations, eq(messages.conversationId, conversations.id))
+      .where(inArray(messages.id, messageIds));
+    
+    // Check if user is participant in all conversations
+    for (const msg of messagesWithConversations) {
+      if (msg.user1Id !== userId && msg.user2Id !== userId) {
+        throw new Error('Access denied: You can only mark messages as read in conversations you participate in');
+      }
+    }
+    
+    // Only mark messages as read if user is participant and didn't send them
+    await db
+      .update(messages)
+      .set({ readAt: new Date() })
+      .where(and(
+        inArray(messages.id, messageIds),
+        ne(messages.senderId, userId), // Don't mark own messages as read
+        isNull(messages.readAt) // Only update unread messages
+      ));
+  }
+
+  async getConversations(userId: string): Promise<(Conversation & { otherUser: User, unreadCount: number, lastMessage?: Message })[]> {
+    const conversationData = await db
+      .select({
+        conversation: conversations,
+        otherUser: users,
+        lastMessage: messages
+      })
+      .from(conversations)
+      .leftJoin(
+        messages, 
+        and(
+          eq(messages.conversationId, conversations.id),
+          eq(messages.createdAt, 
+            db.select({ maxCreatedAt: max(messages.createdAt) })
+              .from(messages)
+              .where(eq(messages.conversationId, conversations.id))
+          )
+        )
+      )
+      .leftJoin(
+        users,
+        or(
+          and(eq(conversations.user1Id, userId), eq(users.id, conversations.user2Id)),
+          and(eq(conversations.user2Id, userId), eq(users.id, conversations.user1Id))
+        )
+      )
+      .where(
+        or(
+          eq(conversations.user1Id, userId),
+          eq(conversations.user2Id, userId)
+        )
+      )
+      .orderBy(desc(conversations.lastMessageAt));
+
+    // Get unread message counts for each conversation
+    const results = [];
+    for (const row of conversationData) {
+      if (!row.conversation || !row.otherUser) continue;
+      
+      const [unreadResult] = await db
+        .select({ count: count() })
+        .from(messages)
+        .where(and(
+          eq(messages.conversationId, row.conversation.id),
+          ne(messages.senderId, userId),
+          isNull(messages.readAt)
+        ));
+      
+      results.push({
+        ...row.conversation,
+        otherUser: row.otherUser,
+        unreadCount: unreadResult?.count || 0,
+        lastMessage: row.lastMessage || undefined
+      });
+    }
+    
+    return results;
+  }
+
+  async getMessages(conversationId: string, userId: string, limit: number = 50, offset: number = 0): Promise<Message[]> {
+    // Verify user has access to this conversation
+    const [conversation] = await db
+      .select()
+      .from(conversations)
+      .where(and(
+        eq(conversations.id, conversationId),
+        or(
+          eq(conversations.user1Id, userId),
+          eq(conversations.user2Id, userId)
+        )
+      ));
+    
+    if (!conversation) {
+      throw new Error('Conversation not found or access denied');
+    }
+    
+    const messageList = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.conversationId, conversationId))
+      .orderBy(desc(messages.createdAt))
+      .limit(limit)
+      .offset(offset);
+    
+    return messageList.reverse(); // Return in chronological order
   }
 }
 

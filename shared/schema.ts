@@ -142,6 +142,27 @@ export const friendships = pgTable("friendships", {
   uniqueFriendship: unique().on(table.requesterId, table.addresseeId),
 }));
 
+export const conversations = pgTable("conversations", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  user1Id: varchar("user1_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  user2Id: varchar("user2_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqueConversation: unique().on(table.user1Id, table.user2Id),
+}));
+
+export const messages = pgTable("messages", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: uuid("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  senderId: varchar("sender_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  readAt: timestamp("read_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
 export const eventRatings = pgTable("event_ratings", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
@@ -469,6 +490,22 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
   createdAt: true,
 });
 
+export const insertConversationSchema = createInsertSchema(conversations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastMessageAt: true,
+});
+
+export const insertMessageSchema = createInsertSchema(messages).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  readAt: true,
+}).extend({
+  content: z.string().min(1, "Mensagem não pode estar vazia").max(2000, "Mensagem muito longa (máx. 2000 caracteres)"),
+});
+
 export const notificationConfigSchema = z.object({
   chave: z.enum([
     "notificarConviteAmigo",
@@ -543,6 +580,10 @@ export type EventContribution = typeof eventContributions.$inferSelect;
 export type InsertEventContribution = z.infer<typeof insertEventContributionSchema>;
 export type Friendship = typeof friendships.$inferSelect;
 export type InsertFriendship = z.infer<typeof insertFriendshipSchema>;
+export type Conversation = typeof conversations.$inferSelect;
+export type InsertConversation = z.infer<typeof insertConversationSchema>;
+export type Message = typeof messages.$inferSelect;
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type EventRating = typeof eventRatings.$inferSelect;
 export type InsertEventRating = z.infer<typeof insertEventRatingSchema>;
 export type Notification = typeof notifications.$inferSelect;
