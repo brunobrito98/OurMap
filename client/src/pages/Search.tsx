@@ -21,7 +21,7 @@ export default function Search() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"events" | "users">("events");
   const [userCity, setUserCity] = useState<string | null>(null);
-  const [periodFilter, setPeriodFilter] = useState<number | undefined>(undefined);
+  const [periodFilter, setPeriodFilter] = useState<number | undefined>(1);
 
   // Debounced search query
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -194,12 +194,12 @@ export default function Search() {
                 </div>
                 <div className="flex gap-2">
                   <Button
-                    variant={periodFilter === undefined ? "default" : "outline"}
+                    variant={periodFilter === 1 ? "default" : "outline"}
                     size="sm"
-                    onClick={() => handlePeriodFilterChange(undefined)}
-                    data-testid="filter-all"
+                    onClick={() => handlePeriodFilterChange(1)}
+                    data-testid="filter-1-day"
                   >
-                    Todos
+                    Último dia
                   </Button>
                   <Button
                     variant={periodFilter === 2 ? "default" : "outline"}

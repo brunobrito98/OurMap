@@ -34,7 +34,7 @@ import {
   type NotificationConfig,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, desc, asc, count, avg, sql, like, isNull, isNotNull, gte } from "drizzle-orm";
+import { eq, and, or, desc, asc, count, avg, sql, like, isNull, isNotNull, gte, lte } from "drizzle-orm";
 
 // Interface for storage operations
 export interface IStorage {
@@ -1119,35 +1119,14 @@ export class DatabaseStorage implements IStorage {
   ): Promise<EventWithDetails[]> {
     const conditions = [];
 
-    // Add condition for ended events
-    conditions.push(
-      or(
-        // If endTime exists, use it; otherwise fall back to dateTime
-        and(
-          isNotNull(events.endTime),
-          sql`${events.endTime} < NOW()`
-        ),
-        and(
-          isNull(events.endTime),
-          sql`${events.dateTime} < NOW()`
-        )
-      )
-    );
+    // Add condition for ended events (events that have already occurred)
+    conditions.push(lte(events.dateTime, new Date()));
 
     // Add date range filter if daysBack is specified
     if (daysBack && daysBack > 0) {
-      conditions.push(
-        or(
-          and(
-            isNotNull(events.endTime),
-            sql`${events.endTime} >= NOW() - INTERVAL '${daysBack} days'`
-          ),
-          and(
-            isNull(events.endTime),
-            sql`${events.dateTime} >= NOW() - INTERVAL '${daysBack} days'`
-          )
-        )
-      );
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+      conditions.push(gte(events.dateTime, cutoffDate));
     }
 
     // Add city filter if specified
@@ -1215,10 +1194,7 @@ export class DatabaseStorage implements IStorage {
       .from(events)
       .innerJoin(users, eq(events.creatorId, users.id))
       .where(and(...conditions))
-      .orderBy(
-        // Order by end time if available, otherwise by dateTime - most recent first
-        sql`COALESCE(${events.endTime}, ${events.dateTime}) DESC`
-      );
+      .orderBy(desc(events.dateTime));
 
     // Enhance with attendance counts
     const enhancedEvents = await Promise.all(
