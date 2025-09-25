@@ -5,6 +5,7 @@ import { storage } from "./storage";
 import { setupLocalAuth, isAuthenticatedLocal, isAdmin, isSuperAdmin, hashPassword } from "./auth";
 import session from "express-session";
 import { insertEventSchema, updateEventSchema, insertEventAttendanceSchema, insertEventRatingSchema, insertAdminUserSchema, insertLocalUserSchema, contactsMatchSchema, insertNotificationSchema, notificationConfigSchema, type User } from "@shared/schema";
+import { validateEventContent, validateUserContent } from "./contentValidation";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -12,6 +13,61 @@ import fs from "fs";
 import { parsePhoneNumber, isValidPhoneNumber } from "libphonenumber-js";
 import { sendEmail } from "./sendgrid";
 import crypto from 'crypto';
+<<<<<<< HEAD
+=======
+import twilio from "twilio";
+
+// Phone authentication schemas
+export const phoneStartSchema = z.object({
+  phone: z.string().min(1, "Número de telefone é obrigatório"),
+  country: z.string().optional(),
+});
+
+export const phoneVerifySchema = z.object({
+  phone: z.string().min(1, "Número de telefone é obrigatório"),
+  code: z.string().min(1, "Código é obrigatório"),
+});
+
+export const phoneLinkSchema = z.object({
+  phone: z.string().min(1, "Número de telefone é obrigatório"),
+  code: z.string().min(1, "Código é obrigatório"),
+});
+
+// OTP storage interface
+interface OTPRecord {
+  codeHash: string;
+  expiresAt: number;
+  attempts: number;
+}
+
+// Global stores and clients
+const otpStore = new Map<string, OTPRecord>();
+
+// Initialize Twilio (if configured)
+const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID;
+const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
+const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER;
+
+let twilioClient: any = null;
+if (twilioAccountSid && twilioAuthToken) {
+  twilioClient = twilio(twilioAccountSid, twilioAuthToken);
+}
+
+// Utility functions
+function generateOTP(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+function hashOTP(otp: string, phone: string): string {
+  const secret = process.env.OTP_SECRET || 'default-secret-key';
+  return crypto.createHmac('sha256', secret).update(`${otp}:${phone}`).digest('hex');
+}
+
+function generatePhoneHmac(phone: string): string {
+  const secret = process.env.PHONE_HMAC_SECRET || 'default-phone-secret';
+  return crypto.createHmac('sha256', secret).update(phone).digest('hex');
+}
+>>>>>>> 485fc9d539ec501712dcbbb19e46c6767df0bce9
 
 // Helper function to sanitize event data for responses
 function sanitizeEventForUser(eventData: any, userId?: string) {
@@ -404,6 +460,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const validatedData = userSchema.parse(req.body);
       
+      // Validate content for offensive language
+      const contentValidation = validateUserContent({
+        username: validatedData.username,
+        firstName: validatedData.firstName,
+        lastName: validatedData.lastName
+      });
+      
+      if (!contentValidation.isValid) {
+        return res.status(400).json({ 
+          message: "Conteúdo contém palavras ofensivas ou inadequadas", 
+          errors: contentValidation.errors 
+        });
+      }
+      
       const existingUser = await storage.getUserByUsername(validatedData.username);
       if (existingUser) {
         return res.status(400).json({ message: "Username já existe" });
@@ -620,6 +690,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate input
       if (!firstName && !lastName && phoneNumber === undefined) {
         return res.status(400).json({ message: "Pelo menos um campo deve ser fornecido" });
+      }
+
+      // Validate content for offensive language
+      const contentValidation = validateUserContent({
+        firstName: firstName || undefined,
+        lastName: lastName || undefined
+      });
+      
+      if (!contentValidation.isValid) {
+        return res.status(400).json({ 
+          message: "Conteúdo contém palavras ofensivas ou inadequadas", 
+          errors: contentValidation.errors 
+        });
       }
 
       const profileData: { firstName?: string; lastName?: string; phoneE164?: string | null; phoneVerified?: boolean; phoneCountry?: string | null } = {};
@@ -1010,6 +1093,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const eventData = insertEventSchema.parse(formData);
       
+      // Validate content for offensive language
+      const contentValidation = validateEventContent({
+        title: eventData.title,
+        description: eventData.description,
+        location: eventData.location
+      });
+      
+      if (!contentValidation.isValid) {
+        return res.status(400).json({ 
+          message: "Conteúdo contém palavras ofensivas ou inadequadas", 
+          errors: contentValidation.errors 
+        });
+      }
+      
       // Use eventData directly - dates are already strings from form validation
       const processedEventData = eventData;
       
@@ -1207,6 +1304,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Use dedicated update schema that supports partial updates with validation
       const eventData = updateEventSchema.parse(formData) as any;
+      
+      // Validate content for offensive language
+      const contentValidation = validateEventContent({
+        title: eventData.title,
+        description: eventData.description,
+        location: eventData.location
+      });
+
+      if (!contentValidation.isValid) {
+        return res.status(400).json({ 
+          message: "Conteúdo contém palavras ofensivas ou inadequadas",
+          errors: contentValidation.errors 
+        });
+      }
       
       // Use eventData directly - dates are already strings from form validation
       const processedEventData = { ...eventData };
