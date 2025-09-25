@@ -13,8 +13,6 @@ import fs from "fs";
 import { parsePhoneNumber, isValidPhoneNumber } from "libphonenumber-js";
 import { sendEmail } from "./sendgrid";
 import crypto from 'crypto';
-<<<<<<< HEAD
-=======
 import twilio from "twilio";
 
 // Phone authentication schemas
@@ -67,7 +65,6 @@ function generatePhoneHmac(phone: string): string {
   const secret = process.env.PHONE_HMAC_SECRET || 'default-phone-secret';
   return crypto.createHmac('sha256', secret).update(phone).digest('hex');
 }
->>>>>>> 485fc9d539ec501712dcbbb19e46c6767df0bce9
 
 // Helper function to sanitize event data for responses
 function sanitizeEventForUser(eventData: any, userId?: string) {
