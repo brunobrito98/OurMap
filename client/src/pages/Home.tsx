@@ -8,7 +8,7 @@ import CategoryFilter from "@/components/CategoryFilter";
 import BottomNavigation from "@/components/BottomNavigation";
 import FloatingCreateButton from "@/components/FloatingCreateButton";
 import CitySearchModal from "@/components/CitySearchModal";
-import { MapPin, Search, ArrowUpDown, CalendarX } from "lucide-react";
+import { MapPin, Search, ArrowUpDown, CalendarX, Calendar, Navigation } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import type { EventWithDetails } from "@shared/schema";
 
@@ -21,6 +21,7 @@ export default function Home() {
   const [userCity, setUserCity] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const [sortBy, setSortBy] = useState<"distance" | "date">("distance");
 
   // Get user's location
   useEffect(() => {
@@ -58,12 +59,18 @@ export default function Home() {
   }, []);
 
   const { data: events = [], isLoading } = useQuery<EventWithDetails[]>({
-    queryKey: ['/api/events', selectedCategory, userCity],
+    queryKey: ['/api/events', selectedCategory, userCity, sortBy, userLocation?.lat, userLocation?.lng],
     queryFn: async ({ queryKey }) => {
-      const [, category, city] = queryKey;
+      const [, category, city, currentSortBy, lat, lng] = queryKey;
       const params = new URLSearchParams();
       if (category) params.set('category', category as string);
       if (city) params.set('city', city as string);
+      
+      // Include coordinates for distance-based sorting
+      if (currentSortBy === 'distance' && lat && lng) {
+        params.set('lat', lat.toString());
+        params.set('lng', lng.toString());
+      }
       
       const response = await fetch(`/api/events?${params}`, {
         credentials: 'include'
@@ -73,9 +80,17 @@ export default function Home() {
     },
   });
 
-  const filteredEvents = events.filter(event => 
-    !searchQuery || event.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Apply search filter and sorting
+  const filteredEvents = events
+    .filter(event => !searchQuery || event.title.toLowerCase().includes(searchQuery.toLowerCase()))
+    .sort((a, b) => {
+      if (sortBy === 'date') {
+        // Sort by date (newest first)
+        return new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime();
+      }
+      // For distance sorting, backend already handles it
+      return 0;
+    });
 
   const handleLocationSelect = (location: { lat: number; lng: number }, cityName: string) => {
     setUserLocation(location);
@@ -88,6 +103,10 @@ export default function Home() {
 
   const handleChangeLocation = () => {
     setIsLocationModalOpen(true);
+  };
+
+  const handleToggleSort = () => {
+    setSortBy(current => current === "distance" ? "date" : "distance");
   };
 
   return (
@@ -142,8 +161,22 @@ export default function Home() {
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-foreground">Eventos próximos</h3>
           <div className="flex space-x-2">
-            <button className="text-primary text-sm font-medium flex items-center" data-testid="button-sort-distance">
-              <ArrowUpDown className="w-4 h-4 mr-1" />Distância
+            <button 
+              onClick={handleToggleSort}
+              className="text-primary text-sm font-medium flex items-center hover:bg-secondary px-2 py-1 rounded-md transition-colors" 
+              data-testid={`button-sort-${sortBy}`}
+            >
+              {sortBy === "distance" ? (
+                <>
+                  <Navigation className="w-4 h-4 mr-1" />
+                  Distância
+                </>
+              ) : (
+                <>
+                  <Calendar className="w-4 h-4 mr-1" />
+                  Data
+                </>
+              )}
             </button>
           </div>
         </div>
