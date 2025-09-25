@@ -384,8 +384,6 @@ export class DatabaseStorage implements IStorage {
       // Filter out events that have already ended
 
       // Only use dateTime since endTime is not in the current schema
-      const conditions = [sql`${events.dateTime} > NOW()`];
-
       // Use dateTime to check if event is still upcoming (assuming events last a few hours)
       const conditions = [gte(events.dateTime, new Date())];
 
@@ -914,8 +912,8 @@ export class DatabaseStorage implements IStorage {
 
   // Phone authentication operations
   async getUserByPhone(phoneE164: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.phoneE164, phoneE164));
-    return user;
+    // Phone fields are disabled in current schema
+    throw new Error("Phone authentication is not enabled in current schema");
   }
 
   async createUser(userData: Partial<UpsertUser>): Promise<User> {
@@ -927,29 +925,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUserPhone(userId: string, phoneData: { phoneE164: string; phoneVerified: boolean; phoneCountry?: string; phoneHmac: string }): Promise<void> {
-    await db
-      .update(users)
-      .set({
-        phoneE164: phoneData.phoneE164,
-        phoneVerified: phoneData.phoneVerified,
-        phoneCountry: phoneData.phoneCountry,
-        phoneHmac: phoneData.phoneHmac,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, userId));
+    // Phone fields are disabled in current schema
+    throw new Error("Phone authentication is not enabled in current schema");
   }
 
   async getUsersByPhoneHmacs(phoneHmacs: string[], excludeUserId?: string): Promise<User[]> {
-    let whereConditions = sql`${users.phoneHmac} = ANY(${phoneHmacs})`;
-    
-    if (excludeUserId) {
-      whereConditions = sql`${whereConditions} AND ${users.id} != ${excludeUserId}`;
-    }
-
-    return await db
-      .select()
-      .from(users)
-      .where(whereConditions);
+    // Phone fields are disabled in current schema
+    throw new Error("Phone authentication is not enabled in current schema");
   }
 
   async hasPendingFriendRequest(userId1: string, userId2: string): Promise<boolean> {
@@ -1173,18 +1155,6 @@ export class DatabaseStorage implements IStorage {
     const conditions = [];
 
 
-    // Add condition for ended events
-    // Only use dateTime since endTime is not in the current schema
-    conditions.push(
-      sql`${events.dateTime} < NOW()`
-    );
-
-    // Add date range filter if daysBack is specified
-    if (daysBack && daysBack > 0) {
-      conditions.push(
-        sql`${events.dateTime} >= NOW() - INTERVAL '${daysBack} days'`
-      );
-
     // Add condition for ended events (events that have already occurred)
     conditions.push(lte(events.dateTime, new Date()));
 
@@ -1193,7 +1163,6 @@ export class DatabaseStorage implements IStorage {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - daysBack);
       conditions.push(gte(events.dateTime, cutoffDate));
-
     }
 
     // Add city filter if specified
@@ -1266,8 +1235,6 @@ export class DatabaseStorage implements IStorage {
         // Order by dateTime - most recent first
         desc(events.dateTime)
       );
-
-      .orderBy(desc(events.dateTime));
 
 
     // Enhance with attendance counts
@@ -1391,7 +1358,7 @@ export class DatabaseStorage implements IStorage {
         profile,
         isConnected: true,
         canViewFullProfile: true,
-        phoneNumber: user.phoneE164,
+        phoneNumber: null, // Phone fields disabled in current schema
         confirmedEvents: enhancedEvents,
       };
     }
@@ -1468,7 +1435,7 @@ export class DatabaseStorage implements IStorage {
         profile,
         isConnected: true,
         canViewFullProfile: true,
-        phoneNumber: user.phoneE164,
+        phoneNumber: null, // Phone fields disabled in current schema
         confirmedEvents: enhancedEvents,
       };
     }
@@ -1648,18 +1615,8 @@ export class DatabaseStorage implements IStorage {
   // Notification preferences operations
   async getNotificationPreferences(userId: string): Promise<Partial<User>> {
     try {
-      const [user] = await db
-        .select({
-          notificarConviteAmigo: users.notificarConviteAmigo,
-          notificarEventoAmigo: users.notificarEventoAmigo,
-          notificarAvaliacaoAmigo: users.notificarAvaliacaoAmigo,
-          notificarContatoCadastrado: users.notificarContatoCadastrado,
-          notificarConfirmacaoPresenca: users.notificarConfirmacaoPresenca,
-          notificarAvaliacaoEventoCriado: users.notificarAvaliacaoEventoCriado,
-        })
-        .from(users)
-        .where(eq(users.id, userId));
-      return user || {};
+      // Notification preferences disabled in current schema
+      return {};
     } catch (error) {
       console.error('Error getting notification preferences:', error);
       return {};
