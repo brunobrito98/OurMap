@@ -1120,33 +1120,15 @@ export class DatabaseStorage implements IStorage {
     const conditions = [];
 
     // Add condition for ended events
+    // Only use dateTime since endTime is not in the current schema
     conditions.push(
-      or(
-        // If endTime exists, use it; otherwise fall back to dateTime
-        and(
-          isNotNull(events.endTime),
-          sql`${events.endTime} < NOW()`
-        ),
-        and(
-          isNull(events.endTime),
-          sql`${events.dateTime} < NOW()`
-        )
-      )
+      sql`${events.dateTime} < NOW()`
     );
 
     // Add date range filter if daysBack is specified
     if (daysBack && daysBack > 0) {
       conditions.push(
-        or(
-          and(
-            isNotNull(events.endTime),
-            sql`${events.endTime} >= NOW() - INTERVAL '${daysBack} days'`
-          ),
-          and(
-            isNull(events.endTime),
-            sql`${events.dateTime} >= NOW() - INTERVAL '${daysBack} days'`
-          )
-        )
+        sql`${events.dateTime} >= NOW() - INTERVAL '${daysBack} days'`
       );
     }
 
@@ -1216,8 +1198,8 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(users, eq(events.creatorId, users.id))
       .where(and(...conditions))
       .orderBy(
-        // Order by end time if available, otherwise by dateTime - most recent first
-        sql`COALESCE(${events.endTime}, ${events.dateTime}) DESC`
+        // Order by dateTime - most recent first
+        desc(events.dateTime)
       );
 
     // Enhance with attendance counts
