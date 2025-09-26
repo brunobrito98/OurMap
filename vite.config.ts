@@ -51,9 +51,6 @@ export default defineConfig({
       strict: true,
       deny: ["**/.*"],
     },
-    hmr: {
-      overlay: false, // Disable error overlay for Mapbox fetch errors
-      clientPort: 443, // Use secure connection for Replit
-    },
+    hmr: false, // Disable HMR for Replit compatibility
   },
 });
