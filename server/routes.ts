@@ -2137,7 +2137,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Search ended events endpoint
   app.get('/api/search/ended-events', async (req, res) => {
     try {
-      const { cityName, daysBack, searchQuery } = req.query;
+      const { cityName, daysBack, searchQuery, lat, lng } = req.query;
       
       // Parse daysBack to number if provided
       const daysBackNumber = daysBack && typeof daysBack === 'string' ? parseInt(daysBack, 10) : undefined;
@@ -2145,12 +2145,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid daysBack parameter" });
       }
       
+      // Parse coordinates if provided
+      let userCoordinates: { lat: number; lng: number } | undefined = undefined;
+      if (lat && lng) {
+        const parsedLat = parseFloat(lat as string);
+        const parsedLng = parseFloat(lng as string);
+        if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
+          userCoordinates = { lat: parsedLat, lng: parsedLng };
+        }
+      }
+      
       const userId = getUserId(req);
       const events = await storage.searchEndedEvents(
-        cityName as string || undefined,
+        (cityName as string) || undefined,
         daysBackNumber,
         searchQuery as string || undefined,
-        userId
+        userId,
+        userCoordinates
       );
       
       // Sanitize events to remove shareableLink for non-creators

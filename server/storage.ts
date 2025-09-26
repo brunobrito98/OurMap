@@ -1168,7 +1168,8 @@ export class DatabaseStorage implements IStorage {
     cityName?: string,
     daysBack?: number,
     searchQuery?: string,
-    userId?: string
+    userId?: string,
+    userCoordinates?: { lat: number; lng: number }
   ): Promise<EventWithDetails[]> {
     const conditions = [];
 
@@ -1196,10 +1197,40 @@ export class DatabaseStorage implements IStorage {
       );
     }
 
-    // Add city filter if specified
+    // Add city filter if specified - use both string matching and coordinate-based filtering
     if (cityName && cityName.trim() !== '') {
       const citySearchTerm = `%${cityName.trim()}%`;
-      conditions.push(like(events.location, citySearchTerm));
+      
+      if (userCoordinates) {
+        // Use coordinate-based approach: events within 30km radius are likely same city
+        const radiusKm = 30;
+        
+        // Simplified distance calculation using PostgreSQL's built-in functions
+        // This calculates distance between two points on Earth using the spherical law of cosines
+        const distanceCalculation = sql`
+          6371 * ACOS(
+            LEAST(1.0, 
+              COS(RADIANS(${userCoordinates.lat})) 
+              * COS(RADIANS(${events.latitude}::float)) 
+              * COS(RADIANS(${events.longitude}::float) - RADIANS(${userCoordinates.lng})) 
+              + SIN(RADIANS(${userCoordinates.lat})) 
+              * SIN(RADIANS(${events.latitude}::float))
+            )
+          )
+        `;
+        
+        
+        // Filter by either city name match OR within radius
+        conditions.push(
+          or(
+            like(events.location, citySearchTerm),
+            lte(distanceCalculation, radiusKm)
+          )
+        );
+      } else {
+        // Fallback to string matching if no coordinates provided
+        conditions.push(like(events.location, citySearchTerm));
+      }
     }
 
     // Add search query filter if specified
@@ -1266,6 +1297,7 @@ export class DatabaseStorage implements IStorage {
         // Order by dateTime - most recent first
         desc(events.dateTime)
       );
+
 
 
     // Enhance with attendance counts
