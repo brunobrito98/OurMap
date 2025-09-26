@@ -87,10 +87,6 @@ export default function ChatConversation() {
       }
       return response.json();
     },
-
-  const { data: otherParticipant } = useQuery<User>({
-    queryKey: ['/api/users/id', otherParticipantId],
-
     enabled: !!otherParticipantId,
     retry: 2,
   });
