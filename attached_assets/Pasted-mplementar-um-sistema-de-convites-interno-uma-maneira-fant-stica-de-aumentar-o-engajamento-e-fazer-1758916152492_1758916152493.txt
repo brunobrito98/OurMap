@@ -1,0 +1,38 @@
+mplementar um sistema de convites interno é uma maneira fantástica de aumentar o engajamento e fazer com que os usuários tragam seus amigos para os eventos.
+
+Vamos estruturar esse fluxo em três partes: a ação do organizador, o que o sistema faz por trás, e a experiência do convidado.
+
+1. O Fluxo do Organizador (Quem Convida)
+Na página de detalhes do evento que ele criou, o organizador deve ter um botão bem visível, como "Convidar Amigos".
+
+Seleção de Amigos: Ao tocar nesse botão, uma nova tela (ou um pop-up) deve surgir, exibindo a lista de amigos do organizador.
+
+Cada amigo na lista deve ter uma foto de perfil, nome e uma caixa de seleção (checkbox).
+
+É essencial ter uma barra de busca no topo para que o organizador possa encontrar amigos específicos facilmente.
+
+Envio do Convite: Após selecionar os amigos desejados, o organizador clica em um botão como "Enviar Convites".
+
+2. O Sistema (O que acontece por trás)
+Quando o organizador envia os convites, o backend do seu aplicativo precisa realizar duas ações principais:
+
+Registrar o Convite: Uma nova entrada é criada em uma tabela no banco de dados, que podemos chamar de convites_eventos. Essa entrada precisa registrar:
+
+O ID do evento.
+
+O ID do usuário que convidou.
+
+O ID do usuário que foi convidado.
+
+Um status inicial, como "pendente".
+
+Enviar a Notificação: O sistema dispara uma notificação push para cada usuário convidado. Essa notificação é o que faz o alerta aparecer no celular do usuário. Para isso, você usará um serviço como o Firebase Cloud Messaging (FCM).
+
+3. O Fluxo do Convidado (Quem Recebe)
+Notificação Push: O usuário convidado recebe uma notificação instantânea no celular. O texto poderia ser: "Bruno te convidou para o evento 'Churrasco de Sábado'".
+
+Caixa de Entrada do App: Ao abrir o aplicativo, essa mesma notificação deve aparecer na caixa de entrada de notificações dele, garantindo que o convite não se perca.
+
+Ação a partir da Notificação: O convite (tanto a notificação push quanto o item na caixa de entrada) deve ser clicável. Ao ser tocado, ele deve levar o usuário diretamente para a página de detalhes do evento.
+
+Aceitar ou Recusar: Na página do evento, o usuário convidado verá botões como "Aceitar" e "Recusar" o convite. A escolha dele atualiza o status no banco de dados de "pendente" para "aceito" ou "recusado".

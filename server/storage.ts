@@ -1872,15 +1872,84 @@ export class DatabaseStorage implements IStorage {
     return results;
   }
 
-  async getUserEventInvites(userId: string): Promise<EventInvite[]> {
+  async getUserEventInvites(userId: string): Promise<(EventInvite & { event: Event })[]> {
     const results = await db
-      .select()
+      .select({
+        invite: eventInvites,
+        event: events
+      })
       .from(eventInvites)
+      .innerJoin(events, eq(eventInvites.eventId, events.id))
       .where(and(
         eq(eventInvites.userId, userId),
         eq(eventInvites.status, 'pending')
+      ))
+      .orderBy(desc(eventInvites.createdAt));
+    
+    return results.map(result => ({
+      ...result.invite,
+      event: result.event
+    }));
+  }
+
+  async respondToEventInvite(inviteId: string, userId: string, response: 'accepted' | 'declined'): Promise<EventInvite | null> {
+    // First verify that the invite exists and belongs to the user
+    const [invite] = await db
+      .select()
+      .from(eventInvites)
+      .where(and(
+        eq(eventInvites.id, inviteId),
+        eq(eventInvites.userId, userId),
+        eq(eventInvites.status, 'pending')
       ));
-    return results;
+
+    if (!invite) {
+      return null;
+    }
+
+    // Update the invite status
+    const [updatedInvite] = await db
+      .update(eventInvites)
+      .set({ status: response })
+      .where(eq(eventInvites.id, inviteId))
+      .returning();
+
+    // If accepted, also add user as attendee to the event
+    if (response === 'accepted') {
+      await db
+        .insert(eventAttendees)
+        .values({
+          eventId: invite.eventId,
+          userId: userId,
+          status: 'attending'
+        })
+        .onConflictDoNothing(); // In case they're already attending
+    }
+
+    return updatedInvite;
+  }
+
+  async getEventInviteWithDetails(inviteId: string, userId: string): Promise<(EventInvite & { event: Event }) | null> {
+    const [result] = await db
+      .select({
+        invite: eventInvites,
+        event: events
+      })
+      .from(eventInvites)
+      .innerJoin(events, eq(eventInvites.eventId, events.id))
+      .where(and(
+        eq(eventInvites.id, inviteId),
+        eq(eventInvites.userId, userId)
+      ));
+
+    if (!result) {
+      return null;
+    }
+
+    return {
+      ...result.invite,
+      event: result.event
+    };
   }
 
   async getEventByShareableLink(shareableLink: string): Promise<Event | undefined> {
