@@ -13,6 +13,7 @@ import EventRatingForm from "@/components/EventRatingForm";
 import Rating from "@/components/ui/rating";
 import OrganizerRating from "@/components/OrganizerRating";
 import EventRatingsDisplay from "@/components/EventRatingsDisplay";
+import SocialShareModal from "@/components/SocialShareModal";
 import { 
   ArrowLeft, 
   Home, 
@@ -236,7 +237,8 @@ export default function EventDetails() {
   const isEventEnded = () => {
     if (!event) return false;
     const now = new Date();
-    const eventEndTime = event.endTime ? new Date(event.endTime) : new Date(event.dateTime);
+    // Assume event ends 4 hours after start time since there's no endTime field
+    const eventEndTime = new Date(new Date(event.dateTime).getTime() + 4 * 60 * 60 * 1000);
     return eventEndTime <= now;
   };
   
@@ -317,14 +319,14 @@ export default function EventDetails() {
                 <Edit className="w-5 h-5" />
               </Button>
             )}
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              data-testid="button-share"
-              title="Compartilhar"
-            >
-              <Share2 className="w-5 h-5" />
-            </Button>
+            <SocialShareModal 
+              title={event.title}
+              description={event.description || undefined}
+              imageUrl={event.coverImageUrl || undefined}
+              eventId={event.id}
+              isPrivate={event.isPrivate || false}
+              shareableLink={event.shareableLink || undefined}
+            />
           </div>
         </div>
       </div>
