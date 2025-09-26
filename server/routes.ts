@@ -927,6 +927,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get user by ID for chat functionality (using specific route to avoid conflicts)
+  app.get('/api/users/id/:userId', async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      console.log(`[DEBUG] Searching for user with ID: ${userId}`);
+      const user = await storage.getUser(userId);
+      console.log(`[DEBUG] User found:`, user);
+      
+      if (!user) {
+        console.log(`[DEBUG] User not found in database for ID: ${userId}`);
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Return sanitized user data
+      const response = {
+        id: user.id,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        profileImageUrl: user.profileImageUrl
+      };
+      
+      console.log(`[DEBUG] Returning user data:`, response);
+      res.json(response);
+    } catch (error) {
+      console.error("Error fetching user by ID:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // User profile route with conditional visibility
   app.get('/api/users/:username', async (req: any, res) => {
     try {
@@ -959,33 +989,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching user profile:", error);
       res.status(500).json({ message: "Erro interno do servidor" });
-    }
-  });
-
-  // Get user by ID for chat functionality
-  app.get('/api/users/:id', async (req: any, res) => {
-    try {
-      const { id } = req.params;
-      
-      const user = await storage.getUser(id);
-      
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      // Return sanitized user data
-      const response = {
-        id: user.id,
-        username: user.username,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        profileImageUrl: user.profileImageUrl
-      };
-      
-      res.json(response);
-    } catch (error) {
-      console.error("Error fetching user by ID:", error);
-      res.status(500).json({ message: "Internal server error" });
     }
   });
 

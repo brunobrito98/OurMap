@@ -67,7 +67,7 @@ export default function ChatConversation() {
 
   // Fetch other participant info
   const { data: otherParticipant } = useQuery<User>({
-    queryKey: ['/api/users', otherParticipantId],
+    queryKey: ['/api/users/id', otherParticipantId],
     enabled: !!otherParticipantId,
   });
 
