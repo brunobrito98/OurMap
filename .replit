@@ -16,8 +16,13 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
+
 localPort = 24678
 externalPort = 3003
+
+localPort = 44457
+externalPort = 3002
+
 
 [[ports]]
 localPort = 44495
@@ -43,7 +48,13 @@ externalPort = 3000
 PORT = "5000"
 
 [agent]
-integrations = ["javascript_log_in_with_replit:1.0.0", "javascript_database:1.0.0", "javascript_supabase:1.0.0", "javascript_auth_all_persistance:1.0.0", "javascript_websocket:1.0.0"]
+integrations = [
+  "javascript_log_in_with_replit:1.0.0",
+  "javascript_database:1.0.0",
+  "javascript_supabase:1.0.0",
+  "javascript_auth_all_persistance:1.0.0",
+  "javascript_websocket:1.0.0",
+]
 expertMode = true
 
 [workflows]

@@ -165,6 +165,17 @@ O banco utiliza PostgreSQL com as seguintes entidades principais:
 
 ## Últimas Atualizações
 
+**26/09/2025 20:59**:
+- ✅ **Melhorias na UX do Mapa**: Implementadas melhorias significativas na experiência do mapa
+  - Busca automática da localização do usuário ao carregar a tela de criar evento
+  - Coordenadas iniciais do mapa definidas automaticamente com base na geolocalização
+  - Preenchimento automático do endereço via reverse geocoding quando localização detectada
+  - Remoção do modal "Abrir Mapa Completo" em favor de expansão inline
+  - Mapa expansível diretamente na tela (240px → 500px) com botão de toggle
+  - Instruções visuais quando mapa está expandido para guiar o usuário
+  - Limpeza de código removendo componente InteractiveMapModal não utilizado
+  - Integração melhorada entre endereço digitado e coordenadas do mapa
+
 **26/09/2025 20:06**:
 - ✅ **Configuração Replit completa**: Aplicação totalmente configurada para o ambiente Replit
 - ✅ **Autenticação corrigida**: Configurações de sessão adequadas para iframe (`secure: true` + `sameSite: 'none'`)
