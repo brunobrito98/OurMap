@@ -108,7 +108,7 @@ export default function Landing() {
             </div>
             <h1 className="text-3xl font-bold">OurMap</h1>
             <p className="text-muted-foreground mt-2">
-              Descubra eventos incríveis na sua região
+              Saia do tédio e descubra encontros incríveis
             </p>
           </div>
 
