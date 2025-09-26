@@ -86,7 +86,7 @@ export default function InteractiveMapModal({
       const response = await fetch('/api/reverse-geocode', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ latitude: lat, longitude: lng })
+        body: JSON.stringify({ lat, lng })
       });
       
       if (response.ok) {
