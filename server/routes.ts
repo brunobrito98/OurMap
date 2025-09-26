@@ -1163,7 +1163,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate content for offensive language
       const contentValidation = validateEventContent({
         title: eventData.title,
-        description: eventData.description,
+        description: eventData.description || '',
         location: eventData.location
       });
       
@@ -1375,7 +1375,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate content for offensive language
       const contentValidation = validateEventContent({
         title: eventData.title,
-        description: eventData.description,
+        description: eventData.description || '',
         location: eventData.location
       });
 
@@ -2242,21 +2242,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch('/api/notifications/preferences', isAuthenticatedAny, async (req: any, res) => {
     try {
-      const userId = req.user.id;
-      const result = notificationConfigSchema.safeParse(req.body);
-      
-      if (!result.success) {
-        return res.status(400).json({ message: "Invalid notification config", errors: result.error.errors });
-      }
-      
-      const { chave, valor } = result.data;
-      const success = await storage.updateNotificationPreference(userId, chave, valor);
-      
-      if (success) {
-        res.json({ message: "Notification preference updated successfully" });
-      } else {
-        res.status(500).json({ message: "Failed to update notification preference" });
-      }
+      // Notification preferences are currently disabled as columns don't exist in current DB
+      res.json({ message: "Notification preferences feature is currently disabled" });
     } catch (error) {
       console.error("Error updating notification preference:", error);
       res.status(500).json({ message: "Failed to update notification preference" });
@@ -2576,7 +2563,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               messageIds: z.array(z.string().uuid()).min(1).max(50) // Limit array size
             });
             
-            const markReadValidation = markReadSchema.safeParse(rawMessage);
+            const markReadValidation = markReadSchema.safeParse(message);
             if (!markReadValidation.success) {
               ws.send(JSON.stringify({ 
                 type: 'error', 
@@ -2636,7 +2623,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Chat API routes
   app.get("/api/conversations", isAuthenticatedLocal, async (req, res) => {
     try {
-      const userId = req.user!.id;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
       const conversations = await storage.getConversations(userId);
       
       // Map otherUser to otherParticipant for frontend compatibility
@@ -2654,7 +2644,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/conversations/:conversationId/messages", isAuthenticatedLocal, async (req, res) => {
     try {
-      const userId = req.user!.id;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
       const { conversationId } = req.params;
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
@@ -2678,7 +2671,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/conversations/:conversationId/messages/read", isAuthenticatedLocal, async (req, res) => {
     try {
-      const userId = req.user!.id;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
       const { conversationId } = req.params;
       
       // Validate request body
@@ -2712,7 +2708,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/conversations", isAuthenticatedLocal, async (req, res) => {
     try {
-      const userId = req.user!.id;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
       const { friendId } = req.body;
       
       if (!friendId) {
