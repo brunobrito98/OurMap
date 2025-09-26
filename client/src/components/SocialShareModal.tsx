@@ -153,7 +153,7 @@ export default function SocialShareModal({
         <Share2 className="w-5 h-5" />
       </Button>
 
-      <Dialog open={isOpen && canShare} onOpenChange={setIsOpen}>
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
