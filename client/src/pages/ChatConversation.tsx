@@ -50,7 +50,11 @@ export default function ChatConversation() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   // Fetch conversation details to determine other participant if not provided
-  const { data: conversation } = useQuery<any>({
+  const { data: conversation } = useQuery<{
+    id: string;
+    user1Id: string;
+    user2Id: string;
+  }>({
     queryKey: ['/api/conversations', conversationId],
     enabled: !!conversationId && !otherParticipantIdFromQuery,
   });
@@ -73,6 +77,7 @@ export default function ChatConversation() {
   });
 
   // Fetch other participant info
+
   const { data: otherParticipant, isLoading: isLoadingParticipant, error: participantError } = useQuery<User>({
     queryKey: ['/api/users/by-id', otherParticipantId],
     queryFn: async () => {
@@ -82,6 +87,10 @@ export default function ChatConversation() {
       }
       return response.json();
     },
+
+  const { data: otherParticipant } = useQuery<User>({
+    queryKey: ['/api/users/id', otherParticipantId],
+
     enabled: !!otherParticipantId,
     retry: 2,
   });
@@ -570,7 +579,7 @@ export default function ChatConversation() {
                       isOwnMessage ? 'text-primary-foreground/70' : 'text-muted-foreground'
                     }`}>
                       <span className="text-xs" data-testid={`message-time-${message.id}`}>
-                        {formatMessageDate(message.createdAt)}
+                        {formatMessageDate(message.createdAt || new Date().toISOString())}
                       </span>
                       {isOwnMessage && (
                         <span className="text-xs" data-testid={`message-read-status-${message.id}`}>
