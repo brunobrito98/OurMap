@@ -928,6 +928,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // User profile route with conditional visibility
+  // Get user by ID for chat functionality - specific route to avoid username conflicts
+  app.get('/api/users/by-id/:id', async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      const user = await storage.getUser(id);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Return sanitized user data
+      const response = {
+        id: user.id,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        profileImageUrl: user.profileImageUrl
+      };
+      
+      res.json(response);
+    } catch (error) {
+      console.error("Error fetching user by ID:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get user profile by username - for public profile access
   app.get('/api/users/:username', async (req: any, res) => {
     try {
       const { username } = req.params;
@@ -959,33 +987,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching user profile:", error);
       res.status(500).json({ message: "Erro interno do servidor" });
-    }
-  });
-
-  // Get user by ID for chat functionality
-  app.get('/api/users/:id', async (req: any, res) => {
-    try {
-      const { id } = req.params;
-      
-      const user = await storage.getUser(id);
-      
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      // Return sanitized user data
-      const response = {
-        id: user.id,
-        username: user.username,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        profileImageUrl: user.profileImageUrl
-      };
-      
-      res.json(response);
-    } catch (error) {
-      console.error("Error fetching user by ID:", error);
-      res.status(500).json({ message: "Internal server error" });
     }
   });
 

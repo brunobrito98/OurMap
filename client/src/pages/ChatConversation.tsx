@@ -74,7 +74,14 @@ export default function ChatConversation() {
 
   // Fetch other participant info
   const { data: otherParticipant, isLoading: isLoadingParticipant, error: participantError } = useQuery<User>({
-    queryKey: ['/api/users', otherParticipantId],
+    queryKey: ['/api/users/by-id', otherParticipantId],
+    queryFn: async () => {
+      const response = await fetch(`/api/users/by-id/${otherParticipantId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch user');
+      }
+      return response.json();
+    },
     enabled: !!otherParticipantId,
     retry: 2,
   });
