@@ -64,11 +64,11 @@ export default function Chat() {
         // Navigate to existing conversation
         navigate(`/chat/${existingConversation.id}?with=${startChatWithUserId}`);
       } else {
-        // Create new conversation
+        // Create new conversation immediately
         createConversationMutation.mutate(startChatWithUserId);
       }
     }
-  }, [startChatWithUserId, conversations, authUser, navigate]);
+  }, [startChatWithUserId, conversations, authUser, navigate, createConversationMutation]);
 
   const handleOpenConversation = (conversationId: string, otherParticipantId: string) => {
     navigate(`/chat/${conversationId}?with=${otherParticipantId}`);
@@ -116,24 +116,41 @@ export default function Chat() {
       </div>
 
       <div className="p-4">
-        {conversations.length === 0 ? (
+        {createConversationMutation.isPending ? (
+          <div className="text-center py-12">
+            <div className="text-muted-foreground mb-4 flex justify-center">
+              <MessageSquare className="w-16 h-16 animate-pulse" />
+            </div>
+            <h3 className="text-lg font-medium text-foreground mb-2">
+              Iniciando conversa...
+            </h3>
+            <p className="text-muted-foreground">
+              Preparando sua nova conversa!
+            </p>
+          </div>
+        ) : conversations.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-muted-foreground mb-4 flex justify-center">
               <MessageSquare className="w-16 h-16" />
             </div>
             <h3 className="text-lg font-medium text-foreground mb-2">
-              Nenhuma conversa ainda
+              {startChatWithUserId ? "Iniciando conversa..." : "Nenhuma conversa ainda"}
             </h3>
             <p className="text-muted-foreground mb-4">
-              Comece uma conversa enviando uma mensagem para um amigo!
+              {startChatWithUserId 
+                ? "Uma nova conversa será criada automaticamente!" 
+                : "Comece uma conversa enviando uma mensagem para um amigo!"
+              }
             </p>
-            <Button 
-              onClick={() => navigate("/friends")}
-              data-testid="button-start-chatting"
-            >
-              <MessageSquare className="w-4 h-4 mr-2" />
-              Iniciar Conversa
-            </Button>
+            {!startChatWithUserId && (
+              <Button 
+                onClick={() => navigate("/friends")}
+                data-testid="button-start-chatting"
+              >
+                <MessageSquare className="w-4 h-4 mr-2" />
+                Iniciar Conversa
+              </Button>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
