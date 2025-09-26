@@ -448,8 +448,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax', // CSRF protection
+      secure: false, // Replit environment needs this as false
+      sameSite: 'none', // Required for iframe/proxy environment
       maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
     },
   });
