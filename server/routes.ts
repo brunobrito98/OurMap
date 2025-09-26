@@ -409,6 +409,14 @@ async function searchLocalPlaces(
 
 // Auth middleware
 function isAuthenticatedAny(req: any, res: any, next: any) {
+  console.log('isAuthenticatedAny check:', {
+    hasIsAuthenticated: !!req.isAuthenticated,
+    isAuthenticated: req.isAuthenticated ? req.isAuthenticated() : false,
+    hasUser: !!req.user,
+    userId: req.user?.id,
+    sessionId: req.sessionID
+  });
+  
   if (req.isAuthenticated && req.isAuthenticated()) {
     return next();
   }
@@ -440,8 +448,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax', // CSRF protection
+      secure: false, // Replit environment needs this as false
+      sameSite: 'none', // Required for iframe/proxy environment
       maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
     },
   });
@@ -2129,7 +2137,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Search ended events endpoint
   app.get('/api/search/ended-events', async (req, res) => {
     try {
-      const { cityName, daysBack, searchQuery } = req.query;
+      const { cityName, daysBack, searchQuery, lat, lng } = req.query;
       
       // Parse daysBack to number if provided
       const daysBackNumber = daysBack && typeof daysBack === 'string' ? parseInt(daysBack, 10) : undefined;
@@ -2137,12 +2145,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid daysBack parameter" });
       }
       
+      // Parse coordinates if provided
+      let userCoordinates: { lat: number; lng: number } | undefined = undefined;
+      if (lat && lng) {
+        const parsedLat = parseFloat(lat as string);
+        const parsedLng = parseFloat(lng as string);
+        if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
+          userCoordinates = { lat: parsedLat, lng: parsedLng };
+        }
+      }
+      
       const userId = getUserId(req);
       const events = await storage.searchEndedEvents(
-        cityName as string || undefined,
+        (cityName as string) || undefined,
         daysBackNumber,
         searchQuery as string || undefined,
-        userId
+        userId,
+        userCoordinates
       );
       
       // Sanitize events to remove shareableLink for non-creators
