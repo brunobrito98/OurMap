@@ -14,7 +14,6 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import ImageUpload from "@/components/ImageUpload";
 import MapComponent from "@/components/MapComponent";
 import LocalPlaceSearch from "@/components/LocalPlaceSearch";
-import InteractiveMapModal from "@/components/InteractiveMapModal";
 import { useToast } from "@/hooks/use-toast";
 import { insertEventSchema, type InsertEvent } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
@@ -58,8 +57,8 @@ export default function CreateEvent() {
   const [isPrivateEvent, setIsPrivateEvent] = useState(false);
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [isPlaceSearchOpen, setIsPlaceSearchOpen] = useState(false);
-  const [isMapModalOpen, setIsMapModalOpen] = useState(false);
   const [currentCityName, setCurrentCityName] = useState<string>("");
+  const [isMapExpanded, setIsMapExpanded] = useState(false);
 
   const isEditing = !!id;
 
@@ -96,7 +95,7 @@ export default function CreateEvent() {
     },
   });
 
-  // Get user's location for proximity search
+  // Get user's location for proximity search and set initial map coordinates
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -107,7 +106,12 @@ export default function CreateEvent() {
           };
           setUserLocation(location);
           
-          // Get city name for local place search
+          // Set initial map coordinates to user's location if not editing event
+          if (!isEditing && !mapCoordinates) {
+            setMapCoordinates(location);
+          }
+          
+          // Get city name for local place search and form address
           fetch('/api/reverse-geocode', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -118,15 +122,28 @@ export default function CreateEvent() {
               if (data.city) {
                 setCurrentCityName(data.city);
               }
+              // Auto-fill location field if not editing and no location set
+              if (!isEditing && !form.getValues('location') && data.address) {
+                form.setValue('location', data.address, { shouldDirty: true });
+              }
             })
             .catch(console.error);
         },
         (error) => {
           console.error("Error getting location:", error);
+          // Set default coordinates if geolocation fails
+          if (!isEditing && !mapCoordinates) {
+            setMapCoordinates({ lat: -23.5505, lng: -46.6333 }); // São Paulo default
+          }
         }
       );
+    } else {
+      // Set default coordinates if geolocation is not available
+      if (!isEditing && !mapCoordinates) {
+        setMapCoordinates({ lat: -23.5505, lng: -46.6333 }); // São Paulo default
+      }
     }
-  }, []);
+  }, [isEditing, mapCoordinates, form]);
 
   // Update form when event data is loaded
   useEffect(() => {
@@ -373,49 +390,6 @@ export default function CreateEvent() {
     }
   };
 
-  const handleMapModalLocationSelect = async (lat: number, lng: number, address?: string) => {
-    setMapCoordinates({ lat, lng });
-    
-    // Only set address if it's not empty
-    if (address && address.trim().length > 0) {
-      form.setValue('location', address, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
-    } else {
-      // If no valid address provided, try reverse geocoding
-      try {
-        const response = await fetch('/api/reverse-geocode', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lat, lng }),
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.address && data.address.trim().length > 0) {
-            form.setValue('location', data.address, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
-          } else {
-            toast({
-              title: "Endereço não encontrado",
-              description: "Não foi possível encontrar um endereço para esta localização. Você pode inserir manualmente.",
-              variant: "destructive",
-            });
-          }
-        } else {
-          toast({
-            title: "Erro ao obter endereço",
-            description: "Não foi possível obter o endereço da localização. Você pode inserir manualmente.",
-            variant: "destructive",
-          });
-        }
-      } catch (error) {
-        console.error('Reverse geocoding error:', error);
-        toast({
-          title: "Erro ao obter endereço",
-          description: "Não foi possível obter o endereço da localização. Você pode inserir manualmente.",
-          variant: "destructive",
-        });
-      }
-    }
-  };
 
   const handlePlaceSelect = (place: any) => {
     const [lng, lat] = place.center;
@@ -704,28 +678,41 @@ export default function CreateEvent() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => setIsMapModalOpen(true)}
+                    onClick={() => setIsMapExpanded(!isMapExpanded)}
                     className="flex items-center gap-2"
-                    data-testid="button-open-map-modal"
+                    data-testid="button-toggle-map-size"
                   >
-                    <Maximize2 className="w-4 h-4" />
-                    Abrir Mapa Completo
+                    <Maximize2 className={`w-4 h-4 transition-transform ${isMapExpanded ? 'rotate-180' : ''}`} />
+                    {isMapExpanded ? 'Reduzir Mapa' : 'Expandir Mapa'}
                   </Button>
                 </div>
                 
-                <div className="rounded-xl overflow-hidden">
+                <div className="rounded-xl overflow-hidden border">
                   <MapComponent
                     latitude={mapCoordinates?.lat || -23.5505}
                     longitude={mapCoordinates?.lng || -46.6333}
-                    height={192}
+                    height={isMapExpanded ? 500 : 240}
                     showMarker
                     draggableMarker
                     onMarkerDrag={handleMapClick}
                     onClick={handleMapClick}
                   />
                 </div>
+                {isMapExpanded && (
+                  <div className="bg-blue-50 dark:bg-blue-950 rounded-lg p-3">
+                    <p className="text-sm text-blue-700 dark:text-blue-300">
+                      💡 <strong>Como usar o mapa expandido:</strong>
+                    </p>
+                    <ul className="text-xs text-blue-600 dark:text-blue-400 mt-1 space-y-1">
+                      <li>• Clique diretamente no mapa para marcar a localização</li>
+                      <li>• Arraste o marcador azul para ajustar a posição</li>
+                      <li>• Use os controles do mapa para navegar e buscar locais</li>
+                      <li>• O endereço será preenchido automaticamente</li>
+                    </ul>
+                  </div>
+                )}
                 <p className="text-xs text-muted-foreground">
-                  Clique ou arraste o pin para definir localização exata, ou use o botão "Abrir Mapa Completo" para uma melhor visualização
+                  Clique ou arraste o pin para definir localização exata{isMapExpanded ? '' : ', ou expanda o mapa para uma melhor visualização'}
                 </p>
               </div>
             </div>
@@ -985,15 +972,6 @@ export default function CreateEvent() {
         currentCity={currentCityName}
       />
 
-      {/* Interactive Map Modal */}
-      <InteractiveMapModal
-        open={isMapModalOpen}
-        onOpenChange={setIsMapModalOpen}
-        onLocationSelect={handleMapModalLocationSelect}
-        initialLat={mapCoordinates?.lat || userLocation?.lat || -23.5505}
-        initialLng={mapCoordinates?.lng || userLocation?.lng || -46.6333}
-        initialAddress={form.watch('location') || ''}
-      />
     </div>
   );
 }
