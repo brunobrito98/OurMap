@@ -21,6 +21,7 @@ export default function Search() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<"events" | "users">("events");
   const [userCity, setUserCity] = useState<string | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [periodFilter, setPeriodFilter] = useState<number | undefined>(1);
 
   // Debounced search query
@@ -43,6 +44,7 @@ export default function Search() {
             lat: position.coords.latitude,
             lng: position.coords.longitude,
           };
+          setUserLocation(location);
           
           // Reverse geocode to get city name
           fetch('/api/reverse-geocode', {
@@ -82,12 +84,18 @@ export default function Search() {
 
   // Search ended events (main functionality) - always used for events tab
   const { data: endedEventResults = [], isLoading: endedEventsLoading } = useQuery<EventWithDetails[]>({
-    queryKey: ['/api/search/ended-events', userCity ?? '', periodFilter ?? '', debouncedQuery || ''],
+    queryKey: ['/api/search/ended-events', userCity ?? '', periodFilter ?? '', debouncedQuery || '', userLocation?.lat, userLocation?.lng],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (userCity) params.append('cityName', userCity);
       if (periodFilter) params.append('daysBack', periodFilter.toString());
       if (debouncedQuery && debouncedQuery.trim().length >= 2) params.append('searchQuery', debouncedQuery);
+      
+      // Include user coordinates for better city filtering
+      if (userLocation) {
+        params.append('lat', userLocation.lat.toString());
+        params.append('lng', userLocation.lng.toString());
+      }
       
       const url = `/api/search/ended-events?${params.toString()}`;
       const response = await fetch(url, { credentials: 'include' });
