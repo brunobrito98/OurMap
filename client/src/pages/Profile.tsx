@@ -198,14 +198,6 @@ export default function Profile() {
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h2 className="font-semibold text-foreground flex-1">Perfil</h2>
-          <Button
-            onClick={() => navigate("/settings/profile")}
-            variant="ghost"
-            size="sm"
-            data-testid="button-settings"
-          >
-            <Settings className="w-5 h-5" />
-          </Button>
         </div>
       </div>
 
@@ -273,6 +265,11 @@ export default function Profile() {
           <h1 className="text-2xl font-bold text-white mb-1" data-testid="text-user-name">
             {user.firstName} {user.lastName}
           </h1>
+          {user.username && (
+            <p className="text-white/80 text-lg mb-1" data-testid="text-user-username">
+              @{user.username}
+            </p>
+          )}
           <p className="text-white/90" data-testid="text-user-email">{user.email}</p>
           <div className="flex items-center justify-center space-x-1 mt-2">
             <Star className="w-4 h-4 text-yellow-300 fill-current" />
@@ -329,6 +326,7 @@ export default function Profile() {
             <div className="border-t border-border"></div>
             
             <Button
+              onClick={() => navigate("/search?tab=saved")}
               variant="ghost"
               className="w-full flex items-center space-x-4 p-4 h-auto justify-start"
               data-testid="button-saved-events"
@@ -346,6 +344,7 @@ export default function Profile() {
             <div className="border-t border-border"></div>
             
             <Button
+              onClick={() => navigate("/friends")}
               variant="ghost"
               className="w-full flex items-center space-x-4 p-4 h-auto justify-start"
               data-testid="button-friends"
@@ -363,6 +362,7 @@ export default function Profile() {
 
           <div className="bg-card border border-border rounded-2xl overflow-hidden">
             <Button
+              onClick={() => navigate("/profile/my-ratings")}
               variant="ghost"
               className="w-full flex items-center space-x-4 p-4 h-auto justify-start"
               data-testid="button-ratings"
@@ -380,6 +380,7 @@ export default function Profile() {
             <div className="border-t border-border"></div>
             
             <Button
+              onClick={() => navigate("/notifications")}
               variant="ghost"
               className="w-full flex items-center space-x-4 p-4 h-auto justify-start"
               data-testid="button-notifications"
@@ -397,6 +398,7 @@ export default function Profile() {
             <div className="border-t border-border"></div>
             
             <Button
+              onClick={() => navigate("/settings/profile")}
               variant="ghost"
               className="w-full flex items-center space-x-4 p-4 h-auto justify-start"
               data-testid="button-account-settings"

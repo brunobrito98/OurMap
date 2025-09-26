@@ -14,12 +14,17 @@ import UserProfile from "@/pages/UserProfile";
 import MyEvents from "@/pages/MyEvents";
 import Friends from "@/pages/Friends";
 import Search from "@/pages/Search";
+import Chat from "@/pages/Chat";
+import ChatConversation from "@/pages/ChatConversation";
 
 import EditProfile from "@/pages/EditProfile";
 import ChangePassword from "@/pages/ChangePassword";
 import ChangePhone from "@/pages/ChangePhone";
 import { Notifications } from "@/pages/Notifications";
 import { NotificationSettings } from "@/pages/NotificationSettings";
+import MyRatings from "@/pages/MyRatings";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
 
 import NotFound from "@/pages/not-found";
 
@@ -69,6 +74,18 @@ function Router() {
         </ProtectedRoute>
       </Route>
       
+      <Route path="/chat">
+        <ProtectedRoute>
+          <Chat />
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/chat/:id">
+        <ProtectedRoute>
+          <ChatConversation />
+        </ProtectedRoute>
+      </Route>
+      
       <Route path="/settings/profile">
         <ProtectedRoute>
           <EditProfile />
@@ -98,6 +115,15 @@ function Router() {
           <NotificationSettings />
         </ProtectedRoute>
       </Route>
+
+      <Route path="/profile/my-ratings">
+        <ProtectedRoute>
+          <MyRatings />
+        </ProtectedRoute>
+      </Route>
+
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password/:token" component={ResetPassword} />
 
       <Route component={NotFound} />
     </Switch>

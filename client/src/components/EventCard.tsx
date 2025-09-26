@@ -159,7 +159,16 @@ export default function EventCard({ event, onClick, isAuthenticated = false }: E
             </span>
           </div>
           <span className="text-primary font-semibold" data-testid={`text-event-price-${event.id}`}>
-            {!event.price || event.price === "0" ? 'Gratuito' : `R$ ${event.price}`}
+            {event.priceType === 'crowdfunding' && event.totalRaised && event.fundraisingGoal ? (
+              <div className="text-right">
+                <div className="text-sm font-semibold text-primary">
+                  R$ {Number(event.totalRaised).toFixed(2)}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  de R$ {Number(event.fundraisingGoal).toFixed(2)}
+                </div>
+              </div>
+            ) : !event.price || event.price === "0" ? 'Gratuito' : `R$ ${event.price}`}
           </span>
         </div>
       </div>

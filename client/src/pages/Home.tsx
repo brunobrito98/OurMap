@@ -8,7 +8,7 @@ import CategoryFilter from "@/components/CategoryFilter";
 import BottomNavigation from "@/components/BottomNavigation";
 import FloatingCreateButton from "@/components/FloatingCreateButton";
 import CitySearchModal from "@/components/CitySearchModal";
-import { MapPin, Search, ArrowUpDown, CalendarX } from "lucide-react";
+import { MapPin, Search, ArrowUpDown, CalendarX, Calendar, Navigation, Bell } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import type { EventWithDetails } from "@shared/schema";
 
@@ -18,8 +18,20 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationName, setLocationName] = useState("São Paulo, SP");
+  const [userCity, setUserCity] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const [sortBy, setSortBy] = useState<"distance" | "date">("distance");
+
+  // Fetch unread notifications count for authenticated users
+  const { data: unreadData } = useQuery({
+    queryKey: ['/api/notifications/unread-count'],
+    enabled: isAuthenticated,
+    staleTime: 1000 * 30, // 30 seconds
+    refetchInterval: 1000 * 60, // 1 minute
+  });
+  
+  const unreadCount = (unreadData as any)?.count || 0;
 
   // Get user's location
   useEffect(() => {
@@ -32,7 +44,7 @@ export default function Home() {
           };
           setUserLocation(location);
           
-          // Reverse geocode to get location name
+          // Reverse geocode to get location name and city
           fetch('/api/reverse-geocode', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -42,6 +54,9 @@ export default function Home() {
             .then(data => {
               if (data.address) {
                 setLocationName(data.address);
+              }
+              if (data.city) {
+                setUserCity(data.city);
               }
             })
             .catch(console.error);
@@ -54,57 +69,89 @@ export default function Home() {
   }, []);
 
   const { data: events = [], isLoading } = useQuery<EventWithDetails[]>({
-    queryKey: ['/api/events', selectedCategory, userLocation?.lat, userLocation?.lng],
+    queryKey: ['/api/events', selectedCategory, userCity, sortBy, userLocation?.lat, userLocation?.lng],
     queryFn: async ({ queryKey }) => {
-      const [, category, lat, lng] = queryKey;
+      const [, category, city, currentSortBy, lat, lng] = queryKey;
       const params = new URLSearchParams();
       if (category) params.set('category', category as string);
-      if (lat && lng) {
+      if (city) params.set('city', city as string);
+      
+      // Include coordinates for distance-based sorting
+      if (currentSortBy === 'distance' && lat && lng) {
         params.set('lat', lat.toString());
         params.set('lng', lng.toString());
       }
       
-      const response = await fetch(`/api/events?${params}`);
+      const response = await fetch(`/api/events?${params}`, {
+        credentials: 'include'
+      });
       if (!response.ok) throw new Error('Failed to fetch events');
       return response.json();
     },
   });
 
-  const filteredEvents = events.filter(event => 
-    !searchQuery || event.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Apply search filter and sorting
+  const filteredEvents = events
+    .filter(event => !searchQuery || event.title.toLowerCase().includes(searchQuery.toLowerCase()))
+    .sort((a, b) => {
+      if (sortBy === 'date') {
+        // Sort by date (newest first)
+        return new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime();
+      }
+      // For distance sorting, backend already handles it
+      return 0;
+    });
 
   const handleLocationSelect = (location: { lat: number; lng: number }, cityName: string) => {
     setUserLocation(location);
     setLocationName(cityName);
+    
+    // Extract just the city name from full address for filtering
+    const cityOnly = cityName.split(',')[0].trim();
+    setUserCity(cityOnly);
   };
 
   const handleChangeLocation = () => {
     setIsLocationModalOpen(true);
   };
 
+  const handleToggleSort = () => {
+    setSortBy(current => current === "distance" ? "date" : "distance");
+  };
+
   return (
     <div className="min-h-screen bg-background pb-20">
       {/* Header with Location */}
       <div className="bg-white border-b border-border p-4 sticky top-0 z-30">
-        <div className="flex items-center justify-between">
+        <button
+          onClick={handleChangeLocation}
+          className="w-full flex items-center justify-between hover:bg-secondary/50 rounded-lg p-2 transition-colors group"
+          data-testid="button-change-location"
+        >
           <div className="flex items-center space-x-2">
             <MapPin className="w-5 h-5 text-primary" />
-            <div>
+            <div className="text-left">
               <p className="text-sm text-muted-foreground">Sua localização</p>
               <p className="font-semibold text-foreground" data-testid="text-location">{locationName}</p>
             </div>
           </div>
-          <Button
-            onClick={handleChangeLocation}
-            variant="ghost"
-            size="sm"
-            className="text-primary hover:bg-secondary"
-            data-testid="button-change-location"
-          >
-            <MapPin className="w-4 h-4" />
-          </Button>
-        </div>
+          {isAuthenticated ? (
+            <button
+              onClick={() => navigate("/notifications")}
+              className="relative p-2 rounded-lg hover:bg-secondary/50 transition-colors"
+              data-testid="button-notifications"
+            >
+              <Bell className="w-5 h-5 text-primary" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+          ) : (
+            <MapPin className="w-4 h-4 text-primary opacity-60 group-hover:opacity-100 transition-opacity" />
+          )}
+        </button>
       </div>
 
       {/* Search Bar */}
@@ -135,8 +182,22 @@ export default function Home() {
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-foreground">Eventos próximos</h3>
           <div className="flex space-x-2">
-            <button className="text-primary text-sm font-medium flex items-center" data-testid="button-sort-distance">
-              <ArrowUpDown className="w-4 h-4 mr-1" />Distância
+            <button 
+              onClick={handleToggleSort}
+              className="text-primary text-sm font-medium flex items-center hover:bg-secondary px-2 py-1 rounded-md transition-colors" 
+              data-testid={`button-sort-${sortBy}`}
+            >
+              {sortBy === "distance" ? (
+                <>
+                  <Navigation className="w-4 h-4 mr-1" />
+                  Distância
+                </>
+              ) : (
+                <>
+                  <Calendar className="w-4 h-4 mr-1" />
+                  Data
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -178,6 +239,7 @@ export default function Home() {
         onOpenChange={setIsLocationModalOpen}
         onLocationSelect={handleLocationSelect}
         currentLocation={locationName}
+        userCoordinates={userLocation}
       />
     </div>
   );

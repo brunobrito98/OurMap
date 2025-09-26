@@ -9,7 +9,7 @@ import BottomNavigation from "@/components/BottomNavigation";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { User, Friendship } from "@shared/schema";
-import { ArrowLeft, UserPlus, Users, Eye, Check, X, Search, Clock } from "lucide-react";
+import { ArrowLeft, UserPlus, Users, Eye, Check, X, Search, Clock, MessageCircle } from "lucide-react";
 
 export default function Friends() {
   const [, navigate] = useLocation();
@@ -156,10 +156,32 @@ export default function Friends() {
                           @{friend.username}
                         </p>
                       </div>
-                      <Button variant="outline" size="sm" data-testid={`button-view-profile-${friend.id}`}>
-                        <Eye className="w-4 h-4 mr-2" />
-                        Ver Perfil
-                      </Button>
+                      <div className="flex space-x-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/chat?start=${friend.id}`);
+                          }}
+                          data-testid={`button-message-${friend.id}`}
+                        >
+                          <MessageCircle className="w-4 h-4 mr-2" />
+                          Mensagem
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/profile/${friend.username}`);
+                          }}
+                          data-testid={`button-view-profile-${friend.id}`}
+                        >
+                          <Eye className="w-4 h-4 mr-2" />
+                          Perfil
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))}

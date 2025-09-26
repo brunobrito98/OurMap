@@ -2,17 +2,22 @@ import {
   users,
   events,
   eventAttendees,
+  eventInvites,
   friendships,
   eventRatings,
   eventContributions,
   categories,
   notifications,
+  conversations,
+  messages,
   type User,
   type UpsertUser,
   type Event,
   type InsertEvent,
   type EventAttendance,
   type InsertEventAttendance,
+  type EventInvite,
+  type InsertEventInvite,
   type Friendship,
   type InsertFriendship,
   type EventRating,
@@ -29,9 +34,11 @@ import {
   type InsertNotification,
   type NotificationWithDetails,
   type NotificationConfig,
+  type Conversation,
+  type Message,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, desc, asc, count, avg, sql, like } from "drizzle-orm";
+import { eq, and, or, desc, asc, count, avg, sql, like, isNull, isNotNull, gte, lte, inArray, ne, max } from "drizzle-orm";
 
 // Interface for storage operations
 export interface IStorage {
@@ -59,6 +66,11 @@ export interface IStorage {
   updateUserProfileImage(userId: string, profileImageUrl: string | null): Promise<User | undefined>;
   updateUserProfile(userId: string, profileData: { firstName?: string; lastName?: string }): Promise<User | undefined>;
   changeUserPassword(userId: string, newPassword: string): Promise<User | undefined>;
+  
+  // Password reset operations
+  setPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<void>;
+  getUserByResetToken(token: string): Promise<User | undefined>;
+  clearPasswordResetToken(userId: string): Promise<void>;
 
   // Event operations
   createEvent(event: InsertEvent, organizerId: string, coordinates: { lat: number; lng: number }): Promise<Event>;
@@ -97,10 +109,12 @@ export interface IStorage {
   canUserRateEvent(eventId: string, userId: string): Promise<{ canRate: boolean; reason?: string }>;
   getEventRatingsAverage(eventId: string): Promise<{ eventAverage: number; organizerAverage: number; totalRatings: number }>;
   getOrganizerRatingsAverage(organizerId: string): Promise<{ average: number; totalRatings: number }>;
+  getOrganizerReceivedRatings(organizerId: string): Promise<EventRating[]>;
 
   // Search operations
   searchUsers(query: string): Promise<UserSanitized[]>;
-  searchEvents(query: string): Promise<EventWithDetails[]>;
+  searchEvents(query: string, userId?: string): Promise<EventWithDetails[]>;
+  searchEndedEvents(cityName?: string, daysBack?: number, searchQuery?: string, userId?: string): Promise<EventWithDetails[]>;
 
   // Profile operations
   getUserProfileByUsername(username: string, viewerId?: string): Promise<{
@@ -134,6 +148,22 @@ export interface IStorage {
   getUserContributions(userId: string): Promise<EventContribution[]>;
   getUserEventContribution(eventId: string, userId: string): Promise<EventContribution | undefined>;
   getEventTotalRaised(eventId: string): Promise<{ totalRaised: number; contributionCount: number }>;
+  removeUserContributions(eventId: string, userId: string): Promise<void>;
+  
+  // Private event operations
+  inviteFriendsToEvent(eventId: string, friendIds: string[]): Promise<void>;
+  getEventInvites(eventId: string): Promise<EventInvite[]>;
+  getUserEventInvites(userId: string): Promise<EventInvite[]>;
+  getEventByShareableLink(shareableLink: string): Promise<Event | undefined>;
+  isUserInvitedToEvent(eventId: string, userId: string): Promise<boolean>;
+  canUserAccessPrivateEvent(eventId: string, userId: string): Promise<boolean>;
+  
+  // Chat operations
+  getOrCreateConversation(userId1: string, userId2: string): Promise<Conversation>;
+  createMessage(conversationId: string, senderId: string, content: string): Promise<Message>;
+  markMessagesAsRead(messageIds: string[], userId: string): Promise<void>;
+  getConversations(userId: string): Promise<(Conversation & { otherUser: User, unreadCount: number, lastMessage?: Message })[]>;
+  getMessages(conversationId: string, userId: string, limit?: number, offset?: number): Promise<Message[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -210,7 +240,6 @@ export class DatabaseStorage implements IStorage {
         description: event.description,
         category: event.category,
         dateTime: new Date(event.dateTime),
-        endTime: event.endTime ? new Date(event.endTime) : undefined,
         location: event.location,
         creatorId: organizerId,
         latitude: coordinates.lat.toString(),
@@ -223,13 +252,37 @@ export class DatabaseStorage implements IStorage {
         recurrenceType: event.recurrenceType,
         recurrenceInterval: event.recurrenceInterval,
         recurrenceEndDate: event.recurrenceEndDate ? new Date(event.recurrenceEndDate) : undefined,
+        // Private event fields
+        isPrivate: event.isPrivate ?? false,
+        priceType: event.priceType ?? 'free',
+        price: event.price,
+        fundraisingGoal: event.fundraisingGoal,
+        minimumContribution: event.minimumContribution,
+        // shareableLink will be auto-generated by database default
       })
       .returning();
     return newEvent;
   }
 
-  async getEvent(id: string): Promise<Event | undefined> {
+  // Internal method to get event without access checks (used by canUserAccessPrivateEvent)
+  private async getEventInternal(id: string): Promise<Event | undefined> {
     const [event] = await db.select().from(events).where(eq(events.id, id));
+    return event;
+  }
+
+  async getEvent(id: string, userId?: string): Promise<Event | undefined> {
+    const event = await this.getEventInternal(id);
+    if (!event) return undefined;
+    
+    // Check access for private events
+    if (event.isPrivate && userId) {
+      const canAccess = await this.canUserAccessPrivateEvent(id, userId);
+      if (!canAccess) return undefined;
+    } else if (event.isPrivate && !userId) {
+      // Private events require authentication
+      return undefined;
+    }
+    
     return event;
   }
 
@@ -254,6 +307,15 @@ export class DatabaseStorage implements IStorage {
       .where(eq(events.id, id));
 
     if (!result) return undefined;
+
+    // Check access for private events
+    if (result.event.isPrivate && userId) {
+      const canAccess = await this.canUserAccessPrivateEvent(id, userId);
+      if (!canAccess) return undefined;
+    } else if (result.event.isPrivate && !userId) {
+      // Private events require authentication
+      return undefined;
+    }
 
     const [attendanceCountResult] = await db
       .select({ count: count() })
@@ -325,10 +387,49 @@ export class DatabaseStorage implements IStorage {
     category?: string;
     userLat?: number;
     userLng?: number;
+    userCity?: string;
     userId?: string;
   }): Promise<EventWithDetails[]> {
     try {
-      const conditions = [sql`DATE(${events.dateTime}) >= DATE(NOW())`];
+      console.log('DEBUG getEvents called with filters:', JSON.stringify(filters));
+      // Filter out events that have already ended
+
+      // Only use dateTime since endTime is not in the current schema
+      // Use dateTime to check if event is still upcoming (assuming events last a few hours)
+      const conditions = [gte(events.dateTime, new Date())];
+
+      console.log('DEBUG: Initial conditions set with event end time filtering');
+      
+      // Filter out private events unless user has access
+      if (filters?.userId) {
+        // Include public events OR private events where user is creator, invited, or attending        
+        const accessCondition = or(
+          eq(events.isPrivate, false),
+          and(
+            eq(events.isPrivate, true),
+            or(
+              eq(events.creatorId, filters.userId),
+              sql`EXISTS (
+                SELECT 1 FROM ${eventInvites} 
+                WHERE ${eventInvites.eventId} = ${events.id} 
+                AND ${eventInvites.userId} = ${filters.userId}
+              )`,
+              sql`EXISTS (
+                SELECT 1 FROM ${eventAttendees} 
+                WHERE ${eventAttendees.eventId} = ${events.id} 
+                AND ${eventAttendees.userId} = ${filters.userId}
+              )`
+            )
+          )
+        );
+        
+        if (accessCondition) {
+          conditions.push(accessCondition);
+        }
+      } else {
+        // No user provided, only show public events
+        conditions.push(eq(events.isPrivate, false));
+      }
       
       if (filters?.category) {
         // Get category and all its subcategories for hierarchical filtering
@@ -336,8 +437,13 @@ export class DatabaseStorage implements IStorage {
         if (categoryValues.length > 0) {
           // Filter by any of the category values (main category + subcategories)
           const categoryConditions = categoryValues.map(value => eq(events.category, value));
-          if (categoryConditions.length > 0) {
-            conditions.push(or(...categoryConditions));
+          if (categoryConditions.length === 1) {
+            conditions.push(categoryConditions[0]);
+          } else if (categoryConditions.length > 1) {
+            const categoryOr = or(...categoryConditions);
+            if (categoryOr) {
+              conditions.push(categoryOr);
+            }
           }
         }
       }
@@ -358,10 +464,11 @@ export class DatabaseStorage implements IStorage {
           },
         })
         .from(events)
-        .innerJoin(users, eq(events.creatorId, users.id))
+        .innerJoin(users, sql`${events.creatorId}::varchar = ${users.id}`)
         .where(and(...conditions));
 
       const results = await query.orderBy(desc(events.createdAt));
+      console.log('DEBUG: Query executed, results count:', results?.length || 0);
       
       if (!results || !Array.isArray(results)) {
         console.log('No results or invalid results from query');
@@ -416,18 +523,53 @@ export class DatabaseStorage implements IStorage {
         })
       );
 
-      // Filter events by proximity (same city) and sort by distance if coordinates provided
+      // Prioritize distance-based filtering if coordinates are available
       if (filters?.userLat && filters?.userLng) {
         // Filter events within 50km (same city/region)
         const nearbyEvents = enhancedEvents.filter(event => 
           event.distance === undefined || event.distance <= 50
         );
         
-        // Sort by distance
-        nearbyEvents.sort((a, b) => (a.distance || 0) - (b.distance || 0));
+        // Sort by distance, then by creation date
+        nearbyEvents.sort((a, b) => {
+          const distanceA = a.distance || 0;
+          const distanceB = b.distance || 0;
+          if (distanceA !== distanceB) {
+            return distanceA - distanceB;
+          }
+          // If distances are equal, sort by creation date (most recent first)
+          const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return bDate - aDate;
+        });
         
         return nearbyEvents;
       }
+
+      // Fallback to text-based city filtering if coordinates not available
+      if (filters?.userCity) {
+        // For now, when filtering by city but no coordinates, return all events
+        // This is a temporary fix to ensure events appear while we improve geocoding
+        // In the future, we should enhance the geocoding process to always include city info
+        console.log(`City filter applied for: ${filters.userCity}, but returning all events to avoid filtering issues`);
+        
+        // Sort by creation date (most recent first)
+        enhancedEvents.sort((a, b) => {
+          const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return bDate - aDate;
+        });
+        
+        return enhancedEvents;
+      }
+
+      // If no filters are provided, return all events sorted by creation date
+      console.log('No filters provided, returning all events');
+      enhancedEvents.sort((a, b) => {
+        const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return bDate - aDate;
+      });
 
       return enhancedEvents;
     } catch (error) {
@@ -454,7 +596,7 @@ export class DatabaseStorage implements IStorage {
           },
         })
         .from(events)
-        .innerJoin(users, eq(events.creatorId, users.id))
+        .innerJoin(users, sql`${events.creatorId}::varchar = ${users.id}`)
         .where(eq(events.creatorId, userId));
 
       const results = await query.orderBy(desc(events.createdAt));
@@ -496,7 +638,6 @@ export class DatabaseStorage implements IStorage {
       ...event, 
       updatedAt: new Date(),
       ...(event.dateTime && { dateTime: new Date(event.dateTime) }),
-      ...(event.endTime && { endTime: new Date(event.endTime) }),
       ...(event.recurrenceEndDate && { recurrenceEndDate: new Date(event.recurrenceEndDate) }),
     };
     if (coordinates) {
@@ -748,6 +889,16 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
+  async getOrganizerReceivedRatings(organizerId: string): Promise<EventRating[]> {
+    return await db
+      .select()
+      .from(eventRatings)
+      .innerJoin(events, eq(eventRatings.eventId, events.id))
+      .where(eq(events.creatorId, organizerId))
+      .orderBy(desc(eventRatings.createdAt))
+      .then(results => results.map(result => result.event_ratings));
+  }
+
   // Additional user operations for local authentication from javascript_auth_all_persistance blueprint
   async getUserByUsername(username: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.username, username));
@@ -772,8 +923,8 @@ export class DatabaseStorage implements IStorage {
 
   // Phone authentication operations
   async getUserByPhone(phoneE164: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.phoneE164, phoneE164));
-    return user;
+    // Phone fields are disabled in current schema
+    throw new Error("Phone authentication is not enabled in current schema");
   }
 
   async createUser(userData: Partial<UpsertUser>): Promise<User> {
@@ -785,39 +936,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUserPhone(userId: string, phoneData: { phoneE164: string; phoneVerified: boolean; phoneCountry?: string; phoneHmac: string }): Promise<void> {
-    await db
-      .update(users)
-      .set({
-        phoneE164: phoneData.phoneE164,
-        phoneVerified: phoneData.phoneVerified,
-        phoneCountry: phoneData.phoneCountry,
-        phoneHmac: phoneData.phoneHmac,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, userId));
+    // Phone fields are disabled in current schema
+    throw new Error("Phone authentication is not enabled in current schema");
   }
 
   async getUsersByPhoneHmacs(phoneHmacs: string[], excludeUserId?: string): Promise<User[]> {
-    let whereConditions = sql`${users.phoneHmac} = ANY(${phoneHmacs})`;
-    
-    if (excludeUserId) {
-      whereConditions = sql`${whereConditions} AND ${users.id} != ${excludeUserId}`;
-    }
-
-    return await db
-      .select({
-        id: users.id,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        profileImageUrl: users.profileImageUrl,
-        username: users.username,
-        authType: users.authType,
-        role: users.role,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-      })
-      .from(users)
-      .where(whereConditions);
+    // Phone fields are disabled in current schema
+    throw new Error("Phone authentication is not enabled in current schema");
   }
 
   async hasPendingFriendRequest(userId1: string, userId2: string): Promise<boolean> {
@@ -892,6 +1017,38 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  // Password reset operations
+  async setPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<void> {
+    await db
+      .update(users)
+      .set({ 
+        resetPasswordToken: token,
+        resetPasswordTokenExpires: expiresAt 
+      })
+      .where(eq(users.id, userId));
+  }
+
+  async getUserByResetToken(token: string): Promise<User | undefined> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(and(
+        eq(users.resetPasswordToken, token),
+        gte(users.resetPasswordTokenExpires, new Date())
+      ));
+    return user;
+  }
+
+  async clearPasswordResetToken(userId: string): Promise<void> {
+    await db
+      .update(users)
+      .set({ 
+        resetPasswordToken: null,
+        resetPasswordTokenExpires: null 
+      })
+      .where(eq(users.id, userId));
+  }
+
   // Search operations
   async searchUsers(query: string): Promise<UserSanitized[]> {
     const searchTerm = `%${query}%`;
@@ -917,8 +1074,46 @@ export class DatabaseStorage implements IStorage {
     return results;
   }
 
-  async searchEvents(query: string): Promise<EventWithDetails[]> {
+  async searchEvents(query: string, userId?: string): Promise<EventWithDetails[]> {
     const searchTerm = `%${query}%`;
+    const conditions = [
+      or(
+        like(events.title, searchTerm),
+        like(events.description, searchTerm),
+        like(events.location, searchTerm)
+      ),
+      sql`DATE(${events.dateTime}) >= DATE(NOW())`
+    ];
+
+    // Filter out private events unless user has access
+    if (userId) {
+      // Include public events OR private events where user is creator, invited, or attending
+      conditions.push(
+        or(
+          eq(events.isPrivate, false),
+          and(
+            eq(events.isPrivate, true),
+            or(
+              eq(events.creatorId, userId),
+              sql`EXISTS (
+                SELECT 1 FROM ${eventInvites} 
+                WHERE ${eventInvites.eventId} = ${events.id} 
+                AND ${eventInvites.userId} = ${userId}
+              )`,
+              sql`EXISTS (
+                SELECT 1 FROM ${eventAttendees} 
+                WHERE ${eventAttendees.eventId} = ${events.id} 
+                AND ${eventAttendees.userId} = ${userId}
+              )`
+            )
+          )
+        )
+      );
+    } else {
+      // No user provided, only show public events
+      conditions.push(eq(events.isPrivate, false));
+    }
+
     const results = await db
       .select({
         event: events,
@@ -936,14 +1131,122 @@ export class DatabaseStorage implements IStorage {
       })
       .from(events)
       .innerJoin(users, eq(events.creatorId, users.id))
-      .where(and(
+      .where(and(...conditions));
+
+    // Enhance with attendance counts
+    const enhancedEvents = await Promise.all(
+      results.map(async (result) => {
+        const [attendanceCountResult] = await db
+          .select({ count: count() })
+          .from(eventAttendees)
+          .where(and(
+            eq(eventAttendees.eventId, result.event.id),
+            eq(eventAttendees.status, 'attending')
+          ));
+
+        return {
+          ...result.event,
+          organizer: result.organizer,
+          attendanceCount: attendanceCountResult.count,
+          userAttendance: undefined,
+          friendsGoing: [],
+        };
+      })
+    );
+
+    return enhancedEvents;
+  }
+
+  async searchEndedEvents(
+    cityName?: string,
+    daysBack?: number,
+    searchQuery?: string,
+    userId?: string
+  ): Promise<EventWithDetails[]> {
+    const conditions = [];
+
+
+    // Add condition for ended events (events that have already occurred)
+    conditions.push(lte(events.dateTime, new Date()));
+
+    // Add date range filter if daysBack is specified
+    if (daysBack && daysBack > 0) {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - daysBack);
+      conditions.push(gte(events.dateTime, cutoffDate));
+    }
+
+    // Add city filter if specified
+    if (cityName && cityName.trim() !== '') {
+      const citySearchTerm = `%${cityName.trim()}%`;
+      conditions.push(like(events.location, citySearchTerm));
+    }
+
+    // Add search query filter if specified
+    if (searchQuery && searchQuery.trim() !== '' && searchQuery.length >= 2) {
+      const searchTerm = `%${searchQuery.trim()}%`;
+      conditions.push(
         or(
           like(events.title, searchTerm),
           like(events.description, searchTerm),
           like(events.location, searchTerm)
-        ),
-        sql`DATE(${events.dateTime}) >= DATE(NOW())`
-      ));
+        )
+      );
+    }
+
+    // Filter out private events unless user has access
+    if (userId) {
+      // Include public events OR private events where user is creator, invited, or attending
+      conditions.push(
+        or(
+          eq(events.isPrivate, false),
+          and(
+            eq(events.isPrivate, true),
+            or(
+              eq(events.creatorId, userId),
+              sql`EXISTS (
+                SELECT 1 FROM ${eventInvites} 
+                WHERE ${eventInvites.eventId} = ${events.id} 
+                AND ${eventInvites.userId} = ${userId}
+              )`,
+              sql`EXISTS (
+                SELECT 1 FROM ${eventAttendees} 
+                WHERE ${eventAttendees.eventId} = ${events.id} 
+                AND ${eventAttendees.userId} = ${userId}
+              )`
+            )
+          )
+        )
+      );
+    } else {
+      // No user provided, only show public events
+      conditions.push(eq(events.isPrivate, false));
+    }
+
+    const results = await db
+      .select({
+        event: events,
+        organizer: {
+          id: users.id,
+          username: users.username,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          profileImageUrl: users.profileImageUrl,
+          role: users.role,
+          authType: users.authType,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt,
+        },
+      })
+      .from(events)
+      .innerJoin(users, eq(events.creatorId, users.id))
+      .where(and(...conditions))
+
+      .orderBy(
+        // Order by dateTime - most recent first
+        desc(events.dateTime)
+      );
+
 
     // Enhance with attendance counts
     const enhancedEvents = await Promise.all(
@@ -1021,10 +1324,25 @@ export class DatabaseStorage implements IStorage {
         })
         .from(eventAttendees)
         .innerJoin(events, eq(eventAttendees.eventId, events.id))
-        .innerJoin(users, eq(events.creatorId, users.id))
+        .innerJoin(users, sql`${events.creatorId}::varchar = ${users.id}`)
         .where(and(
           eq(eventAttendees.userId, user.id),
-          eq(eventAttendees.status, 'attending')
+          eq(eventAttendees.status, 'attending'),
+          // Only show public events OR private events where user has access
+          or(
+            eq(events.isPrivate, false),
+            and(
+              eq(events.isPrivate, true),
+              or(
+                eq(events.creatorId, viewerId),
+                sql`EXISTS (
+                  SELECT 1 FROM ${eventInvites} 
+                  WHERE ${eventInvites.eventId} = ${events.id} 
+                  AND ${eventInvites.userId} = ${viewerId}
+                )`
+              )
+            )
+          )
         ));
 
       const enhancedEvents = await Promise.all(
@@ -1051,7 +1369,7 @@ export class DatabaseStorage implements IStorage {
         profile,
         isConnected: true,
         canViewFullProfile: true,
-        phoneNumber: user.phoneE164,
+        phoneNumber: null, // Phone fields disabled in current schema
         confirmedEvents: enhancedEvents,
       };
     }
@@ -1078,10 +1396,30 @@ export class DatabaseStorage implements IStorage {
         })
         .from(eventAttendees)
         .innerJoin(events, eq(eventAttendees.eventId, events.id))
-        .innerJoin(users, eq(events.creatorId, users.id))
+        .innerJoin(users, sql`${events.creatorId}::varchar = ${users.id}`)
         .where(and(
           eq(eventAttendees.userId, user.id),
-          eq(eventAttendees.status, 'attending')
+          eq(eventAttendees.status, 'attending'),
+          // Only show public events OR private events where viewer has access
+          or(
+            eq(events.isPrivate, false),
+            and(
+              eq(events.isPrivate, true),
+              or(
+                eq(events.creatorId, viewerId),
+                sql`EXISTS (
+                  SELECT 1 FROM ${eventInvites} 
+                  WHERE ${eventInvites.eventId} = ${events.id} 
+                  AND ${eventInvites.userId} = ${viewerId}
+                )`,
+                sql`EXISTS (
+                  SELECT 1 FROM ${eventAttendees} 
+                  WHERE ${eventAttendees.eventId} = ${events.id} 
+                  AND ${eventAttendees.userId} = ${viewerId}
+                )`
+              )
+            )
+          )
         ));
 
       const enhancedEvents = await Promise.all(
@@ -1108,7 +1446,7 @@ export class DatabaseStorage implements IStorage {
         profile,
         isConnected: true,
         canViewFullProfile: true,
-        phoneNumber: user.phoneE164,
+        phoneNumber: null, // Phone fields disabled in current schema
         confirmedEvents: enhancedEvents,
       };
     }
@@ -1154,6 +1492,93 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async initializeCategories(): Promise<void> {
+    try {
+      // Verificar se as categorias já existem
+      const existingCategories = await this.getCategories();
+      if (existingCategories.length > 0) {
+        return; // Categorias já inicializadas
+      }
+
+      console.log('Initializing categories...');
+
+      // Definir categorias principais
+      const mainCategories = [
+        { value: "festas", name: "Festas", icon: "fas fa-glass-cheers" },
+        { value: "sports", name: "Esportes", icon: "fas fa-running" },
+        { value: "tech", name: "Tecnologia", icon: "fas fa-laptop-code" },
+        { value: "religioso", name: "Religioso", icon: "fas fa-pray" },
+        { value: "food", name: "Gastronomia", icon: "fas fa-utensils" },
+        { value: "art", name: "Arte", icon: "fas fa-palette" },
+        { value: "music", name: "Música", icon: "fas fa-music" },
+        { value: "outros", name: "Outros", icon: "fas fa-calendar" },
+      ];
+
+      // Inserir categorias principais
+      const insertedCategories: { [key: string]: string } = {};
+      
+      for (const category of mainCategories) {
+        const [inserted] = await db.insert(categories).values({
+          name: category.name,
+          value: category.value,
+          icon: category.icon,
+          displayOrder: mainCategories.indexOf(category),
+        }).returning();
+        insertedCategories[category.value] = inserted.id;
+      }
+
+      // Definir subcategorias
+      const subcategories = [
+        // Subcategorias de Sports
+        { value: "corrida", name: "Corrida", parentValue: "sports", icon: "fas fa-running" },
+        { value: "futebol", name: "Futebol", parentValue: "sports", icon: "fas fa-futbol" },
+        { value: "natacao", name: "Natação", parentValue: "sports", icon: "fas fa-swimmer" },
+        { value: "ciclismo", name: "Ciclismo", parentValue: "sports", icon: "fas fa-bicycle" },
+        { value: "basquete", name: "Basquete", parentValue: "sports", icon: "fas fa-basketball-ball" },
+        { value: "volei", name: "Vôlei", parentValue: "sports", icon: "fas fa-volleyball-ball" },
+        
+        // Subcategorias de Tech
+        { value: "programacao", name: "Programação", parentValue: "tech", icon: "fas fa-code" },
+        { value: "startups", name: "Startups", parentValue: "tech", icon: "fas fa-rocket" },
+        { value: "ia", name: "Inteligência Artificial", parentValue: "tech", icon: "fas fa-robot" },
+        
+        // Subcategorias de Music
+        { value: "rock", name: "Rock", parentValue: "music", icon: "fas fa-guitar" },
+        { value: "eletronica", name: "Eletrônica", parentValue: "music", icon: "fas fa-headphones" },
+        { value: "sertanejo", name: "Sertanejo", parentValue: "music", icon: "fas fa-microphone" },
+        { value: "samba", name: "Samba", parentValue: "music", icon: "fas fa-drum" },
+        
+        // Subcategorias de Food
+        { value: "churrasco", name: "Churrasco", parentValue: "food", icon: "fas fa-fire" },
+        { value: "vegetariano", name: "Vegetariano", parentValue: "food", icon: "fas fa-leaf" },
+        { value: "pizza", name: "Pizza", parentValue: "food", icon: "fas fa-pizza-slice" },
+        
+        // Subcategorias de Art
+        { value: "pintura", name: "Pintura", parentValue: "art", icon: "fas fa-paint-brush" },
+        { value: "teatro", name: "Teatro", parentValue: "art", icon: "fas fa-theater-masks" },
+        { value: "danca", name: "Dança", parentValue: "art", icon: "fas fa-dancing" },
+      ];
+
+      // Inserir subcategorias
+      for (const subcategory of subcategories) {
+        const parentId = insertedCategories[subcategory.parentValue];
+        if (parentId) {
+          await db.insert(categories).values({
+            name: subcategory.name,
+            value: subcategory.value,
+            icon: subcategory.icon,
+            parentId: parentId,
+            displayOrder: subcategories.filter(s => s.parentValue === subcategory.parentValue).indexOf(subcategory),
+          });
+        }
+      }
+
+      console.log('Categories initialized successfully');
+    } catch (error) {
+      console.error('Error initializing categories:', error);
+    }
+  }
+
   async getCategoryWithSubcategories(categoryValue: string): Promise<string[]> {
     try {
       // Se categoryValue estiver vazio, retorna todos
@@ -1164,6 +1589,7 @@ export class DatabaseStorage implements IStorage {
       // Busca a categoria principal
       const category = await this.getCategoryByValue(categoryValue);
       if (!category) {
+        console.log(`Category '${categoryValue}' not found in database`);
         return [categoryValue]; // Retorna o valor original se não encontrar
       }
 
@@ -1171,6 +1597,7 @@ export class DatabaseStorage implements IStorage {
       if (!category.parentId) {
         const subcategories = await this.getSubcategories(category.id);
         const subcategoryValues = subcategories.map(sub => sub.value);
+        console.log(`Found ${subcategoryValues.length} subcategories for '${categoryValue}':`, subcategoryValues);
         return [categoryValue, ...subcategoryValues];
       }
 
@@ -1288,18 +1715,8 @@ export class DatabaseStorage implements IStorage {
   // Notification preferences operations
   async getNotificationPreferences(userId: string): Promise<Partial<User>> {
     try {
-      const [user] = await db
-        .select({
-          notificarConviteAmigo: users.notificarConviteAmigo,
-          notificarEventoAmigo: users.notificarEventoAmigo,
-          notificarAvaliacaoAmigo: users.notificarAvaliacaoAmigo,
-          notificarContatoCadastrado: users.notificarContatoCadastrado,
-          notificarConfirmacaoPresenca: users.notificarConfirmacaoPresenca,
-          notificarAvaliacaoEventoCriado: users.notificarAvaliacaoEventoCriado,
-        })
-        .from(users)
-        .where(eq(users.id, userId));
-      return user || {};
+      // Notification preferences disabled in current schema
+      return {};
     } catch (error) {
       console.error('Error getting notification preferences:', error);
       return {};
@@ -1370,6 +1787,273 @@ export class DatabaseStorage implements IStorage {
       totalRaised: Number(result.totalRaised) || 0,
       contributionCount: result.contributionCount || 0,
     };
+  }
+
+  async removeUserContributions(eventId: string, userId: string): Promise<void> {
+    await db
+      .delete(eventContributions)
+      .where(and(
+        eq(eventContributions.eventId, eventId),
+        eq(eventContributions.userId, userId)
+      ));
+  }
+
+  // Private event operations
+  async inviteFriendsToEvent(eventId: string, friendIds: string[]): Promise<void> {
+    const invitations = friendIds.map(friendId => ({
+      eventId,
+      userId: friendId,
+      status: 'pending' as const,
+    }));
+
+    await db
+      .insert(eventInvites)
+      .values(invitations)
+      .onConflictDoNothing();
+  }
+
+  async getEventInvites(eventId: string): Promise<EventInvite[]> {
+    const results = await db
+      .select()
+      .from(eventInvites)
+      .where(eq(eventInvites.eventId, eventId));
+    return results;
+  }
+
+  async getUserEventInvites(userId: string): Promise<EventInvite[]> {
+    const results = await db
+      .select()
+      .from(eventInvites)
+      .where(and(
+        eq(eventInvites.userId, userId),
+        eq(eventInvites.status, 'pending')
+      ));
+    return results;
+  }
+
+  async getEventByShareableLink(shareableLink: string): Promise<Event | undefined> {
+    const [event] = await db
+      .select()
+      .from(events)
+      .where(eq(events.shareableLink, shareableLink));
+    return event;
+  }
+
+  async isUserInvitedToEvent(eventId: string, userId: string): Promise<boolean> {
+    const [invite] = await db
+      .select()
+      .from(eventInvites)
+      .where(and(
+        eq(eventInvites.eventId, eventId),
+        eq(eventInvites.userId, userId),
+        eq(eventInvites.status, 'pending')
+      ));
+    return !!invite;
+  }
+
+  async canUserAccessPrivateEvent(eventId: string, userId: string): Promise<boolean> {
+    // Get the event to check if it's private (use internal method to avoid recursion)
+    const event = await this.getEventInternal(eventId);
+    if (!event) return false;
+    
+    // If event is not private, everyone can access
+    if (!event.isPrivate) return true;
+    
+    // CRITICAL: If user is the organizer, they can ALWAYS access their own private events
+    if (event.creatorId === userId) return true;
+    
+    // Check if user is invited
+    const isInvited = await this.isUserInvitedToEvent(eventId, userId);
+    if (isInvited) return true;
+    
+    // Check if user is already attending (e.g., via shared link)
+    const [attendance] = await db
+      .select()
+      .from(eventAttendees)
+      .where(and(
+        eq(eventAttendees.eventId, eventId),
+        eq(eventAttendees.userId, userId)
+      ));
+    
+    return !!attendance;
+  }
+
+  // Chat operations
+  async getOrCreateConversation(userId1: string, userId2: string): Promise<Conversation> {
+    // Ensure consistent ordering to prevent duplicate conversations
+    const [smallerId, largerId] = [userId1, userId2].sort();
+    
+    // Try to find existing conversation
+    const [existing] = await db
+      .select()
+      .from(conversations)
+      .where(and(
+        eq(conversations.user1Id, smallerId),
+        eq(conversations.user2Id, largerId)
+      ));
+    
+    if (existing) {
+      return existing;
+    }
+    
+    // Create new conversation
+    const [newConversation] = await db
+      .insert(conversations)
+      .values({
+        user1Id: smallerId,
+        user2Id: largerId,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      })
+      .returning();
+    
+    return newConversation;
+  }
+
+  async createMessage(conversationId: string, senderId: string, content: string): Promise<Message> {
+    const now = new Date();
+    
+    const [message] = await db
+      .insert(messages)
+      .values({
+        conversationId,
+        senderId,
+        content,
+        createdAt: now,
+        updatedAt: now
+      })
+      .returning();
+    
+    // Update conversation's last message timestamp
+    await db
+      .update(conversations)
+      .set({ 
+        lastMessageAt: now,
+        updatedAt: now 
+      })
+      .where(eq(conversations.id, conversationId));
+    
+    return message;
+  }
+
+  async markMessagesAsRead(messageIds: string[], userId: string): Promise<void> {
+    if (messageIds.length === 0) return;
+    
+    // First, verify that all messages belong to conversations where the user is a participant
+    const messagesWithConversations = await db
+      .select({
+        messageId: messages.id,
+        conversationId: messages.conversationId,
+        user1Id: conversations.user1Id,
+        user2Id: conversations.user2Id
+      })
+      .from(messages)
+      .innerJoin(conversations, eq(messages.conversationId, conversations.id))
+      .where(inArray(messages.id, messageIds));
+    
+    // Check if user is participant in all conversations
+    for (const msg of messagesWithConversations) {
+      if (msg.user1Id !== userId && msg.user2Id !== userId) {
+        throw new Error('Access denied: You can only mark messages as read in conversations you participate in');
+      }
+    }
+    
+    // Only mark messages as read if user is participant and didn't send them
+    await db
+      .update(messages)
+      .set({ readAt: new Date() })
+      .where(and(
+        inArray(messages.id, messageIds),
+        ne(messages.senderId, userId), // Don't mark own messages as read
+        isNull(messages.readAt) // Only update unread messages
+      ));
+  }
+
+  async getConversations(userId: string): Promise<(Conversation & { otherUser: User, unreadCount: number, lastMessage?: Message })[]> {
+    const conversationData = await db
+      .select({
+        conversation: conversations,
+        otherUser: users,
+        lastMessage: messages
+      })
+      .from(conversations)
+      .leftJoin(
+        messages, 
+        and(
+          eq(messages.conversationId, conversations.id),
+          eq(messages.createdAt, 
+            db.select({ maxCreatedAt: max(messages.createdAt) })
+              .from(messages)
+              .where(eq(messages.conversationId, conversations.id))
+          )
+        )
+      )
+      .leftJoin(
+        users,
+        or(
+          and(eq(conversations.user1Id, userId), eq(users.id, conversations.user2Id)),
+          and(eq(conversations.user2Id, userId), eq(users.id, conversations.user1Id))
+        )
+      )
+      .where(
+        or(
+          eq(conversations.user1Id, userId),
+          eq(conversations.user2Id, userId)
+        )
+      )
+      .orderBy(desc(conversations.lastMessageAt));
+
+    // Get unread message counts for each conversation
+    const results = [];
+    for (const row of conversationData) {
+      if (!row.conversation || !row.otherUser) continue;
+      
+      const [unreadResult] = await db
+        .select({ count: count() })
+        .from(messages)
+        .where(and(
+          eq(messages.conversationId, row.conversation.id),
+          ne(messages.senderId, userId),
+          isNull(messages.readAt)
+        ));
+      
+      results.push({
+        ...row.conversation,
+        otherUser: row.otherUser,
+        unreadCount: unreadResult?.count || 0,
+        lastMessage: row.lastMessage || undefined
+      });
+    }
+    
+    return results;
+  }
+
+  async getMessages(conversationId: string, userId: string, limit: number = 50, offset: number = 0): Promise<Message[]> {
+    // Verify user has access to this conversation
+    const [conversation] = await db
+      .select()
+      .from(conversations)
+      .where(and(
+        eq(conversations.id, conversationId),
+        or(
+          eq(conversations.user1Id, userId),
+          eq(conversations.user2Id, userId)
+        )
+      ));
+    
+    if (!conversation) {
+      throw new Error('Conversation not found or access denied');
+    }
+    
+    const messageList = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.conversationId, conversationId))
+      .orderBy(desc(messages.createdAt))
+      .limit(limit)
+      .offset(offset);
+    
+    return messageList.reverse(); // Return in chronological order
   }
 }
 

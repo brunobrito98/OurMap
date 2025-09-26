@@ -5,7 +5,9 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import logoImage from "@assets/image_1758571356074.png";
+import { PhoneInput } from "@/components/PhoneInput";
+import { type Value } from "react-phone-number-input";
+import { Megaphone, MapPin, Utensils, Plus, User, Shield, Loader2 } from "lucide-react";
 
 export default function Landing() {
   const [, navigate] = useLocation();
@@ -17,6 +19,7 @@ export default function Landing() {
     email: "",
     firstName: "",
     lastName: "",
+    phoneNumber: "",
   });
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -27,7 +30,6 @@ export default function Landing() {
       navigate("/");
     }
   }, [isAuthenticated, authLoading, navigate]);
-
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -73,14 +75,14 @@ export default function Landing() {
       } else {
         toast({
           title: "Erro",
-          description: data.message || "Algo deu errado",
+          description: data.message || "Erro desconhecido",
           variant: "destructive",
         });
       }
     } catch (error) {
       toast({
         title: "Erro",
-        description: "Erro de conexão. Tente novamente.",
+        description: "Erro de conexão",
         variant: "destructive",
       });
     } finally {
@@ -88,40 +90,60 @@ export default function Landing() {
     }
   };
 
-  return (
-    <div className="min-h-screen flex flex-col justify-center items-center bg-gradient-to-br from-primary via-accent to-primary p-6">
-      {/* Modern geometric background with circles */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-20 -right-20 w-40 h-40 bg-white/10 rounded-full"></div>
-        <div className="absolute top-40 -left-16 w-32 h-32 bg-white/10 rounded-full"></div>
-        <div className="absolute -bottom-16 left-1/3 w-28 h-28 bg-white/10 rounded-full"></div>
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin" />
       </div>
-      
-      <div className="relative z-10 w-full max-w-sm">
-        {/* Logo and Title */}
-        <div className="text-center mb-8">
-          <div className="w-32 h-32 mx-auto mb-4">
-            <img 
-              src={logoImage} 
-              alt="OurMap Logo" 
-              className="w-full h-full object-contain rounded-2xl shadow-lg"
-              data-testid="img-logo"
-            />
-          </div>
-        </div>
+    );
+  }
 
-        {/* Login Form */}
-        <div className="bg-white rounded-3xl p-8 shadow-2xl">
-          <h2 className="text-2xl font-semibold text-foreground mb-6 text-center">
-            {isRegistering ? "Criar Conta" : "Entrar"}
-          </h2>
-          
-            {/* Auth Form */}
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      <div className="flex items-center justify-center min-h-screen p-4">
+        <div className="w-full max-w-md space-y-8">
+          <div className="text-center">
+            <div className="mx-auto w-16 h-16 bg-primary rounded-full flex items-center justify-center mb-4">
+              <MapPin className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-3xl font-bold">OurMap</h1>
+            <p className="text-muted-foreground mt-2">
+              Descubra eventos incríveis na sua região
+            </p>
+          </div>
+
+          {/* Hero Features Preview */}
+          <div className="bg-white rounded-lg shadow-lg p-6 space-y-4">
+            <div className="grid grid-cols-3 gap-4 text-center">
+              <div className="space-y-2">
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mx-auto">
+                  <Megaphone className="w-5 h-5 text-blue-600" />
+                </div>
+                <p className="text-xs text-muted-foreground">Eventos</p>
+              </div>
+              <div className="space-y-2">
+                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mx-auto">
+                  <MapPin className="w-5 h-5 text-green-600" />
+                </div>
+                <p className="text-xs text-muted-foreground">Localização</p>
+              </div>
+              <div className="space-y-2">
+                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mx-auto">
+                  <Plus className="w-5 h-5 text-purple-600" />
+                </div>
+                <p className="text-xs text-muted-foreground">Criar</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Authentication Form */}
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            <div className="space-y-6">
               <form onSubmit={handleAuth} className="space-y-4">
                 {!isRegistering && (
                   <div>
                     <Label htmlFor="username" className="text-sm font-medium">
-                      Email ou Usuário
+                      Email, Telefone ou Usuário
                     </Label>
                     <Input
                       id="username"
@@ -130,6 +152,7 @@ export default function Landing() {
                       value={formData.username}
                       onChange={handleInputChange}
                       required
+                      placeholder="Digite seu email, telefone ou nome de usuário"
                       className="mt-1"
                       data-testid="input-username"
                     />
@@ -201,6 +224,19 @@ export default function Landing() {
                         data-testid="input-lastName"
                       />
                     </div>
+
+                    <div>
+                      <Label htmlFor="phoneNumber" className="text-sm font-medium">
+                        Telefone (Opcional)
+                      </Label>
+                      <PhoneInput
+                        value={formData.phoneNumber as Value}
+                        onChange={(value) => setFormData({...formData, phoneNumber: value || ""})}
+                        placeholder="Digite seu número"
+                        className="mt-1"
+                        data-testid="input-phone-number"
+                      />
+                    </div>
                   </>
                 )}
 
@@ -218,8 +254,19 @@ export default function Landing() {
                     className="mt-1"
                     data-testid="input-password"
                   />
+                  {!isRegistering && (
+                    <div className="text-right mt-2">
+                      <button
+                        type="button"
+                        onClick={() => navigate("/forgot-password")}
+                        className="text-sm text-primary hover:underline bg-transparent border-none p-0 cursor-pointer"
+                        data-testid="button-forgot-password"
+                      >
+                        Esqueci minha senha
+                      </button>
+                    </div>
+                  )}
                 </div>
-
 
                 <Button
                   type="submit"
@@ -245,6 +292,13 @@ export default function Landing() {
                     : "Não tem conta? Cadastre-se"}
                 </button>
               </div>
+            </div>
+          </div>
+
+          {/* Features Preview */}
+          <div className="text-center text-sm text-muted-foreground">
+            <p>✨ Crie e descubra eventos únicos na sua cidade</p>
+          </div>
         </div>
       </div>
     </div>

@@ -33,7 +33,7 @@ export const sessions = pgTable(
 // User storage table.
 // (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
 export const users = pgTable("users", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: varchar("email").unique(),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
@@ -43,18 +43,23 @@ export const users = pgTable("users", {
   password: varchar("password"),
   authType: varchar("auth_type").default("replit"), // 'replit', 'local', or 'phone'
   role: varchar("role").default("user"), // 'user', 'admin', 'super_admin'
-  // Phone authentication fields
-  phoneE164: varchar("phone_e164").unique(), // Phone number in E.164 format (+5511999999999)
-  phoneVerified: boolean("phone_verified").default(false), // Whether phone is verified
-  phoneCountry: varchar("phone_country", { length: 2 }), // ISO2 country code (BR, US, etc.)
-  phoneHmac: varchar("phone_hmac").unique(), // HMAC-SHA256 of phone for contact matching
-  // Notification preferences
-  notificarConviteAmigo: boolean("notificar_convite_amigo").default(true),
-  notificarEventoAmigo: boolean("notificar_evento_amigo").default(true), 
-  notificarAvaliacaoAmigo: boolean("notificar_avaliacao_amigo").default(true),
-  notificarContatoCadastrado: boolean("notificar_contato_cadastrado").default(true),
-  notificarConfirmacaoPresenca: boolean("notificar_confirmacao_presenca").default(true),
-  notificarAvaliacaoEventoCriado: boolean("notificar_avaliacao_evento_criado").default(true),
+  // Phone authentication fields (disabled as columns don't exist in current DB)
+  // phoneE164: varchar("phone_e164").unique(), // Phone number in E.164 format (+5511999999999)
+  // phoneVerified: boolean("phone_verified").default(false), // Whether phone is verified
+  // phoneCountry: varchar("phone_country", { length: 2 }), // ISO2 country code (BR, US, etc.)
+  // phoneHmac: varchar("phone_hmac").unique(), // HMAC-SHA256 of phone for contact matching
+  // Notification preferences (disabled as columns don't exist in current DB)
+  // notificarConviteAmigo: boolean("notificar_convite_amigo").default(true),
+  // notificarEventoAmigo: boolean("notificar_evento_amigo").default(true), 
+  // notificarAvaliacaoAmigo: boolean("notificar_avaliacao_amigo").default(true),
+  // notificarContatoCadastrado: boolean("notificar_contato_cadastrado").default(true),
+  // notificarConfirmacaoPresenca: boolean("notificar_confirmacao_presenca").default(true),
+  // notificarAvaliacaoEventoCriado: boolean("notificar_avaliacao_evento_criado").default(true),
+  
+  // Password reset fields
+  resetPasswordToken: varchar("reset_password_token"),
+  resetPasswordTokenExpires: timestamp("reset_password_token_expires"),
+  
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -77,11 +82,10 @@ export const events = pgTable("events", {
   description: text("description"),
   category: text("category").notNull().default("outros"),
   dateTime: timestamp("date_time", { withTimezone: true }).notNull(),
-  endTime: timestamp("end_time", { withTimezone: true }),
   location: text("location").notNull(),
   latitude: numeric("latitude"),
   longitude: numeric("longitude"),
-  creatorId: uuid("creator_id").notNull(),
+  creatorId: varchar("creator_id").notNull(),
   maxAttendees: integer("max_attendees"),
   imageUrl: text("image_url"),
   iconEmoji: text("icon_emoji").default("🎉"),
@@ -99,6 +103,9 @@ export const events = pgTable("events", {
   recurrenceType: text("recurrence_type"),
   recurrenceInterval: integer("recurrence_interval").default(1),
   recurrenceEndDate: timestamp("recurrence_end_date", { withTimezone: true }),
+  // Private event fields
+  isPrivate: boolean("is_private").default(false),
+  shareableLink: uuid("shareable_link").default(sql`gen_random_uuid()`),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
@@ -108,7 +115,7 @@ export const events = pgTable("events", {
 export const eventAttendees = pgTable("event_attendees", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   status: text("status").notNull().default("attending"), // attending, interested, not_going
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
@@ -118,7 +125,7 @@ export const eventAttendees = pgTable("event_attendees", {
 export const eventContributions = pgTable("event_contributions", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   amount: numeric("amount").notNull(), // Valor da contribuição
   isPublic: boolean("is_public").default(true), // Se a contribuição aparece publicamente
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
@@ -126,8 +133,8 @@ export const eventContributions = pgTable("event_contributions", {
 
 export const friendships = pgTable("friendships", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  requesterId: uuid("requester_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  addresseeId: uuid("addressee_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  requesterId: varchar("requester_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  addresseeId: varchar("addressee_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   status: text("status").notNull().default("pending"), // pending, accepted, declined
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
@@ -135,10 +142,31 @@ export const friendships = pgTable("friendships", {
   uniqueFriendship: unique().on(table.requesterId, table.addresseeId),
 }));
 
+export const conversations = pgTable("conversations", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  user1Id: varchar("user1_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  user2Id: varchar("user2_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqueConversation: unique().on(table.user1Id, table.user2Id),
+}));
+
+export const messages = pgTable("messages", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: uuid("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  senderId: varchar("sender_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  readAt: timestamp("read_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
 export const eventRatings = pgTable("event_ratings", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   organizerRating: integer("organizer_rating"), // 1-5 stars for organizer
   eventRating: integer("event_rating"), // 1-5 stars for event
   comment: text("comment"),
@@ -147,13 +175,23 @@ export const eventRatings = pgTable("event_ratings", {
   uniqueUserEventRating: unique().on(table.eventId, table.userId),
 }));
 
+export const eventInvites = pgTable("event_invites", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: uuid("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending"), // pending, accepted, declined
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqueEventInvite: unique().on(table.eventId, table.userId),
+}));
+
 export const notifications = pgTable("notifications", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  type: text("type").notNull(), // 'friend_invite', 'event_attendance', 'event_created', 'event_reminder', 'event_rating'
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // 'friend_invite', 'event_attendance', 'event_created', 'event_reminder', 'event_rating', 'event_invite'
   title: text("title").notNull(),
   message: text("message").notNull(),
-  relatedUserId: uuid("related_user_id").references(() => users.id, { onDelete: "cascade" }), // User who triggered the notification
+  relatedUserId: varchar("related_user_id").references(() => users.id, { onDelete: "cascade" }), // User who triggered the notification
   relatedEventId: uuid("related_event_id").references(() => events.id, { onDelete: "cascade" }), // Related event if applicable  
   isRead: boolean("is_read").default(false),
   actionUrl: text("action_url"), // URL to navigate when notification is clicked
@@ -180,6 +218,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   ratings: many(eventRatings),
   notifications: many(notifications),
   triggeredNotifications: many(notifications, { relationName: "relatedUser" }),
+  eventInvites: many(eventInvites),
 }));
 
 export const eventsRelations = relations(events, ({ one, many }) => ({
@@ -191,6 +230,7 @@ export const eventsRelations = relations(events, ({ one, many }) => ({
   contributions: many(eventContributions),
   ratings: many(eventRatings),
   notifications: many(notifications, { relationName: "relatedEvent" }),
+  invites: many(eventInvites),
 }));
 
 export const eventAttendeesRelations = relations(eventAttendees, ({ one }) => ({
@@ -239,6 +279,17 @@ export const eventRatingsRelations = relations(eventRatings, ({ one }) => ({
   }),
 }));
 
+export const eventInvitesRelations = relations(eventInvites, ({ one }) => ({
+  event: one(events, {
+    fields: [eventInvites.eventId],
+    references: [events.id],
+  }),
+  user: one(users, {
+    fields: [eventInvites.userId],
+    references: [users.id],
+  }),
+}));
+
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(users, {
     fields: [notifications.userId],
@@ -270,7 +321,7 @@ export const insertEventSchema = createInsertSchema(events).omit({
   creatorId: true,
   latitude: true,
   longitude: true,
-  totalRaised: true, // Calculado automaticamente
+  shareableLink: true, // Gerado automaticamente
 }).extend({
   dateTime: z.string().min(1, "Data e hora são obrigatórias").refine((val) => {
     // Accept both datetime-local format (YYYY-MM-DDTHH:mm) and ISO with timezone
@@ -293,6 +344,8 @@ export const insertEventSchema = createInsertSchema(events).omit({
     if (!val) return true; // recurrenceEndDate é opcional
     return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val) || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z?([+-]\d{2}:\d{2})?$/.test(val);
   }, "Formato de data de fim da recorrência inválido"),
+  isPrivate: z.boolean().optional().default(false),
+  invitedFriends: z.array(z.string()).optional(), // IDs dos amigos convidados
 }).refine((data) => {
   // Validação para garantir que endTime seja posterior a dateTime
   if (data.endTime && data.dateTime) {
@@ -427,9 +480,30 @@ export const insertEventRatingSchema = createInsertSchema(eventRatings).omit({
   createdAt: true,
 });
 
+export const insertEventInviteSchema = createInsertSchema(eventInvites).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertNotificationSchema = createInsertSchema(notifications).omit({
   id: true,
   createdAt: true,
+});
+
+export const insertConversationSchema = createInsertSchema(conversations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastMessageAt: true,
+});
+
+export const insertMessageSchema = createInsertSchema(messages).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  readAt: true,
+}).extend({
+  content: z.string().min(1, "Mensagem não pode estar vazia").max(2000, "Mensagem muito longa (máx. 2000 caracteres)"),
 });
 
 export const notificationConfigSchema = z.object({
@@ -458,33 +532,15 @@ export const insertLocalUserSchema = createInsertSchema(users).omit({
   profileImageUrl: true,
   authType: true,
   role: true,
-  phoneE164: true,
-  phoneVerified: true,
-  phoneCountry: true,
-  phoneHmac: true,
 }).extend({
   username: z.string().min(3, "Username deve ter pelo menos 3 caracteres"),
   password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
   email: z.string().email("Email deve ser válido"),
   firstName: z.string().min(1, "Nome é obrigatório"),
   lastName: z.string().min(1, "Sobrenome é obrigatório"),
+  phoneNumber: z.string().optional(), // Optional phone number field for registration
 });
 
-// Phone authentication schemas
-export const phoneStartSchema = z.object({
-  phone: z.string().min(1, "Número de telefone é obrigatório"),
-  country: z.string().length(2, "Código do país deve ter 2 caracteres").optional(),
-});
-
-export const phoneVerifySchema = z.object({
-  phone: z.string().min(1, "Número de telefone é obrigatório"),
-  code: z.string().length(6, "Código deve ter 6 dígitos").regex(/^\d{6}$/, "Código deve conter apenas números"),
-});
-
-export const phoneLinkSchema = z.object({
-  phone: z.string().min(1, "Número de telefone é obrigatório"),
-  code: z.string().length(6, "Código deve ter 6 dígitos").regex(/^\d{6}$/, "Código deve conter apenas números"),
-});
 
 export const contactsMatchSchema = z.object({
   contacts: z.array(z.string()).max(1000, "Máximo de 1000 contatos por vez"),
@@ -512,9 +568,6 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertLocalUser = z.infer<typeof insertLocalUserSchema>;
 export type InsertAdminUser = z.infer<typeof insertAdminUserSchema>;
-export type PhoneStart = z.infer<typeof phoneStartSchema>;
-export type PhoneVerify = z.infer<typeof phoneVerifySchema>;
-export type PhoneLink = z.infer<typeof phoneLinkSchema>;
 export type ContactsMatch = z.infer<typeof contactsMatchSchema>;
 export type Category = typeof categories.$inferSelect;
 export type InsertCategory = z.infer<typeof insertCategorySchema>;
@@ -527,9 +580,15 @@ export type EventContribution = typeof eventContributions.$inferSelect;
 export type InsertEventContribution = z.infer<typeof insertEventContributionSchema>;
 export type Friendship = typeof friendships.$inferSelect;
 export type InsertFriendship = z.infer<typeof insertFriendshipSchema>;
+export type Conversation = typeof conversations.$inferSelect;
+export type InsertConversation = z.infer<typeof insertConversationSchema>;
+export type Message = typeof messages.$inferSelect;
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type EventRating = typeof eventRatings.$inferSelect;
 export type InsertEventRating = z.infer<typeof insertEventRatingSchema>;
 export type Notification = typeof notifications.$inferSelect;
+export type EventInvite = typeof eventInvites.$inferSelect;
+export type InsertEventInvite = z.infer<typeof insertEventInviteSchema>;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type NotificationConfig = z.infer<typeof notificationConfigSchema>;
 
