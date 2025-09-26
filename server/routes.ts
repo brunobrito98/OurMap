@@ -409,6 +409,14 @@ async function searchLocalPlaces(
 
 // Auth middleware
 function isAuthenticatedAny(req: any, res: any, next: any) {
+  console.log('isAuthenticatedAny check:', {
+    hasIsAuthenticated: !!req.isAuthenticated,
+    isAuthenticated: req.isAuthenticated ? req.isAuthenticated() : false,
+    hasUser: !!req.user,
+    userId: req.user?.id,
+    sessionId: req.sessionID
+  });
+  
   if (req.isAuthenticated && req.isAuthenticated()) {
     return next();
   }
