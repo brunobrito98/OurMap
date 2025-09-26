@@ -122,7 +122,9 @@ export default function InteractiveMapModal({
   };
 
   const handleConfirm = () => {
-    onLocationSelect(selectedLat, selectedLng, searchAddress);
+    // Pass undefined if searchAddress is empty to trigger fallback reverse geocoding
+    const addressToPass = searchAddress && searchAddress.trim().length > 0 ? searchAddress : undefined;
+    onLocationSelect(selectedLat, selectedLng, addressToPass);
     onOpenChange(false);
   };
 

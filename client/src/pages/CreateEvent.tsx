@@ -373,10 +373,47 @@ export default function CreateEvent() {
     }
   };
 
-  const handleMapModalLocationSelect = (lat: number, lng: number, address?: string) => {
+  const handleMapModalLocationSelect = async (lat: number, lng: number, address?: string) => {
     setMapCoordinates({ lat, lng });
-    if (address) {
-      form.setValue('location', address, { shouldDirty: true, shouldTouch: true });
+    
+    // Only set address if it's not empty
+    if (address && address.trim().length > 0) {
+      form.setValue('location', address, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+    } else {
+      // If no valid address provided, try reverse geocoding
+      try {
+        const response = await fetch('/api/reverse-geocode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lat, lng }),
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.address && data.address.trim().length > 0) {
+            form.setValue('location', data.address, { shouldDirty: true, shouldTouch: true, shouldValidate: true });
+          } else {
+            toast({
+              title: "Endereço não encontrado",
+              description: "Não foi possível encontrar um endereço para esta localização. Você pode inserir manualmente.",
+              variant: "destructive",
+            });
+          }
+        } else {
+          toast({
+            title: "Erro ao obter endereço",
+            description: "Não foi possível obter o endereço da localização. Você pode inserir manualmente.",
+            variant: "destructive",
+          });
+        }
+      } catch (error) {
+        console.error('Reverse geocoding error:', error);
+        toast({
+          title: "Erro ao obter endereço",
+          description: "Não foi possível obter o endereço da localização. Você pode inserir manualmente.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
