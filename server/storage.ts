@@ -169,8 +169,15 @@ export interface IStorage {
 export class DatabaseStorage implements IStorage {
   // User operations (IMPORTANT) these user operations are mandatory for Replit Auth.
   async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    console.log(`[STORAGE DEBUG] Searching for user with ID: ${id}`);
+    try {
+      const [user] = await db.select().from(users).where(eq(users.id, id));
+      console.log(`[STORAGE DEBUG] Query result:`, user);
+      return user;
+    } catch (error) {
+      console.error(`[STORAGE DEBUG] Error in getUser:`, error);
+      throw error;
+    }
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {

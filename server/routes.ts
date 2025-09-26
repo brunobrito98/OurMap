@@ -927,6 +927,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get user by ID for chat functionality (using specific route to avoid conflicts)
+  app.get('/api/users/id/:userId', async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      console.log(`[DEBUG] Searching for user with ID: ${userId}`);
+      const user = await storage.getUser(userId);
+      console.log(`[DEBUG] User found:`, user);
+      
+      if (!user) {
+        console.log(`[DEBUG] User not found in database for ID: ${userId}`);
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Return sanitized user data
+      const response = {
+        id: user.id,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        profileImageUrl: user.profileImageUrl
+      };
+      
+      console.log(`[DEBUG] Returning user data:`, response);
+      res.json(response);
+    } catch (error) {
+      console.error("Error fetching user by ID:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // User profile route with conditional visibility
   app.get('/api/users/:username', async (req: any, res) => {
     try {
@@ -959,33 +989,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching user profile:", error);
       res.status(500).json({ message: "Erro interno do servidor" });
-    }
-  });
-
-  // Get user by ID for chat functionality
-  app.get('/api/users/:id', async (req: any, res) => {
-    try {
-      const { id } = req.params;
-      
-      const user = await storage.getUser(id);
-      
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      // Return sanitized user data
-      const response = {
-        id: user.id,
-        username: user.username,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        profileImageUrl: user.profileImageUrl
-      };
-      
-      res.json(response);
-    } catch (error) {
-      console.error("Error fetching user by ID:", error);
-      res.status(500).json({ message: "Internal server error" });
     }
   });
 
@@ -1528,11 +1531,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Contribution routes for crowdfunding events - DISABLED (database columns missing)
+  // Contribution routes for crowdfunding events
   app.post('/api/events/:id/contribute', isAuthenticatedAny, async (req: any, res) => {
-    res.status(400).json({ message: "Funcionalidade de crowdfunding não disponível" });
-    return;
-    /*
     try {
       const eventId = req.params.id;
       const userId = getUserId(req);
@@ -1558,9 +1558,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Evento não encontrado" });
       }
 
-      // Crowdfunding features disabled as database columns don't exist
-      return res.status(400).json({ message: "Funcionalidade de crowdfunding não disponível" });
-      /*
       if (event.priceType !== 'crowdfunding') {
         return res.status(400).json({ message: "Este evento não aceita contribuições" });
       }
@@ -1571,9 +1568,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: `Valor mínimo para contribuição é R$ ${event.minimumContribution}` 
         });
       }
-      */
 
-      /* 
       // Create contribution
       const contribution = await storage.createContribution({
         eventId,
@@ -1593,8 +1588,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (event.creatorId !== userId) {
         const user = await storage.getUser(userId);
         if (user) {
-      */
-      /*
           await createNotificationIfEnabled(
             event.creatorId,
             'notificarConfirmacaoPresenca',
@@ -1614,17 +1607,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Contribuição realizada com sucesso!",
         contribution 
       });
-      */
-    /*} catch (error) {
+    } catch (error) {
       console.error("Error creating contribution:", error);
       res.status(500).json({ message: "Falha ao processar contribuição" });
-    }*/
+    }
   });
 
   app.get('/api/events/:id/contributions', async (req, res) => {
-    res.status(400).json({ message: "Funcionalidade de crowdfunding não disponível" });
-    return;
-    /*
     try {
       const eventId = req.params.id;
       const contributions = await storage.getEventContributions(eventId);
@@ -1644,13 +1633,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error fetching contributions:", error);
       res.status(500).json({ message: "Falha ao buscar contribuições" });
     }
-    */
   });
 
   app.get('/api/events/:id/total-raised', async (req, res) => {
-    res.status(400).json({ message: "Funcionalidade de crowdfunding não disponível" });
-    return;
-    /*
     try {
       const eventId = req.params.id;
       const totals = await storage.getEventTotalRaised(eventId);
@@ -1659,7 +1644,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error fetching total raised:", error);
       res.status(500).json({ message: "Falha ao buscar total arrecadado" });
     }
-    */
   });
 
   // Friend routes
