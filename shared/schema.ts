@@ -642,3 +642,7 @@ export type NotificationWithDetails = Notification & {
     imageUrl: string | null;
   };
 };
+
+export type MessageWithSender = Message & {
+  sender: UserSanitized;
+};

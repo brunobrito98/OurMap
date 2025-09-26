@@ -36,6 +36,7 @@ import {
   type NotificationConfig,
   type Conversation,
   type Message,
+  type MessageWithSender,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, desc, asc, count, avg, sql, like, isNull, isNotNull, gte, lte, inArray, ne, max } from "drizzle-orm";
@@ -163,7 +164,7 @@ export interface IStorage {
   createMessage(conversationId: string, senderId: string, content: string): Promise<Message>;
   markMessagesAsRead(messageIds: string[], userId: string): Promise<void>;
   getConversations(userId: string): Promise<(Conversation & { otherUser: User, unreadCount: number, lastMessage?: Message })[]>;
-  getMessages(conversationId: string, userId: string, limit?: number, offset?: number): Promise<Message[]>;
+  getMessages(conversationId: string, userId: string, limit?: number, offset?: number): Promise<MessageWithSender[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2149,7 +2150,7 @@ export class DatabaseStorage implements IStorage {
     return results;
   }
 
-  async getMessages(conversationId: string, userId: string, limit: number = 50, offset: number = 0): Promise<Message[]> {
+  async getMessages(conversationId: string, userId: string, limit: number = 50, offset: number = 0): Promise<MessageWithSender[]> {
     // Verify user has access to this conversation
     const [conversation] = await db
       .select()
@@ -2167,8 +2168,28 @@ export class DatabaseStorage implements IStorage {
     }
     
     const messageList = await db
-      .select()
+      .select({
+        id: messages.id,
+        conversationId: messages.conversationId,
+        senderId: messages.senderId,
+        content: messages.content,
+        readAt: messages.readAt,
+        createdAt: messages.createdAt,
+        updatedAt: messages.updatedAt,
+        sender: {
+          id: users.id,
+          username: users.username,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          profileImageUrl: users.profileImageUrl,
+          authType: users.authType,
+          role: users.role,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt
+        }
+      })
       .from(messages)
+      .innerJoin(users, eq(messages.senderId, users.id))
       .where(eq(messages.conversationId, conversationId))
       .orderBy(desc(messages.createdAt))
       .limit(limit)
