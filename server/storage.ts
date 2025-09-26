@@ -169,13 +169,11 @@ export interface IStorage {
 export class DatabaseStorage implements IStorage {
   // User operations (IMPORTANT) these user operations are mandatory for Replit Auth.
   async getUser(id: string): Promise<User | undefined> {
-    console.log(`[STORAGE DEBUG] Searching for user with ID: ${id}`);
     try {
       const [user] = await db.select().from(users).where(eq(users.id, id));
-      console.log(`[STORAGE DEBUG] Query result:`, user);
       return user;
     } catch (error) {
-      console.error(`[STORAGE DEBUG] Error in getUser:`, error);
+      console.error(`[STORAGE] Error in getUser:`, error);
       throw error;
     }
   }
@@ -247,6 +245,7 @@ export class DatabaseStorage implements IStorage {
         description: event.description,
         category: event.category,
         dateTime: new Date(event.dateTime),
+        endTime: event.endTime ? new Date(event.endTime) : undefined,
         location: event.location,
         creatorId: organizerId,
         latitude: coordinates.lat.toString(),
@@ -645,6 +644,7 @@ export class DatabaseStorage implements IStorage {
       ...event, 
       updatedAt: new Date(),
       ...(event.dateTime && { dateTime: new Date(event.dateTime) }),
+      ...(event.endTime !== undefined && { endTime: event.endTime ? new Date(event.endTime) : null }),
       ...(event.recurrenceEndDate && { recurrenceEndDate: new Date(event.recurrenceEndDate) }),
     };
     if (coordinates) {
@@ -1174,13 +1174,26 @@ export class DatabaseStorage implements IStorage {
 
 
     // Add condition for ended events (events that have already occurred)
-    conditions.push(lte(events.dateTime, new Date()));
+    // Use endTime if available, otherwise use dateTime
+    const now = new Date();
+    conditions.push(
+      or(
+        and(isNotNull(events.endTime), lte(events.endTime, now)),
+        and(isNull(events.endTime), lte(events.dateTime, now))
+      )
+    );
 
     // Add date range filter if daysBack is specified
+    // Use endTime if available, otherwise use dateTime for the range check
     if (daysBack && daysBack > 0) {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - daysBack);
-      conditions.push(gte(events.dateTime, cutoffDate));
+      conditions.push(
+        or(
+          and(isNotNull(events.endTime), gte(events.endTime, cutoffDate)),
+          and(isNull(events.endTime), gte(events.dateTime, cutoffDate))
+        )
+      );
     }
 
     // Add city filter if specified
