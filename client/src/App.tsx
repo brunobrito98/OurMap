@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/useAuth";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import { WebSocketProvider } from "@/hooks/useGlobalWebSocket";
 import Landing from "@/pages/Landing";
 import Home from "@/pages/Home";
 import EventDetails from "@/pages/EventDetails";
@@ -141,10 +142,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <div className="app-container bg-background text-foreground">
-          <Toaster />
-          <Router />
-        </div>
+        <WebSocketProvider>
+          <div className="app-container bg-background text-foreground">
+            <Toaster />
+            <Router />
+          </div>
+        </WebSocketProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

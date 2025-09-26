@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useGlobalWebSocket } from "@/hooks/useGlobalWebSocket";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Message, User } from "@shared/schema";
 import { ArrowLeft, Send, Search, MessageSquare, Users } from "lucide-react";
@@ -41,9 +42,9 @@ export default function ChatConversation() {
   
   const { user: authUser } = useAuth();
   const { toast } = useToast();
+  const { ws, sendMessage } = useGlobalWebSocket();
   
   const [messageText, setMessageText] = useState("");
-  const [ws, setWs] = useState<WebSocket | null>(null);
   const [otherParticipantId, setOtherParticipantId] = useState<string | null>(otherParticipantIdFromQuery);
   const [searchQuery, setSearchQuery] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -166,110 +167,6 @@ export default function ChatConversation() {
     },
   });
 
-  // Setup WebSocket connection
-  useEffect(() => {
-    if (!authUser) return;
-
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/ws`;
-    
-    const websocket = new WebSocket(wsUrl);
-    
-    websocket.onopen = () => {
-      console.log('WebSocket connected');
-      setWs(websocket);
-    };
-
-    websocket.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        
-        switch (data.type) {
-          case 'new_message':
-            // Replace optimistic message or add new message
-            queryClient.setQueryData(
-              ['/api/conversations', conversationId, 'messages'],
-              (oldMessages: MessageWithSender[] = []) => {
-                // Remove any optimistic messages from the same sender
-                const filtered = oldMessages.filter(msg => !msg.id.startsWith('temp-'));
-                return [...filtered, data.message];
-              }
-            );
-            
-            // Invalidate conversations list to update last message and unread badges
-            queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
-            
-            // Mark as read if it's from the other participant
-            if (data.message?.senderId === otherParticipantId && data.message?.id) {
-              markAsReadMutation.mutate([data.message.id]);
-            }
-            break;
-            
-          case 'messages_marked_read':
-            // Update message read status
-            queryClient.setQueryData(
-              ['/api/conversations', conversationId, 'messages'],
-              (oldMessages: MessageWithSender[] = []) =>
-                oldMessages.map(msg => 
-                  data.messageIds.includes(msg.id) 
-                    ? { ...msg, readAt: new Date().toISOString() }
-                    : msg
-                )
-            );
-            break;
-            
-          case 'new_notification':
-            // Handle real-time notification updates
-            console.log('New notification received:', data.notification);
-            
-            // Invalidate notifications query to refresh the list
-            queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
-            
-            // Invalidate notification count to update the badge
-            queryClient.invalidateQueries({ queryKey: ['/api/notifications/unread-count'] });
-            
-            // Show a toast notification for immediate feedback
-            if (data.notification?.type === 'chat_message') {
-              toast({
-                title: data.notification.title,
-                description: data.notification.message,
-                duration: 3000,
-              });
-            }
-            break;
-            
-          case 'error':
-            toast({
-              title: "Erro de conexão",
-              description: data.message,
-              variant: "destructive",
-            });
-            break;
-        }
-      } catch (error) {
-        console.error('Error parsing WebSocket message:', error);
-      }
-    };
-
-    websocket.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      toast({
-        title: "Erro de conexão",
-        description: "Problema com a conexão em tempo real",
-        variant: "destructive",
-      });
-    };
-
-    websocket.onclose = () => {
-      console.log('WebSocket disconnected');
-      setWs(null);
-    };
-
-    return () => {
-      websocket.close();
-    };
-  }, [authUser, conversationId, otherParticipantId]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -324,12 +221,12 @@ export default function ChatConversation() {
       // Invalidate conversations list to update last message
       queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
       
-      // Send via WebSocket
-      ws.send(JSON.stringify({
+      // Send via WebSocket using global sendMessage
+      sendMessage({
         type: 'chat_message',
         recipientId: otherParticipantId,
         content,
-      }));
+      });
       setMessageText("");
     } else {
       // Fallback to HTTP request
