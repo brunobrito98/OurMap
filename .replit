@@ -16,46 +16,6 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 43923
-externalPort = 3000
-
-[[ports]]
-
-
-localPort = 40689
-externalPort = 6000
-
-[[ports]]
-
-
-localPort = 41089
-
-
-localPort = 40689
-
-
-externalPort = 6000
-
-[[ports]]
-
-localPort = 44043
-externalPort = 3000
-
-[[ports]]
-
-localPort = 43945
-externalPort = 3002
-
-[[ports]]
-
-
-localPort = 44067
-externalPort = 3000
-
-
-[[ports]]
-
-
 localPort = 44191
 externalPort = 3003
 
@@ -75,17 +35,15 @@ externalPort = 5000
 localPort = 46127
 externalPort = 4200
 
+[[ports]]
+localPort = 46563
+externalPort = 3000
+
 [env]
 PORT = "5000"
 
 [agent]
-integrations = [
-  "javascript_log_in_with_replit:1.0.0",
-  "javascript_database:1.0.0",
-  "javascript_supabase:1.0.0",
-  "javascript_auth_all_persistance:1.0.0",
-  "javascript_websocket:1.0.0",
-]
+integrations = ["javascript_log_in_with_replit:1.0.0", "javascript_database:1.0.0", "javascript_supabase:1.0.0", "javascript_auth_all_persistance:1.0.0", "javascript_websocket:1.0.0"]
 expertMode = true
 
 [workflows]
@@ -104,10 +62,10 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
-[workflows.workflow.metadata]
-outputType = "webview"
-
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "npm run dev"
 waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
