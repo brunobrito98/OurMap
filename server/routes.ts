@@ -227,7 +227,7 @@ async function notifyFriendsAboutEvent(creatorId: string, eventId: string, event
             message: `${creator.firstName || 'Um amigo'} te convidou para um evento privado: "${eventTitle}"`,
             relatedUserId: creatorId,
             relatedEventId: eventId,
-            actionUrl: `/events/${eventId}`
+            actionUrl: `/event/${eventId}`
           }
         );
       }
@@ -244,7 +244,7 @@ async function notifyFriendsAboutEvent(creatorId: string, eventId: string, event
             message: `${creator.firstName || 'Um amigo'} criou um novo evento: "${eventTitle}"`,
             relatedUserId: creatorId,
             relatedEventId: eventId,
-            actionUrl: `/events/${eventId}`
+            actionUrl: `/event/${eventId}`
           }
         );
       }
@@ -409,6 +409,14 @@ async function searchLocalPlaces(
 
 // Auth middleware
 function isAuthenticatedAny(req: any, res: any, next: any) {
+  console.log('isAuthenticatedAny check:', {
+    hasIsAuthenticated: !!req.isAuthenticated,
+    isAuthenticated: req.isAuthenticated ? req.isAuthenticated() : false,
+    hasUser: !!req.user,
+    userId: req.user?.id,
+    sessionId: req.sessionID
+  });
+  
   if (req.isAuthenticated && req.isAuthenticated()) {
     return next();
   }
@@ -440,8 +448,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax', // CSRF protection
+      secure: true, // Required for HTTPS and sameSite: 'none'
+      sameSite: 'none', // Required for iframe/proxy environment
       maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
     },
   });
@@ -927,7 +935,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get user by ID for chat functionality (using specific route to avoid conflicts)
+  app.get('/api/users/id/:userId', async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      console.log(`[DEBUG] Searching for user with ID: ${userId}`);
+      const user = await storage.getUser(userId);
+      console.log(`[DEBUG] User found:`, user);
+      
+      if (!user) {
+        console.log(`[DEBUG] User not found in database for ID: ${userId}`);
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Return sanitized user data
+      const response = {
+        id: user.id,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        profileImageUrl: user.profileImageUrl
+      };
+      
+      console.log(`[DEBUG] Returning user data:`, response);
+      res.json(response);
+    } catch (error) {
+      console.error("Error fetching user by ID:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // User profile route with conditional visibility
+  // Get user by ID for chat functionality - specific route to avoid username conflicts
+  app.get('/api/users/by-id/:id', async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      const user = await storage.getUser(id);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Return sanitized user data
+      const response = {
+        id: user.id,
+        username: user.username,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        profileImageUrl: user.profileImageUrl
+      };
+      
+      res.json(response);
+    } catch (error) {
+      console.error("Error fetching user by ID:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get user profile by username - for public profile access
   app.get('/api/users/:username', async (req: any, res) => {
     try {
       const { username } = req.params;
@@ -959,33 +1025,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching user profile:", error);
       res.status(500).json({ message: "Erro interno do servidor" });
-    }
-  });
-
-  // Get user by ID for chat functionality
-  app.get('/api/users/:id', async (req: any, res) => {
-    try {
-      const { id } = req.params;
-      
-      const user = await storage.getUser(id);
-      
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      // Return sanitized user data
-      const response = {
-        id: user.id,
-        username: user.username,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        profileImageUrl: user.profileImageUrl
-      };
-      
-      res.json(response);
-    } catch (error) {
-      console.error("Error fetching user by ID:", error);
-      res.status(500).json({ message: "Internal server error" });
     }
   });
 
@@ -1124,7 +1163,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate content for offensive language
       const contentValidation = validateEventContent({
         title: eventData.title,
-        description: eventData.description,
+        description: eventData.description || '',
         location: eventData.location
       });
       
@@ -1258,7 +1297,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   message: `Você foi convidado para o evento "${event.title}"`,
                   relatedUserId: userId,
                   relatedEventId: event.id,
-                  actionUrl: `/events/${event.id}`,
+                  actionUrl: `/event/${event.id}`,
                 });
               }
             }
@@ -1336,7 +1375,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate content for offensive language
       const contentValidation = validateEventContent({
         title: eventData.title,
-        description: eventData.description,
+        description: eventData.description || '',
         location: eventData.location
       });
 
@@ -1467,7 +1506,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 message: `${user.firstName || 'Alguém'} confirmou presença no seu evento "${event.title}"`,
                 relatedUserId: userId,
                 relatedEventId: eventId,
-                actionUrl: `/events/${eventId}`
+                actionUrl: `/event/${eventId}`
               }
             );
           }
@@ -1492,7 +1531,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 message: `${user.firstName || 'Alguém'} cancelou a presença no seu evento "${event.title}"`,
                 relatedUserId: userId,
                 relatedEventId: eventId,
-                actionUrl: `/events/${eventId}`
+                actionUrl: `/event/${eventId}`
               }
             );
           }
@@ -1528,11 +1567,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Contribution routes for crowdfunding events - DISABLED (database columns missing)
+  // Contribution routes for crowdfunding events
   app.post('/api/events/:id/contribute', isAuthenticatedAny, async (req: any, res) => {
-    res.status(400).json({ message: "Funcionalidade de crowdfunding não disponível" });
-    return;
-    /*
     try {
       const eventId = req.params.id;
       const userId = getUserId(req);
@@ -1558,9 +1594,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Evento não encontrado" });
       }
 
-      // Crowdfunding features disabled as database columns don't exist
-      return res.status(400).json({ message: "Funcionalidade de crowdfunding não disponível" });
-      /*
       if (event.priceType !== 'crowdfunding') {
         return res.status(400).json({ message: "Este evento não aceita contribuições" });
       }
@@ -1571,9 +1604,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: `Valor mínimo para contribuição é R$ ${event.minimumContribution}` 
         });
       }
-      */
 
-      /* 
       // Create contribution
       const contribution = await storage.createContribution({
         eventId,
@@ -1593,8 +1624,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (event.creatorId !== userId) {
         const user = await storage.getUser(userId);
         if (user) {
-      */
-      /*
           await createNotificationIfEnabled(
             event.creatorId,
             'notificarConfirmacaoPresenca',
@@ -1604,7 +1633,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               message: `${user.firstName || 'Alguém'} contribuiu R$ ${amount.toFixed(2)} para "${event.title}"`,
               relatedUserId: userId,
               relatedEventId: eventId,
-              actionUrl: `/events/${eventId}`
+              actionUrl: `/event/${eventId}`
             }
           );
         }
@@ -1614,17 +1643,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Contribuição realizada com sucesso!",
         contribution 
       });
-      */
-    /*} catch (error) {
+    } catch (error) {
       console.error("Error creating contribution:", error);
       res.status(500).json({ message: "Falha ao processar contribuição" });
-    }*/
+    }
   });
 
   app.get('/api/events/:id/contributions', async (req, res) => {
-    res.status(400).json({ message: "Funcionalidade de crowdfunding não disponível" });
-    return;
-    /*
     try {
       const eventId = req.params.id;
       const contributions = await storage.getEventContributions(eventId);
@@ -1644,13 +1669,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error fetching contributions:", error);
       res.status(500).json({ message: "Falha ao buscar contribuições" });
     }
-    */
   });
 
   app.get('/api/events/:id/total-raised', async (req, res) => {
-    res.status(400).json({ message: "Funcionalidade de crowdfunding não disponível" });
-    return;
-    /*
     try {
       const eventId = req.params.id;
       const totals = await storage.getEventTotalRaised(eventId);
@@ -1659,7 +1680,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error fetching total raised:", error);
       res.status(500).json({ message: "Falha ao buscar total arrecadado" });
     }
-    */
   });
 
   // Friend routes
@@ -1850,7 +1870,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               message: `${user.firstName || 'Alguém'} avaliou seu evento "${event.title}"`,
               relatedUserId: userId,
               relatedEventId: eventId,
-              actionUrl: `/events/${eventId}`
+              actionUrl: `/event/${eventId}`
             }
           );
         }
@@ -2117,7 +2137,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Search ended events endpoint
   app.get('/api/search/ended-events', async (req, res) => {
     try {
-      const { cityName, daysBack, searchQuery } = req.query;
+      const { cityName, daysBack, searchQuery, lat, lng } = req.query;
       
       // Parse daysBack to number if provided
       const daysBackNumber = daysBack && typeof daysBack === 'string' ? parseInt(daysBack, 10) : undefined;
@@ -2125,12 +2145,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid daysBack parameter" });
       }
       
+      // Parse coordinates if provided
+      let userCoordinates: { lat: number; lng: number } | undefined = undefined;
+      if (lat && lng) {
+        const parsedLat = parseFloat(lat as string);
+        const parsedLng = parseFloat(lng as string);
+        if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
+          userCoordinates = { lat: parsedLat, lng: parsedLng };
+        }
+      }
+      
       const userId = getUserId(req);
       const events = await storage.searchEndedEvents(
-        cityName as string || undefined,
+        (cityName as string) || undefined,
         daysBackNumber,
         searchQuery as string || undefined,
-        userId
+        userId,
+        userCoordinates
       );
       
       // Sanitize events to remove shareableLink for non-creators
@@ -2211,28 +2242,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch('/api/notifications/preferences', isAuthenticatedAny, async (req: any, res) => {
     try {
-      const userId = req.user.id;
-      const result = notificationConfigSchema.safeParse(req.body);
-      
-      if (!result.success) {
-        return res.status(400).json({ message: "Invalid notification config", errors: result.error.errors });
-      }
-      
-      const { chave, valor } = result.data;
-      const success = await storage.updateNotificationPreference(userId, chave, valor);
-      
-      if (success) {
-        res.json({ message: "Notification preference updated successfully" });
-      } else {
-        res.status(500).json({ message: "Failed to update notification preference" });
-      }
+      // Notification preferences are currently disabled as columns don't exist in current DB
+      res.json({ message: "Notification preferences feature is currently disabled" });
     } catch (error) {
       console.error("Error updating notification preference:", error);
       res.status(500).json({ message: "Failed to update notification preference" });
     }
   });
 
-  // Private events routes
+  // Event invites routes - works for both public and private events
   app.post('/api/events/:id/invite', isAuthenticatedAny, async (req: any, res) => {
     try {
       const userId = getUserId(req);
@@ -2252,10 +2270,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const event = await storage.getEvent(eventId, userId);
       if (!event || event.creatorId !== userId) {
         return res.status(403).json({ message: "Not authorized to invite to this event" });
-      }
-      
-      if (!event.isPrivate) {
-        return res.status(400).json({ message: "This event is not private" });
       }
       
       // Validate that all friendIds are actual friends
@@ -2278,6 +2292,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Send invitations
       await storage.inviteFriendsToEvent(eventId, validFriendIds);
+      
+      // Send notifications to invited friends
+      for (const friendId of validFriendIds) {
+        await storage.createNotification({
+          userId: friendId,
+          type: 'event_invite',
+          title: 'Novo convite para evento!',
+          message: `Você foi convidado para o evento "${event.title}".`,
+          relatedEventId: event.id,
+          relatedUserId: userId,
+          actionUrl: `/event/${event.id}`
+        });
+      }
       
       res.json({ 
         message: `Invited ${validFriendIds.length} friends to the event`,
@@ -2326,9 +2353,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Response must be 'accepted' or 'declined'" });
       }
       
-      // TODO: Implement invite response logic in storage
-      // For now, return a placeholder response
-      res.json({ message: "Invite response recorded" });
+      // Respond to the invite
+      const updatedInvite = await storage.respondToEventInvite(inviteId, userId, response);
+      
+      if (!updatedInvite) {
+        return res.status(404).json({ message: "Invite not found or already responded to" });
+      }
+      
+      // Get event details for notification
+      const invite = await storage.getEventInviteWithDetails(inviteId, userId);
+      if (invite && response === 'accepted') {
+        // Notify the event organizer about the acceptance
+        await storage.createNotification({
+          userId: invite.event.creatorId,
+          type: 'event_attendance',
+          title: 'Convite aceito!',
+          message: `Alguém aceitou o convite para "${invite.event.title}".`,
+          relatedEventId: invite.event.id,
+          actionUrl: `/event/${invite.event.id}`
+        });
+      }
+      
+      res.json({ 
+        message: response === 'accepted' ? "Invite accepted successfully" : "Invite declined successfully",
+        invite: updatedInvite 
+      });
     } catch (error) {
       console.error("Error responding to invite:", error);
       res.status(500).json({ message: "Failed to respond to invite" });
@@ -2545,7 +2594,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               messageIds: z.array(z.string().uuid()).min(1).max(50) // Limit array size
             });
             
-            const markReadValidation = markReadSchema.safeParse(rawMessage);
+            const markReadValidation = markReadSchema.safeParse(message);
             if (!markReadValidation.success) {
               ws.send(JSON.stringify({ 
                 type: 'error', 
@@ -2605,7 +2654,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Chat API routes
   app.get("/api/conversations", isAuthenticatedLocal, async (req, res) => {
     try {
-      const userId = req.user!.id;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
       const conversations = await storage.getConversations(userId);
       
       // Map otherUser to otherParticipant for frontend compatibility
@@ -2623,7 +2675,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/conversations/:conversationId/messages", isAuthenticatedLocal, async (req, res) => {
     try {
-      const userId = req.user!.id;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
       const { conversationId } = req.params;
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
@@ -2647,7 +2702,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/conversations/:conversationId/messages/read", isAuthenticatedLocal, async (req, res) => {
     try {
-      const userId = req.user!.id;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
       const { conversationId } = req.params;
       
       // Validate request body
@@ -2681,7 +2739,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/conversations", isAuthenticatedLocal, async (req, res) => {
     try {
-      const userId = req.user!.id;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({ message: "User ID not found" });
+      }
       const { friendId } = req.body;
       
       if (!friendId) {

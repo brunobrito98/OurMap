@@ -36,6 +36,7 @@ import {
   type NotificationConfig,
   type Conversation,
   type Message,
+  type MessageWithSender,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, desc, asc, count, avg, sql, like, isNull, isNotNull, gte, lte, inArray, ne, max } from "drizzle-orm";
@@ -163,14 +164,19 @@ export interface IStorage {
   createMessage(conversationId: string, senderId: string, content: string): Promise<Message>;
   markMessagesAsRead(messageIds: string[], userId: string): Promise<void>;
   getConversations(userId: string): Promise<(Conversation & { otherUser: User, unreadCount: number, lastMessage?: Message })[]>;
-  getMessages(conversationId: string, userId: string, limit?: number, offset?: number): Promise<Message[]>;
+  getMessages(conversationId: string, userId: string, limit?: number, offset?: number): Promise<MessageWithSender[]>;
 }
 
 export class DatabaseStorage implements IStorage {
   // User operations (IMPORTANT) these user operations are mandatory for Replit Auth.
   async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    try {
+      const [user] = await db.select().from(users).where(eq(users.id, id));
+      return user;
+    } catch (error) {
+      console.error(`[STORAGE] Error in getUser:`, error);
+      throw error;
+    }
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
@@ -240,6 +246,7 @@ export class DatabaseStorage implements IStorage {
         description: event.description,
         category: event.category,
         dateTime: new Date(event.dateTime),
+        endTime: event.endTime ? new Date(event.endTime) : undefined,
         location: event.location,
         creatorId: organizerId,
         latitude: coordinates.lat.toString(),
@@ -638,6 +645,7 @@ export class DatabaseStorage implements IStorage {
       ...event, 
       updatedAt: new Date(),
       ...(event.dateTime && { dateTime: new Date(event.dateTime) }),
+      ...(event.endTime !== undefined && { endTime: event.endTime ? new Date(event.endTime) : null }),
       ...(event.recurrenceEndDate && { recurrenceEndDate: new Date(event.recurrenceEndDate) }),
     };
     if (coordinates) {
@@ -1161,25 +1169,69 @@ export class DatabaseStorage implements IStorage {
     cityName?: string,
     daysBack?: number,
     searchQuery?: string,
-    userId?: string
+    userId?: string,
+    userCoordinates?: { lat: number; lng: number }
   ): Promise<EventWithDetails[]> {
     const conditions = [];
 
 
     // Add condition for ended events (events that have already occurred)
-    conditions.push(lte(events.dateTime, new Date()));
+    // Use endTime if available, otherwise use dateTime
+    const now = new Date();
+    conditions.push(
+      or(
+        and(isNotNull(events.endTime), lte(events.endTime, now)),
+        and(isNull(events.endTime), lte(events.dateTime, now))
+      )
+    );
 
     // Add date range filter if daysBack is specified
+    // Use endTime if available, otherwise use dateTime for the range check
     if (daysBack && daysBack > 0) {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - daysBack);
-      conditions.push(gte(events.dateTime, cutoffDate));
+      conditions.push(
+        or(
+          and(isNotNull(events.endTime), gte(events.endTime, cutoffDate)),
+          and(isNull(events.endTime), gte(events.dateTime, cutoffDate))
+        )
+      );
     }
 
-    // Add city filter if specified
+    // Add city filter if specified - use both string matching and coordinate-based filtering
     if (cityName && cityName.trim() !== '') {
       const citySearchTerm = `%${cityName.trim()}%`;
-      conditions.push(like(events.location, citySearchTerm));
+      
+      if (userCoordinates) {
+        // Use coordinate-based approach: events within 30km radius are likely same city
+        const radiusKm = 30;
+        
+        // Simplified distance calculation using PostgreSQL's built-in functions
+        // This calculates distance between two points on Earth using the spherical law of cosines
+        const distanceCalculation = sql`
+          6371 * ACOS(
+            LEAST(1.0, 
+              COS(RADIANS(${userCoordinates.lat})) 
+              * COS(RADIANS(${events.latitude}::float)) 
+              * COS(RADIANS(${events.longitude}::float) - RADIANS(${userCoordinates.lng})) 
+              + SIN(RADIANS(${userCoordinates.lat})) 
+              * SIN(RADIANS(${events.latitude}::float))
+            )
+          )
+        `;
+        
+        
+        // Filter by either city name match OR within radius
+        conditions.push(
+          or(
+            like(events.location, citySearchTerm),
+            lte(distanceCalculation, radiusKm)
+          )
+        );
+      } else {
+        // Fallback to string matching if no coordinates provided
+        conditions.push(like(events.location, citySearchTerm));
+      }
     }
 
     // Add search query filter if specified
@@ -1246,6 +1298,7 @@ export class DatabaseStorage implements IStorage {
         // Order by dateTime - most recent first
         desc(events.dateTime)
       );
+
 
 
     // Enhance with attendance counts
@@ -1820,15 +1873,84 @@ export class DatabaseStorage implements IStorage {
     return results;
   }
 
-  async getUserEventInvites(userId: string): Promise<EventInvite[]> {
+  async getUserEventInvites(userId: string): Promise<(EventInvite & { event: Event })[]> {
     const results = await db
-      .select()
+      .select({
+        invite: eventInvites,
+        event: events
+      })
       .from(eventInvites)
+      .innerJoin(events, eq(eventInvites.eventId, events.id))
       .where(and(
         eq(eventInvites.userId, userId),
         eq(eventInvites.status, 'pending')
+      ))
+      .orderBy(desc(eventInvites.createdAt));
+    
+    return results.map(result => ({
+      ...result.invite,
+      event: result.event
+    }));
+  }
+
+  async respondToEventInvite(inviteId: string, userId: string, response: 'accepted' | 'declined'): Promise<EventInvite | null> {
+    // First verify that the invite exists and belongs to the user
+    const [invite] = await db
+      .select()
+      .from(eventInvites)
+      .where(and(
+        eq(eventInvites.id, inviteId),
+        eq(eventInvites.userId, userId),
+        eq(eventInvites.status, 'pending')
       ));
-    return results;
+
+    if (!invite) {
+      return null;
+    }
+
+    // Update the invite status
+    const [updatedInvite] = await db
+      .update(eventInvites)
+      .set({ status: response })
+      .where(eq(eventInvites.id, inviteId))
+      .returning();
+
+    // If accepted, also add user as attendee to the event
+    if (response === 'accepted') {
+      await db
+        .insert(eventAttendees)
+        .values({
+          eventId: invite.eventId,
+          userId: userId,
+          status: 'attending'
+        })
+        .onConflictDoNothing(); // In case they're already attending
+    }
+
+    return updatedInvite;
+  }
+
+  async getEventInviteWithDetails(inviteId: string, userId: string): Promise<(EventInvite & { event: Event }) | null> {
+    const [result] = await db
+      .select({
+        invite: eventInvites,
+        event: events
+      })
+      .from(eventInvites)
+      .innerJoin(events, eq(eventInvites.eventId, events.id))
+      .where(and(
+        eq(eventInvites.id, inviteId),
+        eq(eventInvites.userId, userId)
+      ));
+
+    if (!result) {
+      return null;
+    }
+
+    return {
+      ...result.invite,
+      event: result.event
+    };
   }
 
   async getEventByShareableLink(shareableLink: string): Promise<Event | undefined> {
@@ -2028,7 +2150,7 @@ export class DatabaseStorage implements IStorage {
     return results;
   }
 
-  async getMessages(conversationId: string, userId: string, limit: number = 50, offset: number = 0): Promise<Message[]> {
+  async getMessages(conversationId: string, userId: string, limit: number = 50, offset: number = 0): Promise<MessageWithSender[]> {
     // Verify user has access to this conversation
     const [conversation] = await db
       .select()
@@ -2046,8 +2168,28 @@ export class DatabaseStorage implements IStorage {
     }
     
     const messageList = await db
-      .select()
+      .select({
+        id: messages.id,
+        conversationId: messages.conversationId,
+        senderId: messages.senderId,
+        content: messages.content,
+        readAt: messages.readAt,
+        createdAt: messages.createdAt,
+        updatedAt: messages.updatedAt,
+        sender: {
+          id: users.id,
+          username: users.username,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          profileImageUrl: users.profileImageUrl,
+          authType: users.authType,
+          role: users.role,
+          createdAt: users.createdAt,
+          updatedAt: users.updatedAt
+        }
+      })
       .from(messages)
+      .innerJoin(users, eq(messages.senderId, users.id))
       .where(eq(messages.conversationId, conversationId))
       .orderBy(desc(messages.createdAt))
       .limit(limit)

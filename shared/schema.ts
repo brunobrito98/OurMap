@@ -82,6 +82,7 @@ export const events = pgTable("events", {
   description: text("description"),
   category: text("category").notNull().default("outros"),
   dateTime: timestamp("date_time", { withTimezone: true }).notNull(),
+  endTime: timestamp("end_time", { withTimezone: true }),
   location: text("location").notNull(),
   latitude: numeric("latitude"),
   longitude: numeric("longitude"),
@@ -640,4 +641,8 @@ export type NotificationWithDetails = Notification & {
     title: string;
     imageUrl: string | null;
   };
+};
+
+export type MessageWithSender = Message & {
+  sender: UserSanitized;
 };

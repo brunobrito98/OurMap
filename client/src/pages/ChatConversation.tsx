@@ -5,11 +5,13 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Message, User } from "@shared/schema";
-import { ArrowLeft, Send } from "lucide-react";
+import { ArrowLeft, Send, Search, MessageSquare, Users } from "lucide-react";
 import { format, isSameDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -21,6 +23,14 @@ interface MessageWithSender extends Message {
     lastName: string;
     profileImageUrl: string | null;
   };
+}
+
+interface Friend {
+  id: string;
+  username: string;
+  firstName: string;
+  lastName: string;
+  profileImageUrl: string | null;
 }
 
 export default function ChatConversation() {
@@ -35,11 +45,16 @@ export default function ChatConversation() {
   const [messageText, setMessageText] = useState("");
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [otherParticipantId, setOtherParticipantId] = useState<string | null>(otherParticipantIdFromQuery);
+  const [searchQuery, setSearchQuery] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   // Fetch conversation details to determine other participant if not provided
-  const { data: conversation } = useQuery<any>({
+  const { data: conversation } = useQuery<{
+    id: string;
+    user1Id: string;
+    user2Id: string;
+  }>({
     queryKey: ['/api/conversations', conversationId],
     enabled: !!conversationId && !otherParticipantIdFromQuery,
   });
@@ -62,10 +77,32 @@ export default function ChatConversation() {
   });
 
   // Fetch other participant info
-  const { data: otherParticipant } = useQuery<User>({
-    queryKey: ['/api/users', otherParticipantId],
+
+  const { data: otherParticipant, isLoading: isLoadingParticipant, error: participantError } = useQuery<User>({
+    queryKey: ['/api/users/by-id', otherParticipantId],
+    queryFn: async () => {
+      const response = await fetch(`/api/users/by-id/${otherParticipantId}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch user');
+      }
+      return response.json();
+    },
     enabled: !!otherParticipantId,
+    retry: 2,
   });
+
+  // Fetch friends for conversation selection - enable when no conversationId OR when participant loading fails
+  const { data: friends = [] } = useQuery<Friend[]>({
+    queryKey: ['/api/friends'],
+    enabled: !!authUser && (!conversationId || !!participantError),
+  });
+
+  // Filter friends based on search query
+  const filteredFriends = friends.filter(friend =>
+    friend.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    friend.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    friend.username.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   // Send message mutation
   const sendMessageMutation = useMutation({
@@ -108,6 +145,24 @@ export default function ChatConversation() {
     onSuccess: () => {
       // Invalidate conversations list to update unread badges
       queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+    },
+  });
+
+  // Create new conversation mutation
+  const createConversationMutation = useMutation({
+    mutationFn: async (friendId: string) => {
+      const response = await apiRequest('/api/conversations', 'POST', { friendId });
+      return await response.json();
+    },
+    onSuccess: (conversation, friendId) => {
+      navigate(`/chat/${conversation.id}?with=${friendId}`);
+    },
+    onError: (error) => {
+      toast({
+        title: "Erro ao criar conversa",
+        description: error instanceof Error ? error.message : "Tente novamente",
+        variant: "destructive",
+      });
     },
   });
 
@@ -280,7 +335,7 @@ export default function ChatConversation() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || isLoadingParticipant) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
         <div className="flex-1 animate-pulse">
@@ -295,10 +350,163 @@ export default function ChatConversation() {
     );
   }
 
+  // Show error state for participant loading failure with retry option
+  if (conversationId && otherParticipantId && participantError) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        {/* Header */}
+        <div className="bg-white border-b border-border p-4 sticky top-0 z-30">
+          <div className="flex items-center space-x-4">
+            <Button
+              onClick={() => navigate("/chat")}
+              variant="ghost"
+              size="sm"
+              data-testid="button-back-to-chat"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <h2 className="font-semibold text-foreground flex-1">Erro ao Carregar Conversa</h2>
+          </div>
+        </div>
+
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="text-center">
+            <div className="text-muted-foreground mb-4 flex justify-center">
+              <MessageSquare className="w-16 h-16" />
+            </div>
+            <h3 className="text-lg font-medium text-foreground mb-2">
+              Erro ao carregar participante
+            </h3>
+            <p className="text-muted-foreground mb-6">
+              Não foi possível carregar os dados do participante desta conversa.
+            </p>
+            <div className="space-y-3">
+              <Button 
+                onClick={() => queryClient.invalidateQueries({ queryKey: ['/api/users', otherParticipantId] })}
+                data-testid="button-retry-participant"
+              >
+                Tentar Novamente
+              </Button>
+              <Button 
+                onClick={() => navigate("/chat")}
+                variant="outline"
+                data-testid="button-back-to-conversations"
+              >
+                Voltar às Conversas
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show friend selection interface when no conversation ID or no participant found
   if (!conversationId || !otherParticipant) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Conversa não encontrada</p>
+      <div className="min-h-screen bg-background flex flex-col">
+        {/* Header */}
+        <div className="bg-white border-b border-border p-4 sticky top-0 z-30">
+          <div className="flex items-center space-x-4">
+            <Button
+              onClick={() => navigate("/chat")}
+              variant="ghost"
+              size="sm"
+              data-testid="button-back-to-chat"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <h2 className="font-semibold text-foreground flex-1">Nova Conversa</h2>
+          </div>
+        </div>
+
+        <div className="flex-1 p-4">
+          {/* Search bar */}
+          <div className="relative mb-6">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+            <Input
+              placeholder="Buscar amigos..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+              data-testid="input-search-friends"
+            />
+          </div>
+
+          {/* Friends list */}
+          {filteredFriends.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="text-muted-foreground mb-4 flex justify-center">
+                <Users className="w-16 h-16" />
+              </div>
+              <h3 className="text-lg font-medium text-foreground mb-2">
+                {friends.length === 0 ? "Nenhum amigo ainda" : "Nenhum amigo encontrado"}
+              </h3>
+              <p className="text-muted-foreground mb-4">
+                {friends.length === 0 
+                  ? "Adicione amigos para começar a conversar!" 
+                  : "Tente buscar com um termo diferente"
+                }
+              </p>
+              {friends.length === 0 && (
+                <Button 
+                  onClick={() => navigate("/friends")}
+                  data-testid="button-go-to-friends"
+                >
+                  <Users className="w-4 h-4 mr-2" />
+                  Ver Amigos
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center space-x-2 text-sm text-muted-foreground mb-4">
+                <MessageSquare className="w-4 h-4" />
+                <span>Selecione um amigo para iniciar conversa</span>
+              </div>
+              
+              {filteredFriends.map((friend) => (
+                <Card key={friend.id} className="cursor-pointer hover:bg-gray-50 transition-colors">
+                  <CardContent className="p-4">
+                    <div 
+                      className="flex items-center space-x-3"
+                      onClick={() => createConversationMutation.mutate(friend.id)}
+                      data-testid={`button-start-chat-${friend.id}`}
+                    >
+                      <Avatar className="w-12 h-12">
+                        <AvatarImage src={friend.profileImageUrl || undefined} />
+                        <AvatarFallback>
+                          {friend.firstName?.[0]}
+                          {friend.lastName?.[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-medium text-foreground truncate" data-testid={`friend-name-${friend.id}`}>
+                          {friend.firstName} {friend.lastName}
+                        </h4>
+                        <p className="text-sm text-muted-foreground truncate" data-testid={`friend-username-${friend.id}`}>
+                          @{friend.username}
+                        </p>
+                      </div>
+                      <div className="text-muted-foreground">
+                        <MessageSquare className="w-5 h-5" />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {createConversationMutation.isPending && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 flex items-center space-x-3">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+                <span className="text-foreground">Criando conversa...</span>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -367,7 +575,7 @@ export default function ChatConversation() {
                       isOwnMessage ? 'text-primary-foreground/70' : 'text-muted-foreground'
                     }`}>
                       <span className="text-xs" data-testid={`message-time-${message.id}`}>
-                        {formatMessageDate(message.createdAt)}
+                        {formatMessageDate(message.createdAt ? message.createdAt.toString() : new Date().toISOString())}
                       </span>
                       {isOwnMessage && (
                         <span className="text-xs" data-testid={`message-read-status-${message.id}`}>

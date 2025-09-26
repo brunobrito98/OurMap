@@ -81,8 +81,8 @@ export default function MapComponent({
           transformRequest: (url, resourceType) => {
             // Handle mapbox requests properly in Replit environment
             if (!isMounted || cleanupAttempted) {
-              // Component is unmounted or cleanup started, silently cancel request
-              return null;
+              // Component is unmounted or cleanup started, return original URL
+              return { url: url };
             }
             return { url: url };
           }

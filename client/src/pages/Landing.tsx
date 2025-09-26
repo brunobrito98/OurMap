@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { PhoneInput } from "@/components/PhoneInput";
 import { type Value } from "react-phone-number-input";
-import { Megaphone, MapPin, Utensils, Plus, User, Shield, Loader2 } from "lucide-react";
+import { Megaphone, MapPin, Utensils, Plus, User, Shield, Loader2, ArrowLeft } from "lucide-react";
 
 export default function Landing() {
   const [, navigate] = useLocation();
@@ -108,7 +108,7 @@ export default function Landing() {
             </div>
             <h1 className="text-3xl font-bold">OurMap</h1>
             <p className="text-muted-foreground mt-2">
-              Descubra eventos incríveis na sua região
+              Saia do tédio e descubra encontros incríveis
             </p>
           </div>
 
@@ -138,6 +138,17 @@ export default function Landing() {
 
           {/* Authentication Form */}
           <div className="bg-white rounded-lg shadow-lg p-6">
+            {/* Botão para voltar à homepage */}
+            <div className="mb-4">
+              <button
+                onClick={() => navigate("/")}
+                className="inline-flex items-center text-sm text-muted-foreground hover:text-primary transition-colors bg-transparent border-none p-0 cursor-pointer"
+                data-testid="button-back-home"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Voltar ao início
+              </button>
+            </div>
             <div className="space-y-6">
               <form onSubmit={handleAuth} className="space-y-4">
                 {!isRegistering && (
