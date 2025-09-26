@@ -1,15 +1,15 @@
-import { useEffect, useRef, createContext, useContext, ReactNode } from 'react';
+import { useEffect, useRef, createContext, useContext, ReactNode, useState, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { queryClient } from '@/lib/queryClient';
 
 interface WebSocketContextType {
-  ws: WebSocket | null;
+  isConnected: boolean;
   sendMessage: (message: any) => void;
 }
 
 const WebSocketContext = createContext<WebSocketContextType>({
-  ws: null,
+  isConnected: false,
   sendMessage: () => {},
 });
 
@@ -23,6 +23,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const { user: authUser } = useAuth();
   const { toast } = useToast();
   const wsRef = useRef<WebSocket | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
@@ -41,6 +42,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       websocket.onopen = () => {
         console.log('Global WebSocket connected');
         wsRef.current = websocket;
+        setIsConnected(true);
         reconnectAttempts.current = 0;
       };
 
@@ -113,6 +115,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       websocket.onclose = (event) => {
         console.log('Global WebSocket disconnected:', event.code, event.reason);
         wsRef.current = null;
+        setIsConnected(false);
         
         // Only attempt to reconnect if user is still authenticated and it wasn't a manual close
         if (authUser && event.code !== 1000 && reconnectAttempts.current < maxReconnectAttempts) {
@@ -128,6 +131,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
       websocket.onerror = (error) => {
         console.error('Global WebSocket error:', error);
+        setIsConnected(false);
       };
       
     } catch (error) {
@@ -153,6 +157,7 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         wsRef.current.close(1000, 'User logged out');
         wsRef.current = null;
       }
+      setIsConnected(false);
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
@@ -171,10 +176,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     };
   }, [authUser]);
 
-  const contextValue: WebSocketContextType = {
-    ws: wsRef.current,
+  const contextValue = useMemo<WebSocketContextType>(() => ({
+    isConnected,
     sendMessage,
-  };
+  }), [isConnected]);
 
   return (
     <WebSocketContext.Provider value={contextValue}>

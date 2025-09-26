@@ -42,7 +42,7 @@ export default function ChatConversation() {
   
   const { user: authUser } = useAuth();
   const { toast } = useToast();
-  const { ws, sendMessage } = useGlobalWebSocket();
+  const { isConnected, sendMessage } = useGlobalWebSocket();
   
   const [messageText, setMessageText] = useState("");
   const [otherParticipantId, setOtherParticipantId] = useState<string | null>(otherParticipantIdFromQuery);
@@ -110,15 +110,16 @@ export default function ChatConversation() {
     mutationFn: async (content: string) => {
       if (!conversationId || !otherParticipantId) throw new Error('Missing conversation or participant ID');
       
-      return await apiRequest(`/api/conversations/${conversationId}/messages`, 'POST', {
+      const response = await apiRequest(`/api/conversations/${conversationId}/messages`, 'POST', {
         recipientId: otherParticipantId,
         content: content.trim(),
       });
+      return await response.json();
     },
     onSuccess: (newMessage) => {
       setMessageText("");
       // Update messages cache if WebSocket is not available
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
+      if (!isConnected) {
         queryClient.setQueryData(
           ['/api/conversations', conversationId, 'messages'],
           (oldMessages: MessageWithSender[] = []) => [...oldMessages, newMessage]
@@ -193,7 +194,7 @@ export default function ChatConversation() {
     const content = messageText.trim();
     if (!content) return;
     
-    if (ws && ws.readyState === WebSocket.OPEN) {
+    if (isConnected) {
       // Optimistic UI update - add message immediately
       const optimisticMessage = {
         id: `temp-${Date.now()}`,
@@ -533,7 +534,7 @@ export default function ChatConversation() {
         </div>
         <div className="flex items-center justify-between mt-2">
           <span className="text-xs text-muted-foreground">
-            {ws?.readyState === WebSocket.OPEN 
+            {isConnected 
               ? '🟢 Conectado' 
               : '🔴 Desconectado'
             }
