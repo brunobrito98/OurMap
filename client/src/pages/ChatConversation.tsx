@@ -219,6 +219,26 @@ export default function ChatConversation() {
             );
             break;
             
+          case 'new_notification':
+            // Handle real-time notification updates
+            console.log('New notification received:', data.notification);
+            
+            // Invalidate notifications query to refresh the list
+            queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
+            
+            // Invalidate notification count to update the badge
+            queryClient.invalidateQueries({ queryKey: ['/api/notifications/unread-count'] });
+            
+            // Show a toast notification for immediate feedback
+            if (data.notification?.type === 'chat_message') {
+              toast({
+                title: data.notification.title,
+                description: data.notification.message,
+                duration: 3000,
+              });
+            }
+            break;
+            
           case 'error':
             toast({
               title: "Erro de conexão",

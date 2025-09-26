@@ -2551,11 +2551,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
             let conversation = await storage.getOrCreateConversation(userId, recipientId);
             const savedMessage = await storage.createMessage(conversation.id, userId, content);
             
+            // Create notification for the recipient about the new message
+            const sender = await storage.getUser(userId);
+            if (sender) {
+              const notification = await storage.createNotification({
+                userId: recipientId,
+                type: 'chat_message',
+                title: 'Nova mensagem',
+                message: `${sender.firstName || sender.username || 'Alguém'} enviou uma mensagem: "${content.length > 50 ? content.substring(0, 50) + '...' : content}"`,
+                relatedUserId: userId,
+                actionUrl: `/chat/${conversation.id}?with=${userId}`,
+                isRead: false
+              });
+              
+              // Send real-time notification to recipient if they're online
+              const recipientConnections = connectedUsers.get(recipientId);
+              if (recipientConnections) {
+                const notificationData = {
+                  type: 'new_notification',
+                  notification: {
+                    id: notification.id,
+                    userId: notification.userId,
+                    type: notification.type,
+                    title: notification.title,
+                    message: notification.message,
+                    relatedUserId: notification.relatedUserId,
+                    actionUrl: notification.actionUrl,
+                    isRead: notification.isRead,
+                    createdAt: notification.createdAt,
+                    relatedUser: {
+                      id: sender.id,
+                      firstName: sender.firstName,
+                      lastName: sender.lastName,
+                      profileImageUrl: sender.profileImageUrl,
+                      username: sender.username
+                    }
+                  }
+                };
+                
+                recipientConnections.forEach(connection => {
+                  if (connection.readyState === WebSocket.OPEN) {
+                    connection.send(JSON.stringify(notificationData));
+                  }
+                });
+              }
+            }
+            
             // Send message to recipient if they're online (all their connections)
             const recipientConnections = connectedUsers.get(recipientId);
             if (recipientConnections) {
               const messageData = {
-                type: 'chat_message',
+                type: 'new_message',
                 message: {
                   id: savedMessage.id,
                   conversationId: savedMessage.conversationId,

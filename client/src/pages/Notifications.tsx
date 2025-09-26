@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Bell, BellOff, Check, CheckCheck, Users, Calendar, Star, UserPlus, ArrowLeft } from "lucide-react";
+import { Bell, BellOff, Check, CheckCheck, Users, Calendar, Star, UserPlus, ArrowLeft, MessageSquare } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -45,6 +45,8 @@ function getNotificationIcon(type: string) {
       return <Users className="h-5 w-5 text-purple-500" />;
     case 'event_rating':
       return <Star className="h-5 w-5 text-yellow-500" />;
+    case 'chat_message':
+      return <MessageSquare className="h-5 w-5 text-cyan-500" />;
     default:
       return <Bell className="h-5 w-5 text-gray-500" />;
   }
