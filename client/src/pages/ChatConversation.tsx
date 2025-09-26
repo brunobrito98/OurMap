@@ -575,7 +575,7 @@ export default function ChatConversation() {
                       isOwnMessage ? 'text-primary-foreground/70' : 'text-muted-foreground'
                     }`}>
                       <span className="text-xs" data-testid={`message-time-${message.id}`}>
-                        {formatMessageDate(message.createdAt || new Date().toISOString())}
+                        {formatMessageDate(message.createdAt ? message.createdAt.toString() : new Date().toISOString())}
                       </span>
                       {isOwnMessage && (
                         <span className="text-xs" data-testid={`message-read-status-${message.id}`}>
