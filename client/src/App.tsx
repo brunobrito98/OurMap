@@ -12,6 +12,7 @@ import CreateEvent from "@/pages/CreateEvent";
 import Profile from "@/pages/Profile";
 import UserProfile from "@/pages/UserProfile";
 import MyEvents from "@/pages/MyEvents";
+import EventInvites from "@/pages/EventInvites";
 import Friends from "@/pages/Friends";
 import Search from "@/pages/Search";
 import Chat from "@/pages/Chat";
@@ -65,6 +66,12 @@ function Router() {
       <Route path="/my-events">
         <ProtectedRoute>
           <MyEvents />
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/invites">
+        <ProtectedRoute>
+          <EventInvites />
         </ProtectedRoute>
       </Route>
       

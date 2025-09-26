@@ -227,7 +227,7 @@ async function notifyFriendsAboutEvent(creatorId: string, eventId: string, event
             message: `${creator.firstName || 'Um amigo'} te convidou para um evento privado: "${eventTitle}"`,
             relatedUserId: creatorId,
             relatedEventId: eventId,
-            actionUrl: `/events/${eventId}`
+            actionUrl: `/event/${eventId}`
           }
         );
       }
@@ -244,7 +244,7 @@ async function notifyFriendsAboutEvent(creatorId: string, eventId: string, event
             message: `${creator.firstName || 'Um amigo'} criou um novo evento: "${eventTitle}"`,
             relatedUserId: creatorId,
             relatedEventId: eventId,
-            actionUrl: `/events/${eventId}`
+            actionUrl: `/event/${eventId}`
           }
         );
       }
@@ -1289,7 +1289,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   message: `Você foi convidado para o evento "${event.title}"`,
                   relatedUserId: userId,
                   relatedEventId: event.id,
-                  actionUrl: `/events/${event.id}`,
+                  actionUrl: `/event/${event.id}`,
                 });
               }
             }
@@ -1498,7 +1498,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 message: `${user.firstName || 'Alguém'} confirmou presença no seu evento "${event.title}"`,
                 relatedUserId: userId,
                 relatedEventId: eventId,
-                actionUrl: `/events/${eventId}`
+                actionUrl: `/event/${eventId}`
               }
             );
           }
@@ -1523,7 +1523,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 message: `${user.firstName || 'Alguém'} cancelou a presença no seu evento "${event.title}"`,
                 relatedUserId: userId,
                 relatedEventId: eventId,
-                actionUrl: `/events/${eventId}`
+                actionUrl: `/event/${eventId}`
               }
             );
           }
@@ -1625,7 +1625,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               message: `${user.firstName || 'Alguém'} contribuiu R$ ${amount.toFixed(2)} para "${event.title}"`,
               relatedUserId: userId,
               relatedEventId: eventId,
-              actionUrl: `/events/${eventId}`
+              actionUrl: `/event/${eventId}`
             }
           );
         }
@@ -1862,7 +1862,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               message: `${user.firstName || 'Alguém'} avaliou seu evento "${event.title}"`,
               relatedUserId: userId,
               relatedEventId: eventId,
-              actionUrl: `/events/${eventId}`
+              actionUrl: `/event/${eventId}`
             }
           );
         }
@@ -2244,7 +2244,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Private events routes
+  // Event invites routes - works for both public and private events
   app.post('/api/events/:id/invite', isAuthenticatedAny, async (req: any, res) => {
     try {
       const userId = getUserId(req);
@@ -2264,10 +2264,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const event = await storage.getEvent(eventId, userId);
       if (!event || event.creatorId !== userId) {
         return res.status(403).json({ message: "Not authorized to invite to this event" });
-      }
-      
-      if (!event.isPrivate) {
-        return res.status(400).json({ message: "This event is not private" });
       }
       
       // Validate that all friendIds are actual friends
@@ -2290,6 +2286,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Send invitations
       await storage.inviteFriendsToEvent(eventId, validFriendIds);
+      
+      // Send notifications to invited friends
+      for (const friendId of validFriendIds) {
+        await storage.createNotification({
+          userId: friendId,
+          type: 'event_invite',
+          title: 'Novo convite para evento!',
+          message: `Você foi convidado para o evento "${event.title}".`,
+          relatedEventId: event.id,
+          relatedUserId: userId,
+          actionUrl: `/event/${event.id}`
+        });
+      }
       
       res.json({ 
         message: `Invited ${validFriendIds.length} friends to the event`,
@@ -2338,9 +2347,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Response must be 'accepted' or 'declined'" });
       }
       
-      // TODO: Implement invite response logic in storage
-      // For now, return a placeholder response
-      res.json({ message: "Invite response recorded" });
+      // Respond to the invite
+      const updatedInvite = await storage.respondToEventInvite(inviteId, userId, response);
+      
+      if (!updatedInvite) {
+        return res.status(404).json({ message: "Invite not found or already responded to" });
+      }
+      
+      // Get event details for notification
+      const invite = await storage.getEventInviteWithDetails(inviteId, userId);
+      if (invite && response === 'accepted') {
+        // Notify the event organizer about the acceptance
+        await storage.createNotification({
+          userId: invite.event.creatorId,
+          type: 'event_attendance',
+          title: 'Convite aceito!',
+          message: `Alguém aceitou o convite para "${invite.event.title}".`,
+          relatedEventId: invite.event.id,
+          actionUrl: `/event/${invite.event.id}`
+        });
+      }
+      
+      res.json({ 
+        message: response === 'accepted' ? "Invite accepted successfully" : "Invite declined successfully",
+        invite: updatedInvite 
+      });
     } catch (error) {
       console.error("Error responding to invite:", error);
       res.status(500).json({ message: "Failed to respond to invite" });

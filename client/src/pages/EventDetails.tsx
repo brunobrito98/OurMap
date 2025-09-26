@@ -14,6 +14,7 @@ import Rating from "@/components/ui/rating";
 import OrganizerRating from "@/components/OrganizerRating";
 import EventRatingsDisplay from "@/components/EventRatingsDisplay";
 import SocialShareModal from "@/components/SocialShareModal";
+import InviteFriendsModal from "@/components/InviteFriendsModal";
 import { 
   ArrowLeft, 
   Home, 
@@ -34,7 +35,8 @@ import {
   Laptop,
   X,
   Heart,
-  Target
+  Target,
+  UserPlus
 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -54,6 +56,9 @@ export default function EventDetails() {
   const [isContributionModalOpen, setIsContributionModalOpen] = useState(false);
   const [contributionAmount, setContributionAmount] = useState("");
   const [isPublicContribution, setIsPublicContribution] = useState(true);
+  
+  // Estado para modal de convites
+  const [isInviteFriendsModalOpen, setIsInviteFriendsModalOpen] = useState(false);
 
   const { data: event, isLoading } = useQuery<EventWithDetails>({
     queryKey: ['/api/events', id],
@@ -309,15 +314,26 @@ export default function EventDetails() {
               <Home className="w-5 h-5" />
             </Button>
             {isOrganizer && (
-              <Button
-                onClick={() => navigate(`/edit/${event.id}`)}
-                variant="ghost"
-                size="sm"
-                data-testid="button-edit"
-                title="Editar evento"
-              >
-                <Edit className="w-5 h-5" />
-              </Button>
+              <>
+                <Button
+                  onClick={() => setIsInviteFriendsModalOpen(true)}
+                  variant="ghost"
+                  size="sm"
+                  data-testid="button-invite-friends"
+                  title="Convidar amigos"
+                >
+                  <UserPlus className="w-5 h-5" />
+                </Button>
+                <Button
+                  onClick={() => navigate(`/edit/${event.id}`)}
+                  variant="ghost"
+                  size="sm"
+                  data-testid="button-edit"
+                  title="Editar evento"
+                >
+                  <Edit className="w-5 h-5" />
+                </Button>
+              </>
             )}
             <SocialShareModal 
               title={event.title}
@@ -759,6 +775,14 @@ export default function EventDetails() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Convites para Amigos */}
+      <InviteFriendsModal
+        isOpen={isInviteFriendsModalOpen}
+        onClose={() => setIsInviteFriendsModalOpen(false)}
+        eventId={event?.id || ''}
+        eventTitle={event?.title || ''}
+      />
     </div>
   );
 }
