@@ -376,7 +376,7 @@ export default function CreateEvent() {
   const handleMapModalLocationSelect = (lat: number, lng: number, address?: string) => {
     setMapCoordinates({ lat, lng });
     if (address) {
-      form.setValue('location', address);
+      form.setValue('location', address, { shouldDirty: true, shouldTouch: true });
     }
   };
 
