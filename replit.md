@@ -165,6 +165,17 @@ O banco utiliza PostgreSQL com as seguintes entidades principais:
 
 ## Últimas Atualizações
 
+**27/09/2025 14:00**:
+- ✅ **Bug de Eventos Recorrentes RESOLVIDO**: Corrigido problema crítico onde múltiplos eventos eram criados ao invés de um único evento recorrente
+  - **Causa identificada**: Constraint único do banco não incluía `creatorId`, permitindo duplicatas do mesmo usuário
+  - **Solução implementada**: Adicionado constraint único `(creatorId, title, location, dateTime)` para proteção atômica
+  - **Verificação de duplicatas corrigida**: Função `checkDuplicateEvent` agora verifica por usuário específico
+  - **Multi-usuário funcional**: Diferentes usuários podem criar eventos com mesmos dados
+  - **Duplicatas bloqueadas**: Mesmo usuário não consegue mais criar eventos idênticos
+  - **Proteção à prova de falhas**: Constraint no banco previne duplicatas mesmo em condições de corrida
+  - **Arquitetura mantida**: Sistema continua usando 1 evento que avança datas via `ensureEventRolledForward()`
+  - **Solução aprovada pelo arquiteto**: Proteção atômica + lógica de aplicação alinhadas
+
 **27/09/2025 13:30**:
 - ✅ **Eventos Recorrentes Otimizados**: Implementada nova lógica para eventos recorrentes usando abordagem "roll-forward"
   - Removida criação de múltiplos eventos: agora apenas UM evento é criado no banco
