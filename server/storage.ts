@@ -75,7 +75,7 @@ export interface IStorage {
 
   // Event operations
   createEvent(event: InsertEvent, organizerId: string, coordinates: { lat: number; lng: number }): Promise<Event>;
-  getEvent(id: string): Promise<Event | undefined>;
+  getEvent(id: string, userId?: string): Promise<Event | undefined>;
   getEventWithDetails(id: string, userId?: string): Promise<EventWithDetails | undefined>;
   getEvents(filters?: {
     category?: string;
@@ -165,6 +165,109 @@ export interface IStorage {
   markMessagesAsRead(messageIds: string[], userId: string): Promise<void>;
   getConversations(userId: string): Promise<(Conversation & { otherUser: User, unreadCount: number, lastMessage?: Message })[]>;
   getMessages(conversationId: string, userId: string, limit?: number, offset?: number): Promise<MessageWithSender[]>;
+}
+
+// Helper functions for recurring events roll-forward
+function nextOccurrence(
+  currentDate: Date,
+  recurrenceType: string,
+  recurrenceInterval: number = 1
+): Date {
+  const nextDate = new Date(currentDate);
+  
+  switch (recurrenceType) {
+    case 'daily':
+      nextDate.setDate(nextDate.getDate() + recurrenceInterval);
+      break;
+    case 'weekly':
+      nextDate.setDate(nextDate.getDate() + (7 * recurrenceInterval));
+      break;
+    case 'biweekly':
+      nextDate.setDate(nextDate.getDate() + (14 * recurrenceInterval));
+      break;
+    case 'monthly':
+      nextDate.setMonth(nextDate.getMonth() + recurrenceInterval);
+      break;
+    default:
+      // If unknown type, don't advance
+      break;
+  }
+  
+  return nextDate;
+}
+
+async function ensureEventRolledForward(event: Event): Promise<Event> {
+  // If not recurring or date is still in the future, return as-is
+  if (!event.isRecurring || !event.recurrenceType || !event.recurrenceEndDate) {
+    return event;
+  }
+  
+  const now = new Date();
+  const eventEnd = event.endTime ? new Date(event.endTime) : new Date(event.dateTime);
+  
+  // If event hasn't ended yet, return as-is
+  if (eventEnd >= now) {
+    return event;
+  }
+  
+  // Calculate next occurrence
+  let nextDate = new Date(event.dateTime);
+  const recurrenceEndDate = new Date(event.recurrenceEndDate);
+  
+  // Roll forward until we find the next occurrence after now
+  while (nextDate < now && nextDate < recurrenceEndDate) {
+    nextDate = nextOccurrence(nextDate, event.recurrenceType, event.recurrenceInterval || 1);
+  }
+  
+  // If next occurrence is past the end date, disable recurrence
+  if (nextDate >= recurrenceEndDate) {
+    // Update in database to disable recurrence
+    await db
+      .update(events)
+      .set({
+        isRecurring: false,
+        recurrenceType: null,
+        recurrenceInterval: null,
+        recurrenceEndDate: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(events.id, event.id));
+      
+    return {
+      ...event,
+      isRecurring: false,
+      recurrenceType: null,
+      recurrenceInterval: null,
+      recurrenceEndDate: null,
+      updatedAt: new Date(),
+    };
+  }
+  
+  // Calculate new end time if original event had one
+  let nextEndTime: Date | null = null;
+  if (event.endTime) {
+    const originalStart = new Date(event.dateTime);
+    const originalEnd = new Date(event.endTime);
+    const duration = originalEnd.getTime() - originalStart.getTime();
+    nextEndTime = new Date(nextDate.getTime() + duration);
+  }
+  
+  // Update event in database with new date
+  await db
+    .update(events)
+    .set({
+      dateTime: nextDate,
+      endTime: nextEndTime,
+      updatedAt: new Date(),
+    })
+    .where(eq(events.id, event.id));
+  
+  return {
+    ...event,
+    dateTime: nextDate,
+    endTime: nextEndTime,
+    updatedAt: new Date(),
+  };
 }
 
 export class DatabaseStorage implements IStorage {
@@ -278,8 +381,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getEvent(id: string, userId?: string): Promise<Event | undefined> {
-    const event = await this.getEventInternal(id);
+    let event = await this.getEventInternal(id);
     if (!event) return undefined;
+    
+    // Apply roll-forward for recurring events
+    event = await ensureEventRolledForward(event);
     
     // Check access for private events
     if (event.isPrivate && userId) {
@@ -315,11 +421,14 @@ export class DatabaseStorage implements IStorage {
 
     if (!result) return undefined;
 
+    // Apply roll-forward for recurring events
+    const rolledEvent = await ensureEventRolledForward(result.event);
+
     // Check access for private events
-    if (result.event.isPrivate && userId) {
+    if (rolledEvent.isPrivate && userId) {
       const canAccess = await this.canUserAccessPrivateEvent(id, userId);
       if (!canAccess) return undefined;
-    } else if (result.event.isPrivate && !userId) {
+    } else if (rolledEvent.isPrivate && !userId) {
       // Private events require authentication
       return undefined;
     }
@@ -382,7 +491,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     return {
-      ...result.event,
+      ...rolledEvent,
       organizer: result.organizer,
       attendanceCount: attendanceCountResult.count,
       userAttendance,
@@ -485,6 +594,9 @@ export class DatabaseStorage implements IStorage {
       // Enhance with attendance counts and user data
       const enhancedEvents = await Promise.all(
         results.map(async (result) => {
+          // Apply roll-forward for recurring events
+          const rolledEvent = await ensureEventRolledForward(result.event);
+          
           const [attendanceCountResult] = await db
             .select({ count: count() })
             .from(eventAttendees)
@@ -506,11 +618,11 @@ export class DatabaseStorage implements IStorage {
 
           // Calculate distance if user coordinates provided
           let distance: number | undefined;
-          if (filters?.userLat && filters?.userLng && result.event.latitude && result.event.longitude) {
+          if (filters?.userLat && filters?.userLng && rolledEvent.latitude && rolledEvent.longitude) {
             // Haversine formula for distance calculation
             const R = 6371; // Earth's radius in km
-            const eventLat = parseFloat(result.event.latitude);
-            const eventLng = parseFloat(result.event.longitude);
+            const eventLat = parseFloat(rolledEvent.latitude);
+            const eventLng = parseFloat(rolledEvent.longitude);
             const dLat = (eventLat - filters.userLat) * Math.PI / 180;
             const dLng = (eventLng - filters.userLng) * Math.PI / 180;
             const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
@@ -521,7 +633,7 @@ export class DatabaseStorage implements IStorage {
           }
 
           return {
-            ...result.event,
+            ...rolledEvent,
             organizer: result.organizer,
             attendanceCount: attendanceCountResult.count,
             userAttendance,

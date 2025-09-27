@@ -1215,104 +1215,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
         coverImageUrl = `/uploads/${fileName}`;
       }
       
-      // Handle recurring events
-      if (processedEventData.isRecurring && processedEventData.recurrenceType && processedEventData.recurrenceEndDate) {
-        const startDate = new Date(processedEventData.dateTime);
-        const endDate = new Date(processedEventData.recurrenceEndDate);
-        const recurrenceDates = generateRecurrenceDates(
-          startDate,
-          endDate,
-          processedEventData.recurrenceType,
-          processedEventData.recurrenceInterval || 1
-        );
-        
-        const createdEvents = [];
-        
-        for (let index = 0; index < recurrenceDates.length; index++) {
-          const recurrenceDate = recurrenceDates[index];
-          let eventEndTime: Date | undefined;
-          
-          // Calculate end time for each occurrence if original event has endTime
-          if (processedEventData.endTime) {
-            const originalStart = new Date(processedEventData.dateTime);
-            const originalEnd = new Date(processedEventData.endTime);
-            const duration = originalEnd.getTime() - originalStart.getTime();
-            eventEndTime = new Date(recurrenceDate.getTime() + duration);
-          }
-          
-          const eventInstance = await storage.createEvent(
-            {
-              ...processedEventData,
-              dateTime: recurrenceDate.toISOString(),
-              endTime: eventEndTime?.toISOString(),
-              coverImageUrl,
-              // Only the first event should maintain the recurrence settings
-              // The instances are individual events
-              isRecurring: index === 0 ? true : false,
-              recurrenceType: index === 0 ? processedEventData.recurrenceType : undefined,
-              recurrenceInterval: index === 0 ? processedEventData.recurrenceInterval : undefined,
-              recurrenceEndDate: index === 0 ? processedEventData.recurrenceEndDate : undefined,
-            },
-            userId,
-            coordinates
-          );
-          
-          createdEvents.push(eventInstance);
-        }
-        
-        // Notify friends about the new event series (only for the first event)
-        if (createdEvents.length > 0) {
-          await notifyFriendsAboutEvent(userId, createdEvents[0].id, `${createdEvents[0].title} (${createdEvents.length} eventos)`);
-        }
-        
-        res.status(201).json({
-          message: `${createdEvents.length} eventos criados com sucesso`,
-          events: createdEvents,
-          primaryEvent: createdEvents[0]
-        });
-      } else {
-        // Single event creation
-        const event = await storage.createEvent(
-          {
-            ...processedEventData,
-            coverImageUrl,
-          },
-          userId,
-          coordinates
-        );
-        
-        // Handle private event invitations
-        if (processedEventData.isPrivate && req.body.invitedFriends) {
-          try {
-            const invitedFriends = JSON.parse(req.body.invitedFriends);
-            if (Array.isArray(invitedFriends) && invitedFriends.length > 0) {
-              await storage.inviteFriendsToEvent(event.id, invitedFriends);
-              
-              // Send notifications to invited friends
-              for (const friendId of invitedFriends) {
-                await storage.createNotification({
-                  userId: friendId,
-                  type: 'event_invite',
-                  title: 'Convite para evento privado',
-                  message: `Você foi convidado para o evento "${event.title}"`,
-                  relatedUserId: userId,
-                  relatedEventId: event.id,
-                  actionUrl: `/event/${event.id}`,
-                });
-              }
+      // Create event (both single and recurring events create only one row)
+      const event = await storage.createEvent(
+        {
+          ...processedEventData,
+          coverImageUrl,
+        },
+        userId,
+        coordinates
+      );
+      
+      // Handle private event invitations
+      if (processedEventData.isPrivate && req.body.invitedFriends) {
+        try {
+          const invitedFriends = JSON.parse(req.body.invitedFriends);
+          if (Array.isArray(invitedFriends) && invitedFriends.length > 0) {
+            await storage.inviteFriendsToEvent(event.id, invitedFriends);
+            
+            // Send notifications to invited friends
+            for (const friendId of invitedFriends) {
+              await storage.createNotification({
+                userId: friendId,
+                type: 'event_invite',
+                title: 'Convite para evento privado',
+                message: `Você foi convidado para o evento "${event.title}"`,
+                relatedUserId: userId,
+                relatedEventId: event.id,
+                actionUrl: `/event/${event.id}`,
+              });
             }
-          } catch (error) {
-            console.error('Error processing friend invitations:', error);
           }
+        } catch (error) {
+          console.error('Error processing friend invitations:', error);
         }
-        
-        // Notify friends about the new event (only for public events)
-        if (!processedEventData.isPrivate) {
-          await notifyFriendsAboutEvent(userId, event.id, event.title);
-        }
-        
-        res.status(201).json(event);
       }
+      
+      // Notify friends about the new event (only for public events)
+      if (!processedEventData.isPrivate) {
+        await notifyFriendsAboutEvent(userId, event.id, event.title);
+      }
+      
+      res.status(201).json(event);
     } catch (error) {
       console.error("Error creating event:", error);
       if (error instanceof Error) {
