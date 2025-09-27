@@ -175,6 +175,12 @@ function calculateEventEndTime(startDate: Date, endTime?: Date, duration?: numbe
 }
 
 // Notification helper functions
+let connectedUsersRef: Map<string, Set<WebSocket>> | null = null;
+
+function setConnectedUsersRef(connectedUsers: Map<string, Set<WebSocket>>) {
+  connectedUsersRef = connectedUsers;
+}
+
 async function createNotificationIfEnabled(
   recipientId: string, 
   preferenceKey: string, // Changed type since notification fields don't exist in current DB
@@ -188,21 +194,53 @@ async function createNotificationIfEnabled(
   }
 ) {
   try {
-    // Notifications system disabled as notification preference columns don't exist in current DB
-    console.log(`Notification disabled for ${preferenceKey}: ${notificationData.title}`);
-    return;
-    /*
-    // Check if recipient has this notification type enabled
-    const preferences = await storage.getNotificationPreferences(recipientId);
-    const isEnabled = preferences[preferenceKey];
+    // Create notification directly since notification preferences are not implemented yet
+    const notification = await storage.createNotification({
+      userId: recipientId,
+      ...notificationData
+    });
+    console.log(`Notification created for ${preferenceKey}: ${notificationData.title}`);
     
-    if (isEnabled) {
-      await storage.createNotification({
-        userId: recipientId,
-        ...notificationData
-      });
+    // Send real-time notification to recipient if they're online
+    if (connectedUsersRef) {
+      const recipientConnections = connectedUsersRef.get(recipientId);
+      if (recipientConnections) {
+        // Get related user info for the notification if available
+        let relatedUser = null;
+        if (notificationData.relatedUserId) {
+          relatedUser = await storage.getUser(notificationData.relatedUserId);
+        }
+        
+        const notificationBroadcast = {
+          type: 'new_notification',
+          notification: {
+            id: notification.id,
+            userId: notification.userId,
+            type: notification.type,
+            title: notification.title,
+            message: notification.message,
+            relatedUserId: notification.relatedUserId,
+            relatedEventId: notification.relatedEventId,
+            actionUrl: notification.actionUrl,
+            isRead: notification.isRead,
+            createdAt: notification.createdAt,
+            relatedUser: relatedUser ? {
+              id: relatedUser.id,
+              firstName: relatedUser.firstName,
+              lastName: relatedUser.lastName,
+              profileImageUrl: relatedUser.profileImageUrl,
+              username: relatedUser.username
+            } : null
+          }
+        };
+        
+        recipientConnections.forEach(connection => {
+          if (connection.readyState === WebSocket.OPEN) {
+            connection.send(JSON.stringify(notificationBroadcast));
+          }
+        });
+      }
     }
-    */
   } catch (error) {
     console.error('Error creating notification:', error);
   }
@@ -2437,6 +2475,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Support multiple connections per user
   const connectedUsers = new Map<string, Set<WebSocket>>();
+  
+  // Set the reference for notification broadcasting
+  setConnectedUsersRef(connectedUsers);
   
   wss.on('connection', (ws, request) => {
     const req = request as any;

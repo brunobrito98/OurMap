@@ -20,6 +20,13 @@ const portugueseProfanity = [
   // Insultos graves
   'escroto', 'escrota', 'desgraçado', 'maldito',
   
+  // Insultos moderados comuns (com e sem acentos)
+  'burro', 'burra', 'idiota', 'estúpido', 'estupido', 'estúpida', 'estupida', 
+  'anta', 'tapado', 'tapada', 'mongolóide', 'mongoloide', 'mongol', 
+  'débil', 'debil', 'retardado', 'retardada', 'lixo', 'nojento', 'nojenta',
+  'vagabundo', 'vagabunda', 'preguiçoso', 'preguicoso', 'preguiçosa', 'preguicosa', 
+  'inútil', 'inutil', 'incompetente',
+  
   // Termos de ódio extremo apenas mais graves (removido kkk para evitar falsos positivos com risadas)
   
   // Variações com símbolos/números comuns de evasão
@@ -39,8 +46,26 @@ function normalizeText(text: string): string {
     .replace(/[^\w\s]/g, '');
 }
 
-// Configurar o filtro com palavras em português
-profanity.addWords(portugueseProfanity);
+// Função para expandir palavras com variantes sem acentos
+function expandWordsWithVariants(words: string[]): string[] {
+  const expanded = new Set<string>();
+  
+  words.forEach(word => {
+    // Adicionar palavra original
+    expanded.add(word);
+    // Adicionar variante normalizada (sem acentos)
+    const normalized = normalizeText(word);
+    if (normalized !== word) {
+      expanded.add(normalized);
+    }
+  });
+  
+  return Array.from(expanded);
+}
+
+// Configurar o filtro com palavras em português (incluindo variantes sem acentos)
+const expandedProfanity = expandWordsWithVariants(portugueseProfanity);
+profanity.addWords(expandedProfanity);
 
 export interface ContentValidationResult {
   isValid: boolean;
