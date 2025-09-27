@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { EventWithDetails } from "@shared/schema";
+import { ArrowLeft, Home, UserPlus, CheckCircle, Phone, Calendar, Users } from "lucide-react";
 
 interface UserProfileResponse {
   name: string;
@@ -82,7 +83,7 @@ export default function UserProfile() {
         <div className="text-center p-4">
           <Avatar className="w-16 h-16 mx-auto mb-4">
             <AvatarFallback>
-              <i className="fas fa-user text-2xl text-muted-foreground"></i>
+              <Users className="w-8 h-8 text-muted-foreground" />
             </AvatarFallback>
           </Avatar>
           <h2 className="text-xl font-semibold text-foreground mb-2">
@@ -116,7 +117,7 @@ export default function UserProfile() {
               data-testid="button-back"
               title="Voltar"
             >
-              <i className="fas fa-arrow-left text-xl"></i>
+              <ArrowLeft className="w-5 h-5" />
             </Button>
             <h2 className="font-semibold text-foreground">Perfil</h2>
           </div>
@@ -127,7 +128,7 @@ export default function UserProfile() {
             data-testid="button-home"
             title="Ir para início"
           >
-            <i className="fas fa-home text-xl"></i>
+            <Home className="w-5 h-5" />
           </Button>
         </div>
       </div>
@@ -157,7 +158,7 @@ export default function UserProfile() {
             {!canViewFullProfile ? (
               <div className="bg-accent/5 border border-accent/20 rounded-2xl p-4">
                 <div className="text-center">
-                  <i className="fas fa-user-friends text-accent text-2xl mb-2"></i>
+                  <Users className="text-accent w-6 h-6 mb-2" />
                   <p className="text-sm text-muted-foreground mb-3">
                     Para ver o perfil completo, adicione {profile.name.split(' ')[0]} às suas conexões
                   </p>
@@ -169,12 +170,12 @@ export default function UserProfile() {
                   >
                     {connectionMutation.isPending ? (
                       <>
-                        <i className="fas fa-spinner fa-spin mr-2"></i>
+                        <div className="w-4 h-4 mr-2 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
                         Enviando...
                       </>
                     ) : (
                       <>
-                        <i className="fas fa-user-plus mr-2"></i>
+                        <UserPlus className="w-4 h-4 mr-2" />
                         Adicionar Usuário
                       </>
                     )}
@@ -184,7 +185,7 @@ export default function UserProfile() {
             ) : (
               <div className="bg-green-50 border border-green-200 rounded-2xl p-4">
                 <div className="flex items-center justify-center space-x-2">
-                  <i className="fas fa-check-circle text-green-600"></i>
+                  <CheckCircle className="w-5 h-5 text-green-600" />
                   <p className="text-sm text-green-700 font-medium">
                     Vocês são conexões
                   </p>
@@ -199,7 +200,7 @@ export default function UserProfile() {
           <div className="bg-card border border-border rounded-2xl p-4 mb-6">
             <h3 className="font-semibold text-foreground mb-3">Contato</h3>
             <div className="flex items-center space-x-2" data-testid="text-phone-number">
-              <i className="fas fa-phone text-muted-foreground"></i>
+              <Phone className="w-4 h-4 text-muted-foreground" />
               <span className="text-foreground">{profile.phone_number}</span>
             </div>
           </div>
@@ -226,7 +227,7 @@ export default function UserProfile() {
         {/* No Events Message */}
         {canViewFullProfile && profile.events && profile.events.length === 0 && (
           <div className="text-center py-8">
-            <i className="fas fa-calendar text-4xl text-muted-foreground mb-4"></i>
+            <Calendar className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
             <p className="text-muted-foreground">
               {profile.name.split(' ')[0]} ainda não confirmou presença em nenhum evento
             </p>
