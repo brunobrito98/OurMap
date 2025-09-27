@@ -105,11 +105,25 @@ export default function Landing() {
         <div className="w-full max-w-md space-y-8">
           <div className="text-center">
             <div className="mx-auto w-36 h-36 mb-6 flex items-center justify-center">
-              <img 
-                src={logoImage} 
-                alt="OurMap Logo" 
-                className="w-36 h-36 object-contain rounded-3xl opacity-90 drop-shadow-lg filter brightness-95 saturate-110"
-              />
+              <div 
+                className="w-36 h-36 relative rounded-3xl"
+                style={{
+                  backgroundImage: `url(${logoImage})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  backgroundBlendMode: 'soft-light',
+                  opacity: 0.85,
+                }}
+                role="img"
+                aria-label="OurMap Logo"
+              >
+                {/* Efeito de luz superior para parecer embutido */}
+                <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-white/20 to-transparent opacity-60"></div>
+                {/* Efeito de sombra inferior para profundidade */}
+                <div className="absolute inset-0 rounded-3xl shadow-inner" style={{
+                  boxShadow: 'inset 2px 2px 8px rgba(0,0,0,0.15), inset -2px -2px 8px rgba(255,255,255,0.1)'
+                }}></div>
+              </div>
             </div>
             <h1 className="text-3xl font-bold">OurMap</h1>
             <p className="text-muted-foreground mt-2">
