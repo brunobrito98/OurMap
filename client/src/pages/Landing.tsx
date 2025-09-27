@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { PhoneInput } from "@/components/PhoneInput";
 import { type Value } from "react-phone-number-input";
 import { Megaphone, MapPin, Utensils, Plus, User, Shield, Loader2, ArrowLeft } from "lucide-react";
+import logoImage from "@assets/image_1758985403764.png";
 
 export default function Landing() {
   const [, navigate] = useLocation();
@@ -103,8 +104,12 @@ export default function Landing() {
       <div className="flex items-center justify-center min-h-screen p-4">
         <div className="w-full max-w-md space-y-8">
           <div className="text-center">
-            <div className="mx-auto w-16 h-16 bg-primary rounded-full flex items-center justify-center mb-4">
-              <MapPin className="w-8 h-8 text-white" />
+            <div className="mx-auto w-16 h-16 mb-4 flex items-center justify-center">
+              <img 
+                src={logoImage} 
+                alt="OurMap Logo" 
+                className="w-16 h-16 object-contain"
+              />
             </div>
             <h1 className="text-3xl font-bold">OurMap</h1>
             <p className="text-muted-foreground mt-2">
