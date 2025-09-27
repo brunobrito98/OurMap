@@ -86,7 +86,7 @@ export interface IStorage {
   getUserEvents(userId: string): Promise<EventWithDetails[]>;
   updateEvent(id: string, event: Partial<InsertEvent>, coordinates?: { lat: number; lng: number }): Promise<Event | undefined>;
   deleteEvent(id: string, organizerId: string): Promise<boolean>;
-  checkDuplicateEvent(title: string, location: string, dateTime: string): Promise<Event | undefined>;
+  checkDuplicateEvent(creatorId: string, title: string, location: string, dateTime: string): Promise<Event | undefined>;
 
   // Attendance operations
   createAttendance(attendance: InsertEventAttendance): Promise<EventAttendance>;
@@ -780,11 +780,12 @@ export class DatabaseStorage implements IStorage {
     return (result.rowCount || 0) > 0;
   }
 
-  async checkDuplicateEvent(title: string, location: string, dateTime: string): Promise<Event | undefined> {
+  async checkDuplicateEvent(creatorId: string, title: string, location: string, dateTime: string): Promise<Event | undefined> {
     const [duplicateEvent] = await db
       .select()
       .from(events)
       .where(and(
+        eq(events.creatorId, creatorId),
         eq(events.title, title),
         eq(events.location, location),
         eq(events.dateTime, new Date(dateTime))

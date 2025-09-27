@@ -110,7 +110,8 @@ export const events = pgTable("events", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
-  uniqueEventTitleLocationDateTime: unique().on(table.title, table.location, table.dateTime),
+  // FIXED: Include creatorId to prevent same user from creating duplicate recurring events
+  uniqueEventPerUser: unique().on(table.creatorId, table.title, table.location, table.dateTime),
 }));
 
 export const eventAttendees = pgTable("event_attendees", {

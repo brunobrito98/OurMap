@@ -6,9 +6,9 @@ Uma plataforma completa de gerenciamento de eventos com sistema social, constru�
 
 Este é um aplicativo fullstack para criação, descoberta e participação em eventos com recursos sociais como sistema de amizades, chat, avaliações e notificações.
 
-<<<<<<< HEAD
+
 ## Arquitetura
-=======
+
 **September 25, 2025**
 - **Replit Environment Setup**: Successfully configured application for Replit environment
   - tsx already installed and configured in package.json devDependencies
@@ -41,7 +41,7 @@ Este é um aplicativo fullstack para criação, descoberta e participação em e
   - Phone number is now purely optional contact information with no verification requirements
   - Maintained data consistency with phoneE164, phoneCountry, and phoneVerified fields in database
   - Application now functions completely without Twilio dependencies or SMS verification
->>>>>>> b4834d820d9b5fb53e5ca847f2282afbcbe31e5a
+
 
 ### Frontend
 - **Framework**: React 18 com TypeScript
@@ -165,6 +165,7 @@ O banco utiliza PostgreSQL com as seguintes entidades principais:
 
 ## Últimas Atualizações
 
+
 **27/09/2025 14:15**:
 - ✅ **Sistema de Filtro de Profanidade Corrigido**: Implementada correção completa no sistema de validação de conteúdo
   - Adicionadas palavras ofensivas moderadas à lista de filtro (burro, idiota, estúpido, etc.)
@@ -173,6 +174,18 @@ O banco utiliza PostgreSQL com as seguintes entidades principais:
   - Validação aplicada tanto na criação quanto na edição de eventos
   - Filtro agora funciona corretamente para prevenir linguagem ofensiva em títulos e descrições de eventos
   - Experiência do usuário melhorada com mensagens de erro claras quando conteúdo ofensivo é detectado
+
+**27/09/2025 14:00**:
+- ✅ **Bug de Eventos Recorrentes RESOLVIDO**: Corrigido problema crítico onde múltiplos eventos eram criados ao invés de um único evento recorrente
+  - **Causa identificada**: Constraint único do banco não incluía `creatorId`, permitindo duplicatas do mesmo usuário
+  - **Solução implementada**: Adicionado constraint único `(creatorId, title, location, dateTime)` para proteção atômica
+  - **Verificação de duplicatas corrigida**: Função `checkDuplicateEvent` agora verifica por usuário específico
+  - **Multi-usuário funcional**: Diferentes usuários podem criar eventos com mesmos dados
+  - **Duplicatas bloqueadas**: Mesmo usuário não consegue mais criar eventos idênticos
+  - **Proteção à prova de falhas**: Constraint no banco previne duplicatas mesmo em condições de corrida
+  - **Arquitetura mantida**: Sistema continua usando 1 evento que avança datas via `ensureEventRolledForward()`
+  - **Solução aprovada pelo arquiteto**: Proteção atômica + lógica de aplicação alinhadas
+
 
 **27/09/2025 13:30**:
 - ✅ **Eventos Recorrentes Otimizados**: Implementada nova lógica para eventos recorrentes usando abordagem "roll-forward"

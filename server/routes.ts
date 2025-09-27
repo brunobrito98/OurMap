@@ -119,8 +119,11 @@ function normalizePhoneNumber(phone: string, country?: string): string | null {
 // Rate limiting store (in production, use Redis)
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
 
-// Date recurrence helper functions
-function generateRecurrenceDates(
+// DEPRECATED: This function was used in a previous version that incorrectly created
+// multiple events for recurring events. The current system correctly creates only
+// one event and uses ensureEventRolledForward() to advance dates dynamically.
+// Keeping for reference but should not be used.
+function generateRecurrenceDates_DEPRECATED(
   startDate: Date,
   endDate: Date,
   recurrenceType: string,
@@ -1217,6 +1220,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Check for duplicate events
       const duplicateEvent = await storage.checkDuplicateEvent(
+        userId,
         processedEventData.title,
         processedEventData.location,
         processedEventData.dateTime
@@ -1253,7 +1257,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         coverImageUrl = `/uploads/${fileName}`;
       }
       
-      // Create event (both single and recurring events create only one row)
+      // Create event (database unique constraint prevents duplicate recurring events)
       const event = await storage.createEvent(
         {
           ...processedEventData,
