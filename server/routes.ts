@@ -1182,6 +1182,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Check for duplicate events
       const duplicateEvent = await storage.checkDuplicateEvent(
+        userId,
         processedEventData.title,
         processedEventData.location,
         processedEventData.dateTime
