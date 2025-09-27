@@ -104,11 +104,11 @@ export default function Landing() {
       <div className="flex items-center justify-center min-h-screen p-4">
         <div className="w-full max-w-md space-y-8">
           <div className="text-center">
-            <div className="mx-auto w-16 h-16 mb-4 flex items-center justify-center">
+            <div className="mx-auto w-36 h-36 mb-6 flex items-center justify-center">
               <img 
                 src={logoImage} 
                 alt="OurMap Logo" 
-                className="w-16 h-16 object-contain"
+                className="w-36 h-36 object-contain rounded-3xl opacity-90 drop-shadow-lg filter brightness-95 saturate-110"
               />
             </div>
             <h1 className="text-3xl font-bold">OurMap</h1>
