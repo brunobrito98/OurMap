@@ -165,6 +165,15 @@ O banco utiliza PostgreSQL com as seguintes entidades principais:
 
 ## Últimas Atualizações
 
+**27/09/2025 14:15**:
+- ✅ **Sistema de Filtro de Profanidade Corrigido**: Implementada correção completa no sistema de validação de conteúdo
+  - Adicionadas palavras ofensivas moderadas à lista de filtro (burro, idiota, estúpido, etc.)
+  - Implementada função expandWordsWithVariants que gera automaticamente variantes sem acentos
+  - Sistema agora bloqueia insultos independentemente de como sejam digitados (com ou sem acentos)
+  - Validação aplicada tanto na criação quanto na edição de eventos
+  - Filtro agora funciona corretamente para prevenir linguagem ofensiva em títulos e descrições de eventos
+  - Experiência do usuário melhorada com mensagens de erro claras quando conteúdo ofensivo é detectado
+
 **27/09/2025 13:30**:
 - ✅ **Eventos Recorrentes Otimizados**: Implementada nova lógica para eventos recorrentes usando abordagem "roll-forward"
   - Removida criação de múltiplos eventos: agora apenas UM evento é criado no banco
