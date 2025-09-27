@@ -39,7 +39,7 @@ import {
   type MessageWithSender,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, desc, asc, count, avg, sql, like, isNull, isNotNull, gte, lte, inArray, ne, max } from "drizzle-orm";
+import { eq, and, or, desc, asc, count, avg, sql, like, isNull, isNotNull, gte, lte, inArray, ne, max, not } from "drizzle-orm";
 
 // Interface for storage operations
 export interface IStorage {
@@ -1750,6 +1750,29 @@ export class DatabaseStorage implements IStorage {
       // Se categoryValue estiver vazio, retorna todos
       if (!categoryValue || categoryValue === '') {
         return [];
+      }
+
+      // Lógica especial para categoria "outros" - incluir sub-categorias órfãs
+      if (categoryValue === 'outros') {
+        // Buscar todas as categorias que não têm parentId (potenciais categorias principais)
+        const mainCategoryValues = ['festas', 'sports', 'tech', 'religioso', 'food', 'art', 'music', 'outros'];
+        
+        // Buscar sub-categorias órfãs (que não têm parentId e não são categorias principais conhecidas)
+        const orphanSubcategories = await db.select().from(categories)
+          .where(and(
+            isNull(categories.parentId),
+            not(inArray(categories.value, mainCategoryValues))
+          ));
+
+        const orphanValues = orphanSubcategories.map(cat => cat.value);
+        
+        if (orphanValues.length > 0) {
+          console.log(`Found ${orphanValues.length} orphan subcategories for '${categoryValue}':`, orphanValues);
+          return [categoryValue, ...orphanValues];
+        }
+        
+        // Se não há sub-categorias órfãs, retorna apenas "outros"
+        return [categoryValue];
       }
 
       // Busca a categoria principal
