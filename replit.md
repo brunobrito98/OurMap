@@ -165,6 +165,16 @@ O banco utiliza PostgreSQL com as seguintes entidades principais:
 
 ## Últimas Atualizações
 
+**27/09/2025 13:30**:
+- ✅ **Eventos Recorrentes Otimizados**: Implementada nova lógica para eventos recorrentes usando abordagem "roll-forward"
+  - Removida criação de múltiplos eventos: agora apenas UM evento é criado no banco
+  - Implementação de sistema roll-forward que atualiza datas automaticamente do mesmo evento
+  - Preservação do mesmo ID do evento através de todas as ocorrências
+  - Lógica integrada nos métodos getEvent, getEvents e getEventWithDetails
+  - Sistema desabilita recorrência automaticamente quando data limite é atingida
+  - Manutenção da duração original do evento em todas as ocorrências
+  - Funcionalidade testada e operacional
+
 **26/09/2025 20:59**:
 - ✅ **Melhorias na UX do Mapa**: Implementadas melhorias significativas na experiência do mapa
   - Busca automática da localização do usuário ao carregar a tela de criar evento
