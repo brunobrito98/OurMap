@@ -619,10 +619,19 @@ export default function EventDetails() {
         <div className="max-w-sm mx-auto flex items-center space-x-3">
           <div className="flex-1 text-center">
             <p className="text-2xl font-bold text-primary" data-testid="text-event-price">
-              Gratuito
+              {event.priceType === 'crowdfunding' ? (
+                `R$ ${fundraisingData?.totalRaised?.toFixed(2) || '0,00'}`
+              ) : event.priceType === 'paid' && event.price && event.price !== '0' ? (
+                `R$ ${parseFloat(event.price).toFixed(2)}`
+              ) : (
+                'Gratuito'
+              )}
             </p>
             <p className="text-xs text-muted-foreground">
-              {eventHasEnded ? "Evento finalizado" : "Entrada livre"}
+              {eventHasEnded ? "Evento finalizado" : 
+               event.priceType === 'crowdfunding' ? "Arrecadado" :
+               event.priceType === 'paid' && event.price && event.price !== '0' ? "Entrada paga" :
+               "Entrada livre"}
             </p>
           </div>
           {eventHasEnded ? (
