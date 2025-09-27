@@ -185,21 +185,12 @@ async function createNotificationIfEnabled(
   }
 ) {
   try {
-    // Notifications system disabled as notification preference columns don't exist in current DB
-    console.log(`Notification disabled for ${preferenceKey}: ${notificationData.title}`);
-    return;
-    /*
-    // Check if recipient has this notification type enabled
-    const preferences = await storage.getNotificationPreferences(recipientId);
-    const isEnabled = preferences[preferenceKey];
-    
-    if (isEnabled) {
-      await storage.createNotification({
-        userId: recipientId,
-        ...notificationData
-      });
-    }
-    */
+    // Create notification directly since notification preferences are not implemented yet
+    await storage.createNotification({
+      userId: recipientId,
+      ...notificationData
+    });
+    console.log(`Notification created for ${preferenceKey}: ${notificationData.title}`);
   } catch (error) {
     console.error('Error creating notification:', error);
   }
