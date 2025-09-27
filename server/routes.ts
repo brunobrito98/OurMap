@@ -1471,7 +1471,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { status } = req.body;
       
       // Check if event has already ended before allowing attendance
-      const event = await storage.getEvent(eventId);
+      const event = await storage.getEvent(eventId, userId);
       if (!event) {
         return res.status(404).json({ message: "Event not found" });
       }
